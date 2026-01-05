@@ -205,23 +205,44 @@ func (db *DB) GetTableSchema() ([]map[string]interface{}, error) {
 // When a limit is applied, it returns the N most recent commands, but still ordered oldest-to-newest
 // If limit is 0, all commands are returned
 func (db *DB) ListCommands(limit int) ([]models.Command, error) {
+	return db.ListCommandsInRange(0, 0, limit)
+}
+
+// ListCommandsInRange retrieves commands within a timestamp range, ordered by timestamp ascending
+// If startTime is 0, no lower bound is applied
+// If endTime is 0, no upper bound is applied
+// If limit is 0, all matching commands are returned
+func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models.Command, error) {
 	var query string
+	var whereClause string
+
+	// Build WHERE clause for time range
+	if startTime > 0 && endTime > 0 {
+		whereClause = fmt.Sprintf("WHERE timestamp >= %d AND timestamp <= %d", startTime, endTime)
+	} else if startTime > 0 {
+		whereClause = fmt.Sprintf("WHERE timestamp >= %d", startTime)
+	} else if endTime > 0 {
+		whereClause = fmt.Sprintf("WHERE timestamp <= %d", endTime)
+	}
+
 	if limit > 0 {
-		// Get the N most recent commands, then order them oldest-to-newest
+		// Get the N most recent commands in the range, then order them oldest-to-newest
 		query = fmt.Sprintf(`
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
 			FROM (
 				SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
 				FROM commands
+				%s
 				ORDER BY timestamp DESC
 				LIMIT %d
 			)
-			ORDER BY timestamp ASC`, limit)
+			ORDER BY timestamp ASC`, whereClause, limit)
 	} else {
-		query = `
+		query = fmt.Sprintf(`
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
 			FROM commands
-			ORDER BY timestamp ASC`
+			%s
+			ORDER BY timestamp ASC`, whereClause)
 	}
 
 	rows, err := db.conn.Query(query)

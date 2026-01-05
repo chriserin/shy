@@ -54,12 +54,62 @@ Feature: Basic Query Interface
     Then the output should contain all 100 commands
 
   Scenario 7: List with flag --today
+    Given I have a database with commands from various dates
+      | command_text | timestamp  | date       |
+      | cmd today 1  | 1704470400 | 2024-01-05 |
+      | cmd today 2  | 1704480000 | 2024-01-05 |
+      | cmd yesterday| 1704384000 | 2024-01-04 |
+      | cmd old      | 1704297600 | 2024-01-03 |
+    And today is 2024-01-05
+    When I run "shy list --today"
+    Then the output should contain "cmd today 1"
+    And the output should contain "cmd today 2"
+    And the output should not contain "cmd yesterday"
+    And the output should not contain "cmd old"
 
   Scenario 8: List with flag --yesterday
+    Given I have a database with commands from various dates
+      | command_text | timestamp  | date       |
+      | cmd today    | 1704470400 | 2024-01-05 |
+      | cmd yest 1   | 1704384000 | 2024-01-04 |
+      | cmd yest 2   | 1704390000 | 2024-01-04 |
+      | cmd old      | 1704297600 | 2024-01-03 |
+    And today is 2024-01-05
+    When I run "shy list --yesterday"
+    Then the output should contain "cmd yest 1"
+    And the output should contain "cmd yest 2"
+    And the output should not contain "cmd today"
+    And the output should not contain "cmd old"
 
   Scenario 9: List with flag --this-week
+    Given I have a database with commands from various dates
+      | command_text  | timestamp  | date       | week      |
+      | cmd monday    | 1704067200 | 2024-01-01 | this week |
+      | cmd wednesday | 1704240000 | 2024-01-03 | this week |
+      | cmd friday    | 1704412800 | 2024-01-05 | this week |
+      | cmd last week | 1703462400 | 2023-12-25 | last week |
+    And today is Friday 2024-01-05
+    And the week starts on Monday
+    When I run "shy list --this-week"
+    Then the output should contain "cmd monday"
+    And the output should contain "cmd wednesday"
+    And the output should contain "cmd friday"
+    And the output should not contain "cmd last week"
 
-  Scenario 9: List with flag --last-week
+  Scenario 10: List with flag --last-week
+    Given I have a database with commands from various dates
+      | command_text   | timestamp  | date       | week      |
+      | cmd this week  | 1704412800 | 2024-01-05 | this week |
+      | cmd last mon   | 1703462400 | 2023-12-25 | last week |
+      | cmd last fri   | 1703808000 | 2023-12-29 | last week |
+      | cmd two weeks  | 1702857600 | 2023-12-18 | old       |
+    And today is Friday 2024-01-05
+    And the week starts on Monday
+    When I run "shy list --last-week"
+    Then the output should contain "cmd last mon"
+    And the output should contain "cmd last fri"
+    And the output should not contain "cmd this week"
+    And the output should not contain "cmd two weeks"
 
   # Stats Command Scenarios
 

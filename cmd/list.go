@@ -9,11 +9,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/chris/shy/internal/db"
+	"github.com/chris/shy/pkg/models"
 )
 
 var (
-	listLimit  int
-	listFormat string
+	listLimit     int
+	listFormat    string
+	listToday     bool
+	listYesterday bool
+	listThisWeek  bool
+	listLastWeek  bool
 )
 
 var listCmd = &cobra.Command{
@@ -27,6 +32,10 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().IntVarP(&listLimit, "limit", "n", 20, "Maximum number of commands to display")
 	listCmd.Flags().StringVar(&listFormat, "fmt", "", "Format output with comma-separated columns (timestamp,status,pwd,cmd)")
+	listCmd.Flags().BoolVar(&listToday, "today", false, "Show only commands from today")
+	listCmd.Flags().BoolVar(&listYesterday, "yesterday", false, "Show only commands from yesterday")
+	listCmd.Flags().BoolVar(&listThisWeek, "this-week", false, "Show only commands from this week")
+	listCmd.Flags().BoolVar(&listLastWeek, "last-week", false, "Show only commands from last week")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
@@ -41,8 +50,57 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
+	// Calculate time range based on flags
+	var startTime, endTime int64
+	now := time.Now()
+
+	if listToday {
+		// Start of today (00:00:00)
+		startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).Unix()
+		// End of today (23:59:59)
+		endTime = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location()).Unix()
+	} else if listYesterday {
+		yesterday := now.AddDate(0, 0, -1)
+		// Start of yesterday (00:00:00)
+		startTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location()).Unix()
+		// End of yesterday (23:59:59)
+		endTime = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 59, 59, 0, yesterday.Location()).Unix()
+	} else if listThisWeek {
+		// Find the most recent Monday (start of this week)
+		weekday := int(now.Weekday())
+		if weekday == 0 { // Sunday
+			weekday = 7
+		}
+		daysFromMonday := weekday - 1
+		monday := now.AddDate(0, 0, -daysFromMonday)
+		// Start of Monday (00:00:00)
+		startTime = time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, monday.Location()).Unix()
+		// End of Sunday (23:59:59)
+		sunday := monday.AddDate(0, 0, 6)
+		endTime = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 59, 0, sunday.Location()).Unix()
+	} else if listLastWeek {
+		// Find last week's Monday
+		weekday := int(now.Weekday())
+		if weekday == 0 { // Sunday
+			weekday = 7
+		}
+		daysFromMonday := weekday - 1
+		thisMonday := now.AddDate(0, 0, -daysFromMonday)
+		lastMonday := thisMonday.AddDate(0, 0, -7)
+		// Start of last Monday (00:00:00)
+		startTime = time.Date(lastMonday.Year(), lastMonday.Month(), lastMonday.Day(), 0, 0, 0, 0, lastMonday.Location()).Unix()
+		// End of last Sunday (23:59:59)
+		lastSunday := lastMonday.AddDate(0, 0, 6)
+		endTime = time.Date(lastSunday.Year(), lastSunday.Month(), lastSunday.Day(), 23, 59, 59, 0, lastSunday.Location()).Unix()
+	}
+
 	// List commands
-	commands, err := database.ListCommands(listLimit)
+	var commands []models.Command
+	if startTime > 0 || endTime > 0 {
+		commands, err = database.ListCommandsInRange(startTime, endTime, listLimit)
+	} else {
+		commands, err = database.ListCommands(listLimit)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to list commands: %w", err)
 	}
