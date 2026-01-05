@@ -200,3 +200,56 @@ func (db *DB) GetTableSchema() ([]map[string]interface{}, error) {
 
 	return schema, nil
 }
+
+// ListCommands retrieves commands ordered by timestamp ascending (oldest first)
+// When a limit is applied, it returns the N most recent commands, but still ordered oldest-to-newest
+// If limit is 0, all commands are returned
+func (db *DB) ListCommands(limit int) ([]models.Command, error) {
+	var query string
+	if limit > 0 {
+		// Get the N most recent commands, then order them oldest-to-newest
+		query = fmt.Sprintf(`
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+			FROM (
+				SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+				FROM commands
+				ORDER BY timestamp DESC
+				LIMIT %d
+			)
+			ORDER BY timestamp ASC`, limit)
+	} else {
+		query = `
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+			FROM commands
+			ORDER BY timestamp ASC`
+	}
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list commands: %w", err)
+	}
+	defer rows.Close()
+
+	var commands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}

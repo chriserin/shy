@@ -1,0 +1,153 @@
+Feature: Basic Query Interface
+  As a user
+  I want to query my command history
+  So that I can find and review past commands
+
+  # List Command Scenarios
+
+  Scenario 1: List recent commands
+    Given I have a database with commands
+      | command_text | working_dir | exit_status | timestamp  |
+      | git status   | /home/test  | 0           | 1704470400 |
+      | ls -la       | /home/test  | 0           | 1704470401 |
+      | npm test     | /home/proj  | 1           | 1704470402 |
+    When I run "shy list"
+    Then the output should contain all 3 commands
+    And the commands should be ordered by timestamp descending (newest first)
+
+  Scenario 2: List with limit flag
+    Given I have a database with 10 commands
+    When I run "shy list -n 8" without specifying a limit
+    Then the output should contain at 8 commands
+    And the commands should be the 8 most recent
+
+  Scenario 3: List shows command metadata with --fmt flag
+    Given I have a database with a command "git commit -m 'test'" at "/home/project" with exit status 0
+    When I run "shy list --fmt=timestamp,status,pwd,cmd"
+    Then the output should show the command text "git commit -m 'test'"
+    And the output should show the working directory "/home/project"
+    And the output should show the exit status "0"
+    And the output should show a readable timestamp
+    and the columns should be tab separated
+
+  Scenario 4: List on empty database
+    Given I have an empty database
+    When I run "shy list"
+    Then the output should indicate no commands found
+    And the exit status should be 0
+
+  Scenario 5: List without database file
+    Given no database file exists
+    When I run "shy list"
+    Then the output should indicate the database doesn't exist
+    And the exit status should be non-zero
+
+  Scenario 6: List without limit flag
+    Given I have a database with 100 commands
+    When I run "shy list" without specifying a limit
+    Then the output should contain at most 20 commands
+    And the commands should be the 20 most recent
+
+  Scenario 6.5: List all commands with list-all command
+    Given I have a database with 100 commands
+    When I run "shy list-all"
+    Then the output should contain all 100 commands
+
+  Scenario 7: List with flag --today
+
+  Scenario 8: List with flag --yesterday
+
+  Scenario 9: List with flag --this-week
+
+  Scenario 9: List with flag --last-week
+
+  # Stats Command Scenarios
+
+  Scenario 14: Stats shows total commands
+    Given I have a database with 42 commands
+    When I run "shy stats"
+    Then the output should show "Total commands: 42"
+
+  Scenario 15: Stats shows date range
+    Given I have a database with commands from 2024-01-01 to 2024-12-31
+    When I run "shy stats"
+    Then the output should show the earliest command date
+    And the output should show the latest command date
+
+  Scenario 16: Stats shows successful vs failed commands
+    Given I have a database with commands
+      | command_text | exit_status |
+      | true         | 0           |
+      | false        | 1           |
+      | true         | 0           |
+      | false        | 1           |
+      | true         | 0           |
+    When I run "shy stats"
+    Then the output should show "Successful: 3"
+    And the output should show "Failed: 2"
+
+  Scenario 17: Stats on empty database
+    Given I have an empty database
+    When I run "shy stats"
+    Then the output should show "Total commands: 0"
+    And the exit status should be 0
+
+  Scenario 18: Stats without database file
+    Given no database file exists
+    When I run "shy stats"
+    Then the output should indicate the database doesn't exist
+    And the exit status should be non-zero
+
+  Scenario 19: Stats shows unique directories
+    Given I have a database with commands from 5 different directories
+    When I run "shy stats"
+    Then the output should show "Unique directories: 5"
+
+  Scenario 20: Stats shows database location
+    Given I have a database at "/custom/path/history.db"
+    When I run "shy stats --db /custom/path/history.db"
+    Then the output should show the database path
+
+  # Output Formatting Scenarios
+
+  Scenario 21: List output includes command ID
+    Given I have a database with commands
+    When I run "shy list"
+    Then each command should show its database ID
+
+  Scenario 22: List output shows git context when available
+    Given I have a database with a command with git_repo "github.com/user/repo" and git_branch "main"
+    When I run "shy list"
+    Then the output should show the git repository
+    And the output should show the git branch
+
+  Scenario 23: List output omits git context when not available
+    Given I have a database with a command without git context
+    When I run "shy list"
+    Then the output should not show git repository
+    And the output should not show git branch
+
+  # Error Handling Scenarios
+
+  Scenario 24: List handles corrupted database gracefully
+    Given I have a corrupted database file
+    When I run "shy list"
+    Then the output should indicate database error
+    And the exit status should be non-zero
+
+  Scenario 25: Search requires search term
+    Given I have a database with commands
+    When I run "shy search" without a search term
+    Then the output should show usage information
+    And the exit status should be non-zero
+
+  Scenario 26: List with invalid limit
+    Given I have a database with commands
+    When I run "shy list --limit -5"
+    Then the output should indicate invalid limit
+    And the exit status should be non-zero
+
+  Scenario 27: Commands with special characters display correctly
+    Given I have a database with a command "echo \"hello world\" | grep 'test'"
+    When I run "shy list"
+    Then the output should correctly display the command with quotes and pipes
