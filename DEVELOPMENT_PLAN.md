@@ -39,6 +39,15 @@
 - Output is readable and useful
 - Tool handles edge cases gracefully
 
+## Iteration 2.5: History integration with zsh/tv/fzf, etc
+
+- Ctrl-R history look-up draws data from shy
+  - if tv is installed, create a channel for tv
+  - if using fzf, integrate into fzf's user interface
+- `up` (arrow up) should use the shy last-command `shy last-command`
+- zsh right arrow completion should use shy's like-recent command `shy like-recent` to get most recent command that start's the same
+- shy's zsh functionality should be available via `shy init` but split into two different variants, `--record` and `--use`
+
 ---
 
 ## Iteration 3: Rich Metadata

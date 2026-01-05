@@ -1,0 +1,213 @@
+Feature: Shell Integration for Interactive History
+  As a user
+  I want to use shy's history in my shell's interactive features
+  So that I can quickly find and reuse commands
+
+  # Last Command Scenarios
+
+  Scenario 1: Get the last command with shy last-command
+    Given I have a database with commands
+      | command_text | timestamp  |
+      | git status   | 1704470400 |
+      | ls -la       | 1704470401 |
+      | npm test     | 1704470402 |
+    When I run "shy last-command"
+    Then the output should be "npm test"
+    And only the command text should be output (no formatting)
+
+  Scenario 2: Last command with no history
+    Given I have an empty database
+    When I run "shy last-command"
+    Then the output should be empty
+    And the exit status should be 0
+
+  # Like-Recent Command Scenarios
+
+  Scenario 4: Get most recent command starting with prefix
+    Given I have a database with commands
+      | command_text        | timestamp  |
+      | git status          | 1704470400 |
+      | git commit -m "a"   | 1704470401 |
+      | ls -la              | 1704470402 |
+      | git push            | 1704470403 |
+    When I run "shy like-recent 'git'"
+    Then the output should be "git push"
+
+  Scenario 5: Like-recent with no matches
+    Given I have a database with commands
+      | command_text | timestamp  |
+      | ls -la       | 1704470400 |
+      | pwd          | 1704470401 |
+    When I run "shy like-recent 'docker'"
+    Then the output should be empty
+    And the exit status should be 0
+
+  Scenario 6: Like-recent is case-sensitive by default
+    Given I have a database with commands
+      | command_text | timestamp  |
+      | Git Status   | 1704470400 |
+      | git status   | 1704470401 |
+    When I run "shy like-recent 'git'"
+    Then the output should be "git status"
+
+  Scenario 7: Like-recent ignores shy commands
+    Given I have a database with commands
+      | command_text    | timestamp  |
+      | git status      | 1704470400 |
+      | shy list        | 1704470401 |
+      | git commit      | 1704470402 |
+    When I run "shy like-recent 'git'"
+    Then the output should be "git commit"
+    And shy commands should be filtered out
+
+  # Init Command Variants
+
+  Scenario 8: Init with --record flag only enables recording
+    Given I am using zsh as my shell
+    When I run "shy init zsh --record"
+    Then the output should define __shy_preexec
+    And the output should define __shy_precmd
+    And the output should NOT include history lookup functions
+    And the output should NOT include completion functions
+
+  Scenario 9: Init with --use flag only enables history usage
+    Given I am using zsh as my shell
+    When I run "shy init zsh --use"
+    Then the output should define shy_ctrl_r for Ctrl-R binding
+    And the output should define shy_up_arrow for up arrow binding
+    And the output should define shy_right_arrow for right arrow completion
+    And the output should NOT include __shy_preexec
+    And the output should NOT include __shy_precmd
+
+  Scenario 10: Init with both --record and --use
+    Given I am using zsh as my shell
+    When I run "shy init zsh --record --use"
+    Then the output should define __shy_preexec
+    And the output should define __shy_precmd
+    And the output should define shy_ctrl_r
+    And the output should define shy_up_arrow
+    And the output should define shy_right_arrow
+
+  Scenario 11: Init without flags defaults to --record only
+    Given I am using zsh as my shell
+    When I run "shy init zsh"
+    Then the output should define __shy_preexec
+    And the output should define __shy_precmd
+    And the output should NOT include history lookup functions
+
+  # Ctrl-R History Lookup Scenarios
+
+  Scenario 12: Ctrl-R lookup uses fzf when available
+    Given I am using zsh with shy integration
+    And fzf is installed
+    And I have a database with commands
+      | command_text | timestamp  |
+      | git status   | 1704470400 |
+      | git commit   | 1704470401 |
+      | npm test     | 1704470402 |
+    When I press Ctrl-R
+    Then fzf should be invoked with shy's command list
+    And the fzf preview should show command metadata (timestamp, pwd, exit status)
+
+  Scenario 13: Ctrl-R lookup uses basic search when fzf not available
+    Given I am using zsh with shy integration
+    And fzf is not installed
+    And I have a database with commands
+    When I press Ctrl-R
+    Then a basic history search interface should be presented
+    And I can type to filter commands
+
+  # Up Arrow Integration Scenarios
+
+  Scenario 14: Up arrow retrieves last command
+    Given I am using zsh with shy --use integration
+    And I have a database with commands
+      | command_text | timestamp  |
+      | git status   | 1704470400 |
+      | npm test     | 1704470401 |
+    When I press the up arrow key
+    Then "npm test" should appear on the command line
+
+  Scenario 15: Up arrow cycles through history
+    Given I am using zsh with shy --use integration
+    And I have a database with commands
+      | command_text | timestamp  |
+      | git status   | 1704470400 |
+      | npm test     | 1704470401 |
+      | ls -la       | 1704470402 |
+    When I press the up arrow key once
+    Then "ls -la" should appear on the command line
+    When I press the up arrow key again
+    Then "npm test" should appear on the command line
+    When I press the up arrow key again
+    Then "git status" should appear on the command line
+
+  # Right Arrow Completion Scenarios
+
+  Scenario 16: Right arrow completes with like-recent command
+    Given I am using zsh with shy --use integration
+    And I have a database with commands
+      | command_text        | timestamp  |
+      | git status          | 1704470400 |
+      | git commit -m "a"   | 1704470401 |
+      | git push            | 1704470402 |
+    And I have typed "git " on the command line
+    When I press the right arrow key
+    Then "git push" should complete on the command line
+
+  Scenario 17: Right arrow does nothing when no matches
+    Given I am using zsh with shy --use integration
+    And I have a database with commands
+    And I have typed "docker " on the command line
+    When I press the right arrow key
+    Then the command line should remain unchanged
+
+  # TV Integration Scenarios (if tv is installed)
+
+  Scenario 18: Ctrl-R uses tv when installed
+    Given I am using zsh with shy integration
+    And tv is installed
+    And I have a database with commands
+    When I press Ctrl-R
+    Then tv should be invoked with a shy channel
+    And the channel should stream commands in reverse chronological order
+    And the channel should include metadata columns
+
+  Scenario 19: TV channel shows formatted output
+    Given tv is installed
+    And I have a database with commands
+      | command_text | timestamp  | pwd         | status |
+      | git status   | 1704470400 | /home/user  | 0      |
+      | npm test     | 1704470401 | /home/proj  | 1      |
+    When I run "shy tv-channel"
+    Then the output should be tab-separated with columns
+    And columns should be: timestamp, status, pwd, command
+    And commands should be in reverse chronological order
+
+  # Filter Integration
+
+  Scenario 20: Shy commands are excluded from interactive history
+    Given I have a database with commands
+      | command_text    | timestamp  |
+      | git status      | 1704470400 |
+      | shy list        | 1704470401 |
+      | shy stats       | 1704470402 |
+      | npm test        | 1704470403 |
+    When I use any shy history lookup feature
+    Then shy commands (shy *) should be automatically filtered out
+    And only non-shy commands should be shown
+
+  # Configuration Scenarios
+
+  Scenario 21: Configure whether to record shy commands
+    Given I have a shy configuration file
+    When I set "record_shy_commands: true"
+    Then shy commands should be recorded in history
+    When I set "record_shy_commands: false"
+    Then shy commands should not be recorded in history
+
+  Scenario 22: Configure history lookup limit
+    Given I have a shy configuration file
+    When I set "history_lookup_limit: 1000"
+    Then Ctrl-R should load at most 1000 recent commands
+    And the default should be 10000 if not configured
