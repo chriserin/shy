@@ -34,13 +34,18 @@ type DB struct {
 
 // New creates a new database connection and initializes the schema
 func New(dbPath string) (*DB, error) {
-	// Expand tilde in path
+	// Expand tilde in path or use default
 	if dbPath == "" || dbPath == defaultDBPath {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get user home directory: %w", err)
+		// Use XDG_DATA_HOME if set, otherwise fallback to ~/.local/share
+		dataDir := os.Getenv("XDG_DATA_HOME")
+		if dataDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get user home directory: %w", err)
+			}
+			dataDir = filepath.Join(home, ".local/share")
 		}
-		dbPath = filepath.Join(home, ".local/share/shy/history.db")
+		dbPath = filepath.Join(dataDir, "shy/history.db")
 	} else if dbPath[0] == '~' {
 		home, err := os.UserHomeDir()
 		if err != nil {

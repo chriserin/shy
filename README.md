@@ -34,7 +34,7 @@ shy insert --command "ls -la" --dir /home/user/project --status 0
 - `--git-repo`: Git repository URL (auto-detected if not provided)
 - `--git-branch`: Git branch name (auto-detected if not provided)
 - `--timestamp`: Unix timestamp (default: current time)
-- `--db`: Database file path (default: ~/.local/share/shy/history.db)
+- `--db`: Database file path (default: $XDG_DATA_HOME/shy/history.db or ~/.local/share/shy/history.db)
 
 ### Examples
 

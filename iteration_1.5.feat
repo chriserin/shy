@@ -1,0 +1,159 @@
+Feature: Zsh Shell Integration
+  As a zsh user
+  I want shy to automatically track my commands via shell hooks
+  So that I don't have to manually insert each command
+
+  Background:
+    Given the shy tool is installed
+    And the shy database exists
+
+  Scenario: Generate zsh integration script
+    Given I am using zsh as my shell
+    When I run "shy init zsh"
+    Then the command should output zsh integration script
+    And the script should define a preexec function
+    And the script should define a precmd function
+    And the script should include instructions for installation
+    And the output should be valid zsh syntax
+
+  Scenario: Integration script captures command text
+    Given I have sourced the shy zsh integration
+    When I execute the command "echo hello"
+    Then shy should store the command text "echo hello"
+    And the working directory should be captured
+    And the timestamp should be recorded
+
+  Scenario: Integration script captures exit status
+    Given I have sourced the shy zsh integration
+    When I execute the command "false"
+    And the command exits with status 1
+    Then shy should store the exit status 1
+    And the command should be recorded in the database
+
+  Scenario: Integration script captures successful commands
+    Given I have sourced the shy zsh integration
+    When I execute the command "true"
+    And the command exits with status 0
+    Then shy should store the exit status 0
+    And the command should be recorded in the database
+
+  Scenario: Integration captures git context automatically
+    Given I have sourced the shy zsh integration
+    And I am in a git repository with remote "https://github.com/user/myproject.git"
+    And the current branch is "main"
+    When I execute the command "git status"
+    Then shy should auto-detect and store the git repo
+    And shy should auto-detect and store the git branch "main"
+
+  Scenario: Integration works in non-git directories
+    Given I have sourced the shy zsh integration
+    And I am in a directory that is not a git repository
+    When I execute the command "ls"
+    Then shy should store the command
+    And the git_repo should be NULL
+    And the git_branch should be NULL
+
+  Scenario: Integration captures working directory changes
+    Given I have sourced the shy zsh integration
+    And I am in directory "/home/user/project1"
+    When I execute the command "cd /home/user/project2"
+    And I execute the command "pwd"
+    Then the first command should have working_dir "/home/user/project1"
+    And the second command should have working_dir "/home/user/project2"
+
+  Scenario: Integration handles commands with special characters
+    Given I have sourced the shy zsh integration
+    When I execute the command "echo 'hello \"world\"'"
+    Then shy should store the exact command text including quotes
+    And the special characters should be properly escaped
+
+  Scenario: Integration handles multi-line commands
+    Given I have sourced the shy zsh integration
+    When I execute a multi-line command:
+      """
+      echo "line 1" && \
+      echo "line 2"
+      """
+    Then shy should store the complete multi-line command
+    And the command text should preserve the structure
+
+  Scenario: Integration handles pipelines
+    Given I have sourced the shy zsh integration
+    When I execute the command "ls -la | grep test | wc -l"
+    Then shy should store the entire pipeline as a single command
+    And the exit status should reflect the final command in the pipeline
+
+  Scenario: Integration script has minimal performance impact
+    Given I have sourced the shy zsh integration
+    When I execute a simple command like "echo test"
+    Then the command should complete in under 50 milliseconds additional overhead
+    And the shell should remain responsive
+
+  Scenario: Integration script doesn't interfere with shell operations
+    Given I have sourced the shy zsh integration
+    When I use tab completion
+    And I navigate command history with up/down arrows
+    And I use Ctrl+R for reverse search
+    Then all shell operations should work normally
+    And the hooks should not cause any errors
+
+  Scenario: Init command with eval output
+    Given I am using zsh
+    When I run "shy init zsh"
+    Then the output should include a line like "eval \"$(shy init zsh)\""
+    And the output should explain how to add to .zshrc
+
+  Scenario: Init command provides uninstall instructions
+    Given I am using zsh
+    When I run "shy init zsh"
+    Then the output should include comments explaining how to disable tracking
+    And the output should explain how to remove the integration
+
+  Scenario: Integration can be disabled temporarily
+    Given I have sourced the shy zsh integration
+    When I set the environment variable "SHY_DISABLE=1"
+    And I execute the command "echo test"
+    Then the command should not be tracked
+    When I unset the environment variable "SHY_DISABLE"
+    And I execute the command "echo test2"
+    Then the command should be tracked normally
+
+  Scenario: Integration handles background jobs
+    Given I have sourced the shy zsh integration
+    When I execute the command "sleep 10 &"
+    Then shy should store the command including the "&"
+    And the exit status should be 0 (for the backgrounding operation)
+
+  Scenario: Integration captures command start time accurately
+    Given I have sourced the shy zsh integration
+    When I execute the command "sleep 2"
+    Then the timestamp should reflect when the command started
+    And the timestamp should be accurate within 1 second
+
+  Scenario: Integration handles errors gracefully
+    Given I have sourced the shy zsh integration
+    And the shy database is not accessible
+    When I execute the command "echo test"
+    Then the command should still execute normally
+    And the shell should not hang or show errors
+    And shy should log the error silently
+
+  Scenario: Integration works with command substitution
+    Given I have sourced the shy zsh integration
+    When I execute the command "echo $(date)"
+    Then shy should store the command "echo $(date)"
+    And the command substitution should be recorded as written, not expanded
+
+  Scenario: Integration script is idempotent
+    Given I have sourced the shy zsh integration
+    When I source the shy zsh integration again
+    Then the hooks should not be duplicated
+    And there should be no errors or warnings
+    And command tracking should continue to work normally
+
+  Scenario: Init command includes configuration options
+    Given I am using zsh
+    When I run "shy init zsh"
+    Then the output should include a comment about the SHY_DISABLE variable
+    And the output should mention the database location
+    And the output should be self-documenting
