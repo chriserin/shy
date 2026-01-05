@@ -1,0 +1,56 @@
+# Vision Statement
+
+## Overview
+A lightweight, intelligent command-line history tracker that
+transforms shell history from a simple text log into a queryable, structured
+database.
+
+## Purpose
+Modern shell users execute thousands of commands, but traditional
+history mechanisms are limited - they're difficult to search, lack context, and
+provide minimal insight into workflow patterns. This tool bridges that gap by
+capturing rich command history data in SQLite, making it instantly searchable
+and analyzable.
+
+Provides historical context to enable work summarization
+
+## Core Principles
+
+**Seamless Integration**
+Zero friction through zsh hooks - history tracking
+happens automatically without changing user workflow or requiring explicit
+actions.
+
+**Structured Intelligence**
+SQLite storage enables powerful queries: find commands by directory, timestamp,
+exit status, git branch, or duration . Understand not just what you ran, but
+when, where, and how it performed.
+
+**Privacy & Control**
+All data stays local. Users maintain full control over
+their history database with the ability to filter, exclude, or purge sensitive
+commands.
+
+**Performance First**
+Minimal overhead - tracking should be imperceptible. Fast
+queries mean instant recall of relevant commands, even with years of history.
+
+## Key Capabilities
+
+- Rich metadata capture: command text, timestamp, working directory, exit
+  status, duration
+- Advanced search and filtering across all metadata dimensions
+- Statistics and insights into command usage patterns
+- Export and backup functionality
+- Configurable retention and privacy rules
+
+## Target Users
+
+Developers, system administrators, and power users who live in the terminal and
+want to leverage their command history as a knowledge base as well as a basic log.
+
+## Future Direction
+
+Evolve from simple tracking to intelligent assistance: command suggestions
+based on context, workflow pattern recognition, and integration with other
+shell tools to create a smarter command-line experience.

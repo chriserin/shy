@@ -1,0 +1,107 @@
+Feature: Core Command History Tracking via CLI
+  As a shell user
+  I want to manually record my commands in a SQLite database using the shy CLI
+  So that I can build a queryable history of my terminal activities
+
+  Background:
+    Given the shy tool is installed
+
+  Scenario: Database initialization on first insert
+    Given no existing shy database exists
+    When I run "shy insert --command 'ls -la' --dir '/home/user/projects' --status 0"
+    Then a SQLite database should be created at "~/.local/share/shy/history.db"
+    And the database should contain a "commands" table
+    And the "commands" table should have the following columns:
+      | column        | type    |
+      | id            | INTEGER |
+      | timestamp     | INTEGER |
+      | exit_status   | INTEGER |
+      | command_text  | TEXT    |
+      | working_dir   | TEXT    |
+      | git_repo      | TEXT    |
+      | git_branch    | TEXT    |
+    And a new record should be inserted with the provided values
+
+  Scenario: Insert a simple command without git context
+    Given the shy database exists
+    When I run "shy insert --command 'ls -la' --dir '/home/user/projects'"
+    Then a new record should be inserted into the commands table
+    And the record should have command_text "ls -la"
+    And the record should have working_dir "/home/user/projects"
+    And the record should have exit_status 0
+    And the record should have git_repo NULL
+    And the record should have git_branch NULL
+    And the timestamp should be within 1 second of the current time
+
+  Scenario: Insert a command with git context
+    Given the shy database exists
+    When I run "shy insert --command 'git status' --dir '/home/user/myproject' --git-repo 'https://github.com/user/myproject.git' --git-branch 'feature/new-feature'"
+    Then a new record should be inserted into the commands table
+    And the record should have command_text "git status"
+    And the record should have working_dir "/home/user/myproject"
+    And the record should have exit_status 0
+    And the record should have git_repo "https://github.com/user/myproject.git"
+    And the record should have git_branch "feature/new-feature"
+
+  Scenario: Insert a command with non-zero exit status
+    Given the shy database exists
+    When I run "shy insert --command 'grep nonexistent file.txt' --dir '/home/user/projects' --status 1"
+    Then a new record should be inserted into the commands table
+    And the record should have command_text "grep nonexistent file.txt"
+    And the record should have exit_status 1
+
+  Scenario: Insert multiple commands sequentially
+    Given the shy database exists
+    And the database has 0 command records
+    When I run the following commands:
+      | command                                                   |
+      | shy insert --command 'pwd' --dir '/home/user' --status 0          |
+      | shy insert --command 'echo test' --dir '/home/user' --status 0    |
+      | shy insert --command 'false' --dir '/home/user' --status 1        |
+      | shy insert --command 'true' --dir '/home/user' --status 0         |
+    Then the database should have 4 command records
+    And each record should have a unique id
+    And the records should be ordered by timestamp ascending
+
+  Scenario: Insert command with special characters
+    Given the shy database exists
+    When I run "shy insert --command 'echo \"Hello \\\"World\\\"\"' --dir '/home/user' --status 0"
+    Then a new record should be inserted into the commands table
+    And the record should have command_text "echo \"Hello \\\"World\\\"\""
+
+  Scenario: Insert very long command
+    Given the shy database exists
+    When I run "shy insert" with a command text that is 1000 characters long
+    Then a new record should be inserted into the commands table
+    And the record should have the complete command_text with all 1000 characters
+
+  Scenario: Auto-detect git context from working directory
+    Given the shy database exists
+    And "/home/user/myproject" is a git repository with remote "https://github.com/user/myproject.git"
+    And the current branch is "main"
+    When I run "shy insert --command 'ls' --dir '/home/user/myproject'"
+    Then the git context should be auto-detected
+    And the record should have git_repo "https://github.com/user/myproject.git"
+    And the record should have git_branch "main"
+
+  Scenario: Auto-detect git context from subdirectory
+    Given the shy database exists
+    And "/home/user/myproject/src/components" is inside a git repository with remote "https://github.com/user/myproject.git"
+    And the current branch is "main"
+    When I run "shy insert --command 'ls' --dir '/home/user/myproject/src/components' --status 0"
+    Then the git context should be auto-detected from the parent repository
+    And the record should have git_repo "https://github.com/user/myproject.git"
+    And the record should have git_branch "main"
+
+  Scenario: Explicit git context overrides auto-detection
+    Given the shy database exists
+    And "/home/user/myproject" is a git repository with remote "https://github.com/user/myproject.git"
+    When I run "shy insert --command 'ls' --dir '/home/user/myproject' --status 0 --git-repo 'override-repo' --git-branch 'override-branch'"
+    Then the record should have git_repo "override-repo"
+    And the record should have git_branch "override-branch"
+
+  Scenario: Insert fails with missing required parameters
+    Given the shy database exists
+    When I run "shy insert --command 'ls'"
+    Then the command should fail with an error
+    And the error message should indicate that --dir is required
