@@ -43,9 +43,10 @@ func TestScenario1_GenerateZshIntegrationScript(t *testing.T) {
 	assert.Contains(t, output, "Installation:", "should include installation instructions")
 	assert.Contains(t, output, "eval \"$(shy init zsh)\"", "should include eval command")
 
-	// And: the output should be valid zsh syntax (basic checks)
-	assert.Contains(t, output, "preexec_functions+=", "should add to preexec_functions")
-	assert.Contains(t, output, "precmd_functions+=", "should add to precmd_functions")
+	// And: the output should use zsh's standard hook system
+	assert.Contains(t, output, "add-zsh-hook", "should use add-zsh-hook")
+	assert.Contains(t, output, "add-zsh-hook preexec __shy_preexec", "should register preexec hook")
+	assert.Contains(t, output, "add-zsh-hook precmd __shy_precmd", "should register precmd hook")
 
 	// Reset command for next test
 	rootCmd.SetArgs(nil)
