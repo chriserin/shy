@@ -68,6 +68,18 @@ func runListAll(cmd *cobra.Command, args []string) error {
 					parts = append(parts, c.WorkingDir)
 				case "cmd":
 					parts = append(parts, c.CommandText)
+				case "gb": // git branch
+					if c.GitBranch != nil && *c.GitBranch != "" {
+						parts = append(parts, *c.GitBranch)
+					} else {
+						parts = append(parts, "")
+					}
+				case "gr": // git repo
+					if c.GitRepo != nil && *c.GitRepo != "" {
+						parts = append(parts, *c.GitRepo)
+					} else {
+						parts = append(parts, "")
+					}
 				}
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", strings.Join(parts, "\t"))
