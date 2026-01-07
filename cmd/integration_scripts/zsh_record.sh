@@ -31,7 +31,14 @@ __shy_preexec() {
 	# Store the command and context
 	__shy_cmd="$1"
 	__shy_cmd_dir="$PWD"
-	__shy_cmd_start="$(date +%s)"
+	# Capture start time in milliseconds (using date with %N for nanoseconds, falling back to seconds * 1000)
+	if date +%N &>/dev/null 2>&1; then
+		# GNU date supports nanoseconds
+		__shy_cmd_start="$(date +%s%3N)"
+	else
+		# macOS/BSD date doesn't support %N, use seconds and append 000 for milliseconds
+		__shy_cmd_start="$(($(date +%s) * 1000))"
+	fi
 }
 
 # Hook called after command execution
@@ -52,6 +59,25 @@ __shy_precmd() {
 	local shy_data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/shy"
 	local shy_error_log="$shy_data_dir/error.log"
 
+	# Calculate duration if start time was captured
+	local duration=""
+	local timestamp=""
+	if [[ -n "$__shy_cmd_start" ]]; then
+		# Get current time in milliseconds
+		local end_time
+		if date +%N &>/dev/null 2>&1; then
+			end_time="$(date +%s%3N)"
+		else
+			end_time="$(($(date +%s) * 1000))"
+		fi
+
+		# Calculate duration in milliseconds
+		duration=$((end_time - __shy_cmd_start))
+
+		# Timestamp for database (seconds since epoch)
+		timestamp=$(((__shy_cmd_start + 500) / 1000))  # Round to nearest second
+	fi
+
 	# Build shy insert command
 	local shy_args=(
 		"insert"
@@ -61,8 +87,13 @@ __shy_precmd() {
 	)
 
 	# Add timestamp if available
-	if [[ -n "$__shy_cmd_start" ]]; then
-		shy_args+=("--timestamp" "$__shy_cmd_start")
+	if [[ -n "$timestamp" ]]; then
+		shy_args+=("--timestamp" "$timestamp")
+	fi
+
+	# Add duration if calculated
+	if [[ -n "$duration" ]] && [[ "$duration" -ge 0 ]]; then
+		shy_args+=("--duration" "$duration")
 	fi
 
 	# Add custom database path if set

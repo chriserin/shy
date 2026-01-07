@@ -74,40 +74,24 @@ func formatTimestamp(timestamp int64) string {
 	return ""
 }
 
-// formatElapsedTime formats the elapsed time since a command was run
-func formatElapsedTime(timestamp int64) string {
-	elapsed := time.Since(time.Unix(timestamp, 0))
+// formatDuration formats a duration in milliseconds to mm:ss format
+// Returns "00:00" for null/missing duration or durations >= 1 hour
+func formatDuration(durationMs *int64) string {
+	if durationMs == nil {
+		return "00:00"
+	}
 
-	if elapsed.Hours() >= 24 {
-		days := int(elapsed.Hours() / 24)
-		if days == 1 {
-			return "1 day ago"
-		}
-		return fmt.Sprintf("%d days ago", days)
+	totalSeconds := *durationMs / 1000
+
+	// Don't show hours - return empty or 00:00 for >= 1 hour
+	if totalSeconds >= 3600 {
+		return "" // Empty string for >= 1 hour
 	}
-	if elapsed.Hours() >= 1 {
-		hours := int(elapsed.Hours())
-		minutes := int(elapsed.Minutes()) % 60
-		if hours == 1 && minutes == 0 {
-			return "1 hour ago"
-		}
-		if minutes > 0 {
-			return fmt.Sprintf("%d hours %d minutes ago", hours, minutes)
-		}
-		return fmt.Sprintf("%d hours ago", hours)
-	}
-	if elapsed.Minutes() >= 1 {
-		minutes := int(elapsed.Minutes())
-		if minutes == 1 {
-			return "1 minute ago"
-		}
-		return fmt.Sprintf("%d minutes ago", minutes)
-	}
-	seconds := int(elapsed.Seconds())
-	if seconds <= 1 {
-		return "just now"
-	}
-	return fmt.Sprintf("%d seconds ago", seconds)
+
+	minutes := totalSeconds / 60
+	seconds := totalSeconds % 60
+
+	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
 func runFc(cmd *cobra.Command, args []string) error {
@@ -165,13 +149,13 @@ func runFc(cmd *cobra.Command, args []string) error {
 			line += timeStr
 		}
 
-		// Add elapsed time if -D flag is set
+		// Add duration if -D flag is set
 		if fcElapsedTime {
-			elapsedStr := formatElapsedTime(c.Timestamp)
+			durationStr := formatDuration(c.Duration)
 			if line != "" {
 				line += "  "
 			}
-			line += fmt.Sprintf("[%s]", elapsedStr)
+			line += durationStr
 		}
 
 		// Add command text

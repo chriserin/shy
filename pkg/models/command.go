@@ -11,6 +11,7 @@ type Command struct {
 	WorkingDir  string
 	GitRepo     *string
 	GitBranch   *string
+	Duration    *int64 // Duration in milliseconds, null if not captured
 }
 
 // NewCommand creates a new Command with the current timestamp

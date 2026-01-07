@@ -902,9 +902,9 @@ func TestScenario20_DisplayTimestampsCustomFormat(t *testing.T) {
 	fcTimeCustom = "" // Reset flag
 }
 
-// Scenario 21: Display elapsed time since command
-func TestScenario21_DisplayElapsedTime(t *testing.T) {
-	// Given: I have a command run 2 hours and 30 minutes ago
+// Scenario 21: Display duration with -D flag
+func TestScenario21_DisplayDuration(t *testing.T) {
+	// Given: I have a command with a 2.5 minute duration
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
@@ -912,14 +912,15 @@ func TestScenario21_DisplayElapsedTime(t *testing.T) {
 	require.NoError(t, err)
 	defer database.Close()
 
-	// Create a timestamp that's 2.5 hours ago
-	twoHoursThirtyMinutesAgo := time.Now().Add(-2*time.Hour - 30*time.Minute)
+	// Create a command with 2 minutes 30 seconds duration
+	duration := int64(150000) // 150 seconds = 2m 30s
 
 	cmd := &models.Command{
 		CommandText: "test command",
 		WorkingDir:  "/home/test",
 		ExitStatus:  0,
-		Timestamp:   twoHoursThirtyMinutesAgo.Unix(),
+		Timestamp:   time.Now().Unix(),
+		Duration:    &duration,
 	}
 	_, err = database.InsertCommand(cmd)
 	require.NoError(t, err)
@@ -934,19 +935,16 @@ func TestScenario21_DisplayElapsedTime(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: the output should show elapsed time information
-	// It should show something like "[2 hours 30 minutes ago]"
-	assert.Contains(t, output, "hours", "should show hours in elapsed time")
-	assert.Contains(t, output, "minutes", "should show minutes in elapsed time")
-	assert.Contains(t, output, "ago", "should show 'ago' in elapsed time")
+	// Then: the output should show duration in mm:ss format
+	assert.Contains(t, output, "02:30", "should show duration as 02:30")
 
 	rootCmd.SetArgs(nil)
 	fcElapsedTime = false // Reset flag
 }
 
-// Scenario 22: Combine timestamp format with elapsed time
-func TestScenario22_CombineTimestampAndElapsedTime(t *testing.T) {
-	// Given: I have a command run at a specific time
+// Scenario 22: Combine timestamp format with duration
+func TestScenario22_CombineTimestampAndDuration(t *testing.T) {
+	// Given: I have a command run at a specific time with duration
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
@@ -954,14 +952,16 @@ func TestScenario22_CombineTimestampAndElapsedTime(t *testing.T) {
 	require.NoError(t, err)
 	defer database.Close()
 
-	// Create a timestamp that's 1 hour ago
+	// Create a timestamp and duration
 	oneHourAgo := time.Now().Add(-1 * time.Hour)
+	duration := int64(30000) // 30 seconds
 
 	cmd := &models.Command{
 		CommandText: "test command",
 		WorkingDir:  "/home/test",
 		ExitStatus:  0,
 		Timestamp:   oneHourAgo.Unix(),
+		Duration:    &duration,
 	}
 	_, err = database.InsertCommand(cmd)
 	require.NoError(t, err)
@@ -976,14 +976,227 @@ func TestScenario22_CombineTimestampAndElapsedTime(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: the output should show both ISO timestamp and elapsed time
+	// Then: the output should show both ISO timestamp and duration
 	// Check for ISO format pattern (YYYY-MM-DD HH:MM)
 	assert.Regexp(t, `\d{4}-\d{2}-\d{2} \d{2}:\d{2}`, output, "should show ISO timestamp")
-	// Check for elapsed time
-	assert.Contains(t, output, "ago", "should show elapsed time")
-	assert.Contains(t, output, "[", "elapsed time should be in brackets")
+	// Check for duration in mm:ss format
+	assert.Contains(t, output, "00:30", "should show duration")
 
 	rootCmd.SetArgs(nil)
 	fcTimeISO = false    // Reset flag
 	fcElapsedTime = false // Reset flag
+}
+
+// Phase 2: Duration Display Tests
+
+// Scenario 9: Display duration with -D flag in history
+func TestDurationScenario9_DisplayDurationWithDFlag(t *testing.T) {
+	// Given: I have commands with durations in the database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands with various durations
+	durations := []int64{1500, 45000, 120000} // 1.5s, 45s, 2m
+	for i, dur := range durations {
+		d := dur
+		cmd := &models.Command{
+			CommandText: fmt.Sprintf("cmd%d", i+1),
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400 + i),
+			Duration:    &d,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy history -D"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-D", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: the output should show duration for each command
+	assert.Equal(t, 3, len(lines), "should show 3 commands")
+
+	// And: durations should be in human-readable format 'mm:ss'
+	assert.Contains(t, lines[0], "00:01", "1.5s should show as 00:01")
+	assert.Contains(t, lines[1], "00:45", "45s should show as 00:45")
+	assert.Contains(t, lines[2], "02:00", "120s should show as 02:00")
+
+	rootCmd.SetArgs(nil)
+	fcElapsedTime = false
+}
+
+// Scenario 11: Display duration in human-readable format
+func TestDurationScenario11_DisplayDurationInHumanReadableFormat(t *testing.T) {
+	// Given: I have commands with various durations
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Test cases: duration in ms, expected output
+	testCases := []struct {
+		durationMs int64
+		expected   string
+		desc       string
+	}{
+		{500, "00:00", "under 1 second should show 00:00"},
+		{45000, "00:45", "45 seconds should show 00:45"},
+		{150000, "02:30", "2 minutes 30 seconds should show 02:30"},
+		{3600000, "", "1 hour should show empty string"},
+		{7200000, "", "2 hours should show empty string"},
+	}
+
+	for i, tc := range testCases {
+		d := tc.durationMs
+		cmd := &models.Command{
+			CommandText: fmt.Sprintf("cmd%d", i+1),
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400 + i),
+			Duration:    &d,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy history -D"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-D", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: verify each format
+	for i, tc := range testCases {
+		if tc.expected != "" {
+			assert.Contains(t, lines[i], tc.expected, tc.desc)
+		} else {
+			// For empty duration (>= 1 hour), the line should still be present but without duration shown
+			// It will just have the event number and command text
+			assert.Contains(t, lines[i], fmt.Sprintf("cmd%d", i+1), "command should still be shown")
+		}
+	}
+
+	rootCmd.SetArgs(nil)
+	fcElapsedTime = false
+}
+
+// Scenario 12: Display duration alongside timestamps
+func TestDurationScenario12_DisplayDurationAlongsideTimestamps(t *testing.T) {
+	// Given: I have a command with timestamp and duration
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	testTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.UTC)
+	require.NoError(t, err)
+
+	duration := int64(125000) // 2m 5s
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   testTime.Unix(),
+		Duration:    &duration,
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history -i -D"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "1", "-i", "-D", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should show: event number, timestamp, duration, command text
+	assert.Contains(t, output, "1", "should show event number")
+	assert.Contains(t, output, "2024-01-15 14:30", "should show timestamp")
+	assert.Contains(t, output, "02:05", "should show duration")
+	assert.Contains(t, output, "test command", "should show command text")
+
+	// And: all fields should be properly aligned (separated by spaces)
+	assert.Regexp(t, `\s+1\s+2024-01-15 14:30\s+02:05\s+test command`, output)
+
+	rootCmd.SetArgs(nil)
+	fcTimeISO = false
+	fcElapsedTime = false
+}
+
+// Scenario 13: Commands without duration show 00:00
+func TestDurationScenario13_CommandsWithoutDurationShow0000(t *testing.T) {
+	// Given: I have some commands with duration and some without
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Command with duration
+	duration := int64(45000) // 45s
+	cmd1 := &models.Command{
+		CommandText: "cmd_with_duration",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+		Duration:    &duration,
+	}
+	_, err = database.InsertCommand(cmd1)
+	require.NoError(t, err)
+
+	// Command without duration (nil)
+	cmd2 := &models.Command{
+		CommandText: "cmd_without_duration",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470401),
+		Duration:    nil,
+	}
+	_, err = database.InsertCommand(cmd2)
+	require.NoError(t, err)
+
+	// When: I run "shy history -D"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-D", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: commands with duration should show the duration
+	assert.Contains(t, lines[0], "00:45", "command with duration should show 00:45")
+
+	// And: commands without duration should show "00:00"
+	assert.Contains(t, lines[1], "00:00", "command without duration should show 00:00")
+
+	rootCmd.SetArgs(nil)
+	fcElapsedTime = false
 }

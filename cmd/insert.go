@@ -17,6 +17,7 @@ var (
 	gitRepo    string
 	gitBranch  string
 	timestamp  int64
+	duration   int64
 )
 
 var insertCmd = &cobra.Command{
@@ -35,6 +36,7 @@ func init() {
 	insertCmd.Flags().StringVar(&gitRepo, "git-repo", "", "Git repository URL")
 	insertCmd.Flags().StringVar(&gitBranch, "git-branch", "", "Git branch name")
 	insertCmd.Flags().Int64Var(&timestamp, "timestamp", 0, "Unix timestamp (default: current time)")
+	insertCmd.Flags().Int64Var(&duration, "duration", 0, "Command duration in milliseconds")
 
 	insertCmd.MarkFlagRequired("command")
 	insertCmd.MarkFlagRequired("dir")
@@ -62,6 +64,11 @@ func runInsert(cmd *cobra.Command, args []string) error {
 	// Override timestamp if provided
 	if timestamp != 0 {
 		cmdModel.Timestamp = timestamp
+	}
+
+	// Set duration if provided
+	if duration > 0 {
+		cmdModel.Duration = &duration
 	}
 
 	// Handle git context

@@ -1,0 +1,172 @@
+Feature: Command Duration Tracking
+
+  As a user, I want to track how long my commands take to execute
+  so that I can identify slow commands and optimize my workflow.
+
+  Background:
+    Given shy is properly initialized with recording enabled
+    And the database schema supports duration tracking
+
+  # Phase 1: Duration Capture
+
+  Scenario 1: Capture duration for successful command
+    Given I run a command that takes 2.5 seconds to complete
+    When the command finishes successfully
+    Then the database should record a duration of approximately 2.5 seconds
+
+  Scenario 2: Capture duration for failed command
+    Given I run a command that takes 1.2 seconds and fails
+    When the command finishes with exit status 1
+    Then the database should record a duration of approximately 1.2 seconds
+    And the exit status should be 1
+
+  Scenario 3: Capture duration for very short commands
+    Given I run a command that completes in less than 0.1 seconds
+    When the command finishes
+    Then the database should record a duration in milliseconds
+
+  Scenario 4: Capture duration for long-running commands
+    Given I run a command that takes 3 hours and 45 minutes
+    When the command finishes
+    Then the database should record a duration of 13500 seconds
+
+  Scenario 5: Duration is null for commands without timing data
+    Given I have historical commands imported without duration
+    When I query those commands
+    Then the duration field should be null
+    And commands should display without errors
+
+  Scenario 6: Preexec hook sets start time
+    Given the preexec hook is triggered
+    When a command is about to execute
+    Then the start time should be stored in a shell variable
+
+  Scenario 7: Precmd hook calculates duration
+    Given the preexec hook stored a start time
+    When the precmd hook is triggered after command completion
+    Then the duration should be calculated as (end time - start time)
+    And the duration should be passed to shy insert
+
+  Scenario 8: Duration capture handles missing preexec
+    Given a command runs without preexec being triggered
+    When precmd tries to calculate duration
+    Then duration should be recorded as null
+    And the command should still be recorded
+
+  # Phase 2: Duration Display
+
+  Scenario 9: Display duration with -D flag in history
+    Given I have commands with durations in the database
+    When I run "shy history -D"
+    Then the output should show duration for each command
+    And durations should be in human-readable format 'mm:ss'
+
+  Scenario 11: Display duration in human-readable format
+    Given I have commands with various durations
+    When I run "shy history -D"
+    Then commands under 1 second should not show milliseconds (e.g., "00:00")
+    And commands under 1 minute should show seconds (e.g., "00:45")
+    And commands over 1 minute should show minutes and seconds (e.g., "02:30")
+    And commands over 1 hour should not show hours (e.g., "")
+
+  Scenario 12: Display duration alongside timestamps
+    Given I have a command with timestamp and duration
+    When I run "shy history -i -D"
+    Then the output should show: event number, timestamp, duration, command text
+    And all fields should be properly aligned
+
+  Scenario 13: Commands without duration show 00:00
+    Given I have some commands with duration and some without
+    When I run "shy history -D"
+    Then commands with duration should show the duration
+    And commands without duration should show "00:00"
+
+  # Phase 3: Duration in list command
+
+  Scenario 17: List command includes duration in format string
+    Given I have commands with durations
+    When I run "shy list --fmt 'cmd,timestamp,dur'"
+    Then each line should show command text, timestamp, and duration
+    And duration should be in human-readable format
+
+  Scenario 18: List command shows duration in seconds format
+    Given I have commands with durations
+    When I run "shy list --fmt 'cmd,duration' --duration-format seconds"
+    Then durations should be shown as decimal seconds (e.g., "2.50")
+
+  # Phase 4: Database Schema
+
+  Scenario 19: Duration column is added to database
+    Given an existing database without duration column
+    When shy runs with duration support
+    Then the database should be migrated to add duration column
+    And existing commands should have null duration
+
+  Scenario 20: Duration is stored as milliseconds in database
+    Given I run a command that takes 2.5 seconds
+    When the command is inserted into the database
+    Then the duration column should contain 2500 (milliseconds)
+
+  Scenario 21: Duration precision handles sub-millisecond commands
+    Given I run a very fast command that takes 0.3 milliseconds
+    When the command is inserted
+    Then the duration should be stored with microsecond precision
+    Or rounded to nearest millisecond
+
+  # Phase 5: Shell Integration
+
+  Scenario 22: Zsh integration captures duration correctly
+    Given I am using zsh with shy integration
+    When I run "sleep 2"
+    Then the preexec hook should capture the start time
+    And the precmd hook should calculate duration as ~2000ms
+    And shy insert should receive the duration parameter
+
+  Scenario 23: Duration capture works with command substitution
+    Given I run a command with command substitution "echo $(sleep 1; echo done)"
+    When the command completes
+    Then the total duration should include the sleep time
+
+  Scenario 24: Duration handles interrupted commands
+    Given I start a long-running command
+    When I press Ctrl-C to interrupt it
+    Then the duration should reflect the time until interruption
+    And the exit status should show it was interrupted
+
+  # Phase 6: Edge Cases
+
+  Scenario 25: Duration handles clock changes
+    Given a command starts before a clock adjustment
+    When the system clock is adjusted during execution
+    Then the duration should be calculated using monotonic time
+    Or should handle the edge case gracefully
+
+  Scenario 26: Duration handles very long commands
+    Given I run a command that takes 7 days
+    When the command completes
+    Then the duration should be accurately recorded
+    And display as "7d" or "168h" in human-readable format
+
+  Scenario 27: Duration statistics
+    Given I have 100 commands in history
+    When I run "shy stats duration"
+    Then I should see average, median, min, max durations
+    And percentile breakdowns (p50, p95, p99)
+
+  # Phase 7: Privacy and Configuration
+
+  Scenario 28: Option to disable duration tracking
+    Given I set SHY_CAPTURE_DURATION=false
+    When I run commands
+    Then duration should not be captured
+    But other command data should still be recorded
+
+  Scenario 29: Duration format configuration
+    Given I set SHY_DURATION_FORMAT=hms
+    When I run "shy history -d"
+    Then durations should show as "1h 23m 45s" format
+
+  Scenario 30: Duration format configuration as seconds
+    Given I set SHY_DURATION_FORMAT=seconds
+    When I run "shy history -d"
+    Then durations should show as "125.00s" format

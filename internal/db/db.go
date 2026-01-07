@@ -21,7 +21,8 @@ const (
 			command_text TEXT NOT NULL,
 			working_dir TEXT NOT NULL,
 			git_repo TEXT,
-			git_branch TEXT
+			git_branch TEXT,
+			duration INTEGER
 		);
 	`
 )
@@ -84,10 +85,51 @@ func New(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 
-	return &DB{
+	// Run migrations
+	db := &DB{
 		conn: conn,
 		path: dbPath,
-	}, nil
+	}
+	if err := db.migrate(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	return db, nil
+}
+
+// migrate runs database migrations
+func (db *DB) migrate() error {
+	// Check if duration column exists
+	rows, err := db.conn.Query("PRAGMA table_info(commands)")
+	if err != nil {
+		return fmt.Errorf("failed to get table info: %w", err)
+	}
+	defer rows.Close()
+
+	hasDuration := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dfltValue interface{}
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("failed to scan column info: %w", err)
+		}
+		if name == "duration" {
+			hasDuration = true
+			break
+		}
+	}
+
+	// Add duration column if it doesn't exist
+	if !hasDuration {
+		if _, err := db.conn.Exec("ALTER TABLE commands ADD COLUMN duration INTEGER"); err != nil {
+			return fmt.Errorf("failed to add duration column: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Close closes the database connection
@@ -103,14 +145,15 @@ func (db *DB) Path() string {
 // InsertCommand inserts a new command into the database
 func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 	result, err := db.conn.Exec(`
-		INSERT INTO commands (timestamp, exit_status, command_text, working_dir, git_repo, git_branch)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		INSERT INTO commands (timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		cmd.Timestamp,
 		cmd.ExitStatus,
 		cmd.CommandText,
 		cmd.WorkingDir,
 		cmd.GitRepo,
 		cmd.GitBranch,
+		cmd.Duration,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert command: %w", err)
@@ -128,7 +171,7 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 func (db *DB) GetCommand(id int64) (*models.Command, error) {
 	cmd := &models.Command{}
 	err := db.conn.QueryRow(`
-		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
 		FROM commands WHERE id = ?`,
 		id,
 	).Scan(
@@ -139,6 +182,7 @@ func (db *DB) GetCommand(id int64) (*models.Command, error) {
 		&cmd.WorkingDir,
 		&cmd.GitRepo,
 		&cmd.GitBranch,
+		&cmd.Duration,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get command: %w", err)
@@ -228,9 +272,9 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models
 	if limit > 0 {
 		// Get the N most recent commands in the range, then order them oldest-to-newest
 		query = fmt.Sprintf(`
-			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
 			FROM (
-				SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+				SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
 				FROM commands
 				%s
 				ORDER BY timestamp DESC
@@ -239,7 +283,7 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models
 			ORDER BY timestamp ASC`, whereClause, limit)
 	} else {
 		query = fmt.Sprintf(`
-			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
 			FROM commands
 			%s
 			ORDER BY timestamp ASC`, whereClause)
@@ -262,6 +306,7 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models
 			&cmd.WorkingDir,
 			&cmd.GitRepo,
 			&cmd.GitBranch,
+			&cmd.Duration,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan command: %w", err)
 		}
@@ -299,7 +344,7 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 	}
 
 	query := `
-		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
 		FROM commands
 		WHERE id >= ? AND id <= ?
 		ORDER BY id ASC`
@@ -321,6 +366,7 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 			&cmd.WorkingDir,
 			&cmd.GitRepo,
 			&cmd.GitBranch,
+			&cmd.Duration,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan command: %w", err)
 		}
