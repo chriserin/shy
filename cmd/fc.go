@@ -4,17 +4,25 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
+	"github.com/ncruces/go-strftime"
 	"github.com/spf13/cobra"
 
 	"github.com/chris/shy/internal/db"
 )
 
 var (
-	fcList    bool
-	fcNoNum   bool
-	fcReverse bool
-	fcLast    int
+	fcList         bool
+	fcNoNum        bool
+	fcReverse      bool
+	fcLast         int
+	fcShowTime     bool
+	fcTimeISO      bool
+	fcTimeUS       bool
+	fcTimeEU       bool
+	fcTimeCustom   string
+	fcElapsedTime  bool
 )
 
 var fcCmd = &cobra.Command{
@@ -30,6 +38,76 @@ func init() {
 	fcCmd.Flags().BoolVarP(&fcNoNum, "no-numbers", "n", false, "Suppress event numbers when listing")
 	fcCmd.Flags().BoolVarP(&fcReverse, "reverse", "r", false, "Reverse order (oldest first)")
 	fcCmd.Flags().IntVar(&fcLast, "last", 0, "Show last N commands (e.g., --last 10 instead of -- -10)")
+	fcCmd.Flags().BoolVarP(&fcShowTime, "time", "d", false, "Display timestamps")
+	fcCmd.Flags().BoolVarP(&fcTimeISO, "iso", "i", false, "Display timestamps in ISO8601 format (yyyy-mm-dd hh:mm)")
+	fcCmd.Flags().BoolVarP(&fcTimeUS, "american", "f", false, "Display timestamps in US format (mm/dd/yy hh:mm)")
+	fcCmd.Flags().BoolVarP(&fcTimeEU, "european", "E", false, "Display timestamps in European format (dd.mm.yyyy hh:mm)")
+	fcCmd.Flags().StringVarP(&fcTimeCustom, "time-format", "t", "", "Custom timestamp format (strftime)")
+	fcCmd.Flags().BoolVarP(&fcElapsedTime, "elapsed", "D", false, "Display elapsed time since command")
+}
+
+// formatTimestamp formats a Unix timestamp based on the active flags
+func formatTimestamp(timestamp int64) string {
+	t := time.Unix(timestamp, 0).UTC()
+
+	// Custom format takes precedence
+	if fcTimeCustom != "" {
+		return strftime.Format(fcTimeCustom, t)
+	}
+
+	// Then check specific formats
+	if fcTimeISO {
+		return strftime.Format("%Y-%m-%d %H:%M", t)
+	}
+	if fcTimeUS {
+		return strftime.Format("%m/%d/%y %H:%M", t)
+	}
+	if fcTimeEU {
+		return strftime.Format("%d.%m.%Y %H:%M", t)
+	}
+
+	// Default format for -d flag
+	if fcShowTime {
+		return strftime.Format("%Y-%m-%d %H:%M:%S", t)
+	}
+
+	return ""
+}
+
+// formatElapsedTime formats the elapsed time since a command was run
+func formatElapsedTime(timestamp int64) string {
+	elapsed := time.Since(time.Unix(timestamp, 0))
+
+	if elapsed.Hours() >= 24 {
+		days := int(elapsed.Hours() / 24)
+		if days == 1 {
+			return "1 day ago"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	}
+	if elapsed.Hours() >= 1 {
+		hours := int(elapsed.Hours())
+		minutes := int(elapsed.Minutes()) % 60
+		if hours == 1 && minutes == 0 {
+			return "1 hour ago"
+		}
+		if minutes > 0 {
+			return fmt.Sprintf("%d hours %d minutes ago", hours, minutes)
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	}
+	if elapsed.Minutes() >= 1 {
+		minutes := int(elapsed.Minutes())
+		if minutes == 1 {
+			return "1 minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", minutes)
+	}
+	seconds := int(elapsed.Seconds())
+	if seconds <= 1 {
+		return "just now"
+	}
+	return fmt.Sprintf("%d seconds ago", seconds)
 }
 
 func runFc(cmd *cobra.Command, args []string) error {
@@ -70,12 +148,39 @@ func runFc(cmd *cobra.Command, args []string) error {
 
 	// Output commands
 	for _, c := range commands {
-		if fcNoNum {
-			fmt.Fprintln(cmd.OutOrStdout(), c.CommandText)
-		} else {
-			// Format with event number - right-aligned, matching zsh format
-			fmt.Fprintf(cmd.OutOrStdout(), "%5d  %s\n", c.ID, c.CommandText)
+		// Build output line
+		var line string
+
+		// Add event number (unless -n flag is set)
+		if !fcNoNum {
+			line = fmt.Sprintf("%5d", c.ID)
 		}
+
+		// Add timestamp if any time flag is set
+		timeStr := formatTimestamp(c.Timestamp)
+		if timeStr != "" {
+			if line != "" {
+				line += "  "
+			}
+			line += timeStr
+		}
+
+		// Add elapsed time if -D flag is set
+		if fcElapsedTime {
+			elapsedStr := formatElapsedTime(c.Timestamp)
+			if line != "" {
+				line += "  "
+			}
+			line += fmt.Sprintf("[%s]", elapsedStr)
+		}
+
+		// Add command text
+		if line != "" {
+			line += "  "
+		}
+		line += c.CommandText
+
+		fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
 
 	return nil

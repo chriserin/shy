@@ -42,6 +42,22 @@ func parseHistoryArgsAndFlags(args []string) ([]string, []string, error) {
 					return nil, nil, fmt.Errorf("--last value must be a number: %w", err)
 				}
 				fcLast = val
+			case "-d", "--time":
+				fcShowTime = true
+			case "-i", "--iso":
+				fcTimeISO = true
+			case "-f", "--american":
+				fcTimeUS = true
+			case "-E", "--european":
+				fcTimeEU = true
+			case "-t", "--time-format":
+				if i+1 >= len(args) {
+					return nil, nil, fmt.Errorf("-t requires a format string")
+				}
+				i++
+				fcTimeCustom = args[i]
+			case "-D", "--elapsed":
+				fcElapsedTime = true
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -103,5 +119,5 @@ var historyCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(historyCmd)
 	// Note: We use DisableFlagParsing and parse flags manually to support negative numbers like -10
-	// Supported flags: -n/--no-numbers, -r/--reverse, --last N
+	// Supported flags: -n/--no-numbers, -r/--reverse, --last N, -d, -i, -f, -E, -t, -D
 }

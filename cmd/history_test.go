@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -690,4 +691,299 @@ func TestScenario15_CombineNegativeOffsetWithReverseFlag(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 	fcReverse = false // Reset flag
+}
+// Phase 2: Timestamp Formatting Tests
+
+// Scenario 16: Display timestamps with -d flag
+func TestScenario16_DisplayTimestampsWithDFlag(t *testing.T) {
+	// Given: I have a command with event ID 100 run at "2024-01-15 14:30:00"
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Parse the timestamp "2024-01-15 14:30:00" in UTC
+	testTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.UTC)
+	require.NoError(t, err)
+
+	// Insert 100 commands, with the last one at the specific time
+	for i := 1; i <= 100; i++ {
+		var timestamp int64
+		if i == 100 {
+			timestamp = testTime.Unix()
+		} else {
+			timestamp = int64(1704470400 + i)
+		}
+		cmd := &models.Command{
+			CommandText: fmt.Sprintf("cmd%d", i),
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   timestamp,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy history 100 -d"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "100", "-d", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should show the event number, timestamp, and command
+	assert.Contains(t, output, "100", "should show event number 100")
+	assert.Contains(t, output, "cmd100", "should show command text")
+	// And: the timestamp should be in a readable format (default: YYYY-MM-DD HH:MM:SS)
+	assert.Contains(t, output, "2024-01-15 14:30:00", "should show timestamp in default format")
+
+	rootCmd.SetArgs(nil)
+	fcShowTime = false // Reset flag
+}
+
+// Scenario 17: Display timestamps in ISO8601 format
+func TestScenario17_DisplayTimestampsISO8601(t *testing.T) {
+	// Given: I have a command with event ID 100 run at "2024-01-15 14:30:00"
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	testTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.UTC)
+	require.NoError(t, err)
+
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   testTime.Unix(),
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history 1 -i"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "1", "-i", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should contain "2024-01-15 14:30"
+	assert.Contains(t, output, "2024-01-15 14:30", "should show timestamp in ISO8601 format")
+
+	rootCmd.SetArgs(nil)
+	fcTimeISO = false // Reset flag
+}
+
+// Scenario 18: Display timestamps in US format
+func TestScenario18_DisplayTimestampsUSFormat(t *testing.T) {
+	// Given: I have a command with event ID 100 run at "2024-01-15 14:30:00"
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	testTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.UTC)
+	require.NoError(t, err)
+
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   testTime.Unix(),
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history 1 -f"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "1", "-f", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should contain "01/15/24 14:30"
+	assert.Contains(t, output, "01/15/24 14:30", "should show timestamp in US format")
+
+	rootCmd.SetArgs(nil)
+	fcTimeUS = false // Reset flag
+}
+
+// Scenario 19: Display timestamps in European format
+func TestScenario19_DisplayTimestampsEuropeanFormat(t *testing.T) {
+	// Given: I have a command with event ID 100 run at "2024-01-15 14:30:00"
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	testTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.UTC)
+	require.NoError(t, err)
+
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   testTime.Unix(),
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history 1 -E"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "1", "-E", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should contain "15.01.2024 14:30"
+	assert.Contains(t, output, "15.01.2024 14:30", "should show timestamp in European format")
+
+	rootCmd.SetArgs(nil)
+	fcTimeEU = false // Reset flag
+}
+
+// Scenario 20: Display timestamps with custom format
+func TestScenario20_DisplayTimestampsCustomFormat(t *testing.T) {
+	// Given: I have a command with event ID 100 run at "2024-01-15 14:30:00"
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	testTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.UTC)
+	require.NoError(t, err)
+
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   testTime.Unix(),
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history 1 -t '%Y-%m-%d %H:%M:%S'"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "1", "-t", "%Y-%m-%d %H:%M:%S", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should contain "2024-01-15 14:30:00"
+	assert.Contains(t, output, "2024-01-15 14:30:00", "should show timestamp in custom format")
+
+	rootCmd.SetArgs(nil)
+	fcTimeCustom = "" // Reset flag
+}
+
+// Scenario 21: Display elapsed time since command
+func TestScenario21_DisplayElapsedTime(t *testing.T) {
+	// Given: I have a command run 2 hours and 30 minutes ago
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create a timestamp that's 2.5 hours ago
+	twoHoursThirtyMinutesAgo := time.Now().Add(-2*time.Hour - 30*time.Minute)
+
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   twoHoursThirtyMinutesAgo.Unix(),
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history -1 -D"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-D", "--db", dbPath, "--", "-1"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should show elapsed time information
+	// It should show something like "[2 hours 30 minutes ago]"
+	assert.Contains(t, output, "hours", "should show hours in elapsed time")
+	assert.Contains(t, output, "minutes", "should show minutes in elapsed time")
+	assert.Contains(t, output, "ago", "should show 'ago' in elapsed time")
+
+	rootCmd.SetArgs(nil)
+	fcElapsedTime = false // Reset flag
+}
+
+// Scenario 22: Combine timestamp format with elapsed time
+func TestScenario22_CombineTimestampAndElapsedTime(t *testing.T) {
+	// Given: I have a command run at a specific time
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create a timestamp that's 1 hour ago
+	oneHourAgo := time.Now().Add(-1 * time.Hour)
+
+	cmd := &models.Command{
+		CommandText: "test command",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   oneHourAgo.Unix(),
+	}
+	_, err = database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// When: I run "shy history -1 -i -D"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-i", "-D", "--db", dbPath, "--", "-1"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: the output should show both ISO timestamp and elapsed time
+	// Check for ISO format pattern (YYYY-MM-DD HH:MM)
+	assert.Regexp(t, `\d{4}-\d{2}-\d{2} \d{2}:\d{2}`, output, "should show ISO timestamp")
+	// Check for elapsed time
+	assert.Contains(t, output, "ago", "should show elapsed time")
+	assert.Contains(t, output, "[", "elapsed time should be in brackets")
+
+	rootCmd.SetArgs(nil)
+	fcTimeISO = false    // Reset flag
+	fcElapsedTime = false // Reset flag
 }
