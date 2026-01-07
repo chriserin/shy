@@ -51,23 +51,24 @@ func TestScenario9_InitWithUseFlag(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: the output should define shy_ctrl_r for Ctrl-R binding
-	assert.Contains(t, output, "shy_ctrl_r()", "should define shy_ctrl_r")
-	assert.Contains(t, output, "bindkey '^R' shy_ctrl_r", "should bind Ctrl-R")
+	// Then: the output should include Ctrl-R binding for history search
+	assert.Contains(t, output, "bindkey '^R'", "should bind Ctrl-R")
+	assert.Contains(t, output, "shy list-all", "should use shy list-all for history")
 
-	// And: the output should define shy_up_arrow for up arrow binding
-	assert.Contains(t, output, "shy_up_arrow()", "should define shy_up_arrow")
-	assert.Contains(t, output, "bindkey '^[[A' shy_up_arrow", "should bind up arrow")
+	// And: the output should include up arrow binding
+	assert.Contains(t, output, "bindkey '^[[A'", "should bind up arrow (standard)")
+	assert.Contains(t, output, "bindkey '^[OA'", "should bind up arrow (application mode)")
+	assert.Contains(t, output, "shy last-command", "should use shy last-command")
 
-	// And: the output should define shy_right_arrow for right arrow completion
-	assert.Contains(t, output, "shy_right_arrow()", "should define shy_right_arrow")
-	assert.Contains(t, output, "bindkey '^[[C' shy_right_arrow", "should bind right arrow")
+	// And: the output should include down arrow binding
+	assert.Contains(t, output, "bindkey '^[[B'", "should bind down arrow (standard)")
+	assert.Contains(t, output, "bindkey '^[OB'", "should bind down arrow (application mode)")
 
-	// And: the output should NOT include __shy_preexec
-	assert.NotContains(t, output, "__shy_preexec()", "should not include __shy_preexec")
-
-	// And: the output should NOT include __shy_precmd
-	assert.NotContains(t, output, "__shy_precmd()", "should not include __shy_precmd")
+	// And: the output should NOT include recording hooks
+	assert.NotContains(t, output, "__shy_preexec", "should not include __shy_preexec")
+	assert.NotContains(t, output, "__shy_precmd", "should not include __shy_precmd")
+	assert.NotContains(t, output, "add-zsh-hook preexec", "should not add preexec hook")
+	assert.NotContains(t, output, "add-zsh-hook precmd", "should not add precmd hook")
 
 	// Reset command and flags for next test
 	rootCmd.SetArgs(nil)
@@ -88,20 +89,20 @@ func TestScenario10_InitWithBothFlags(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: the output should define __shy_preexec
-	assert.Contains(t, output, "__shy_preexec()", "should define __shy_preexec")
+	// Then: the output should include recording hooks
+	assert.Contains(t, output, "__shy_preexec", "should include __shy_preexec")
+	assert.Contains(t, output, "__shy_precmd", "should include __shy_precmd")
+	assert.Contains(t, output, "add-zsh-hook preexec", "should add preexec hook")
+	assert.Contains(t, output, "add-zsh-hook precmd", "should add precmd hook")
 
-	// And: the output should define __shy_precmd
-	assert.Contains(t, output, "__shy_precmd()", "should define __shy_precmd")
+	// And: the output should include history usage bindings
+	assert.Contains(t, output, "bindkey '^R'", "should bind Ctrl-R")
+	assert.Contains(t, output, "bindkey '^[[A'", "should bind up arrow")
 
-	// And: the output should define shy_ctrl_r
-	assert.Contains(t, output, "shy_ctrl_r()", "should define shy_ctrl_r")
-
-	// And: the output should define shy_up_arrow
-	assert.Contains(t, output, "shy_up_arrow()", "should define shy_up_arrow")
-
-	// And: the output should define shy_right_arrow
-	assert.Contains(t, output, "shy_right_arrow()", "should define shy_right_arrow")
+	// And: both shy commands should be present
+	assert.Contains(t, output, "shy insert", "should use shy insert for recording")
+	assert.Contains(t, output, "shy list-all", "should use shy list-all for history")
+	assert.Contains(t, output, "shy last-command", "should use shy last-command")
 
 	// Reset command and flags for next test
 	rootCmd.SetArgs(nil)
