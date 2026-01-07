@@ -274,3 +274,108 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models
 
 	return commands, nil
 }
+
+// GetMostRecentEventID returns the ID of the most recent command
+// Returns 0 if no commands exist
+func (db *DB) GetMostRecentEventID() (int64, error) {
+	var id sql.NullInt64
+	err := db.conn.QueryRow("SELECT MAX(id) FROM commands").Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get most recent event ID: %w", err)
+	}
+	if !id.Valid {
+		// No commands in database
+		return 0, nil
+	}
+	return id.Int64, nil
+}
+
+// GetCommandsByRange retrieves commands by event ID range (inclusive)
+// Returns commands ordered by ID ascending
+func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
+	// Handle invalid range
+	if first > last {
+		return []models.Command{}, nil
+	}
+
+	query := `
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch
+		FROM commands
+		WHERE id >= ? AND id <= ?
+		ORDER BY id ASC`
+
+	rows, err := db.conn.Query(query, first, last)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands by range: %w", err)
+	}
+	defer rows.Close()
+
+	var commands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}
+
+// FindMostRecentMatching finds the most recent command that starts with the given prefix
+// Returns the event ID, or 0 if not found
+func (db *DB) FindMostRecentMatching(prefix string) (int64, error) {
+	var id int64
+	err := db.conn.QueryRow(`
+		SELECT id FROM commands
+		WHERE command_text LIKE ?
+		ORDER BY id DESC
+		LIMIT 1`,
+		prefix+"%",
+	).Scan(&id)
+
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to find matching command: %w", err)
+	}
+
+	return id, nil
+}
+
+// FindMostRecentMatchingBefore finds the most recent command that starts with the given prefix
+// and has an ID <= beforeID
+// Returns the event ID, or 0 if not found
+func (db *DB) FindMostRecentMatchingBefore(prefix string, beforeID int64) (int64, error) {
+	var id int64
+	err := db.conn.QueryRow(`
+		SELECT id FROM commands
+		WHERE command_text LIKE ? AND id <= ?
+		ORDER BY id DESC
+		LIMIT 1`,
+		prefix+"%",
+		beforeID,
+	).Scan(&id)
+
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to find matching command: %w", err)
+	}
+
+	return id, nil
+}

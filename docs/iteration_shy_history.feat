@@ -1,0 +1,282 @@
+Feature: shy history - Shell History Command (fc -l alias)
+  As a command-line user
+  I want to view my command history with event numbers like zsh's builtin history
+  So that I can reference and navigate my command history efficiently
+
+  Background:
+    Given I have shy installed and integrated with my shell
+    And I have a history database with commands
+
+  # Phase 1: Core Command Structure & Event Numbering
+
+  Scenario 1: Display last 16 commands with event numbers (default behavior)
+    Given I have 50 commands in my history with event IDs 1 through 50
+    When I run "shy history"
+    Then the output should show 16 commands
+    And each command should be prefixed with its event number
+    And the first line should show event 35
+    And the last line should show event 50
+    And the commands should be ordered oldest to newest (ascending event numbers)
+
+  Scenario 2: Display from specific event to most recent
+    Given I have commands with event IDs 1 through 100
+    When I run "shy history 80"
+    Then the output should show 21 commands
+    And the first command should have event ID 80
+    And the last command should have event ID 100
+
+  Scenario 3: Display range of commands by event number
+    Given I have commands with event IDs 1 through 100
+    When I run "shy history 50 75"
+    Then the output should show 26 commands
+    And the first command should have event ID 50
+    And the last command should have event ID 75
+
+  Scenario 4: Display last N commands using negative offset
+    Given I have 100 commands in my history
+    And the most recent command has event ID 100
+    When I run "shy history -10"
+    Then the output should show 10 commands
+    And the first command should have event ID 91
+    And the last command should have event ID 100
+
+  Scenario 5: Display from string match to most recent
+    Given I have commands with event IDs 1 through 100
+    And event 45 has command "git status"
+    And event 67 has command "git commit"
+    And event 89 has command "git push"
+    When I run "shy history git"
+    Then the output should show commands from event 89 to 100
+    And the first command should be "git push"
+
+  Scenario 6: Display from string match to specific event
+    Given I have commands with event IDs 1 through 100
+    And event 45 has command "git status"
+    And event 67 has command "git commit"
+    When I run "shy history git 70"
+    Then the output should show commands from event 67 to 70
+    And the first command should be "git commit"
+
+  Scenario 7: Display between two string matches
+    Given I have commands with event IDs 1 through 100
+    And event 30 has command "docker build"
+    And event 45 has command "git status"
+    And event 60 has command "docker run"
+    And event 75 has command "git commit"
+    When I run "shy history docker git"
+    Then the output should show commands from event 60 to 75
+    And the first command should be "docker run"
+    And the last command should be "git commit"
+
+  Scenario 8: Event numbers are persistent and use database row ID
+    Given I have commands with event IDs 1 through 10
+    When I insert a new command
+    Then the new command should have event ID 11
+    And the event ID should match the database row ID
+
+  Scenario 9: Suppress event numbers with -n flag
+    Given I have 20 commands in my history
+    When I run "shy history -n"
+    Then the output should show 16 commands without event numbers
+    And each line should contain only the command text
+
+  Scenario 10: Reverse chronological order with -r flag
+    Given I have commands with event IDs 1 through 20
+    When I run "shy history -r"
+    Then the output should show 16 commands
+    And the first command shown should have event ID 20
+    And the last command shown should have event ID 5
+    And the commands should be ordered newest to oldest (descending event numbers)
+
+  Scenario 11: Empty history displays nothing
+    Given I have an empty history database
+    When I run "shy history"
+    Then the output should be empty
+    And the exit status should be 0
+
+  Scenario 12: Range exceeds available history
+    Given I have commands with event IDs 1 through 10
+    When I run "shy history 5 20"
+    Then the output should show commands from event 5 to 10
+    And no error should occur
+
+  Scenario 13: Single event number shows from that event to most recent
+    Given I have commands with event IDs 1 through 100
+    When I run "shy history 100"
+    Then the output should show exactly 1 command
+    And that command should have event ID 100
+
+  Scenario 14: String not found outputs error message
+    Given I have commands with event IDs 1 through 100
+    And no command starts with "nonexistent"
+    When I run "shy history nonexistent"
+    Then the output should show message "shy: event not found: nonexistent"
+
+  Scenario 15: Combine negative offset with reverse flag
+    Given I have commands with event IDs 1 through 50
+    When I run "shy history -10 -r"
+    Then the output should show 10 commands
+    And the first command should have event ID 50
+    And the last command should have event ID 41
+
+  # Phase 2: Timestamp Formatting
+
+  Scenario 16: Display timestamps with -d flag
+    Given I have a command with event ID 100 run at "2024-01-15 14:30:00"
+    When I run "shy history 100 -d"
+    Then the output should show the event number, timestamp, and command
+    And the timestamp should be in a readable format
+
+  Scenario 17: Display timestamps in ISO8601 format
+    Given I have a command with event ID 100 run at "2024-01-15 14:30:00"
+    When I run "shy history 100 -i"
+    Then the output should contain "2024-01-15 14:30"
+
+  Scenario 18: Display timestamps in US format
+    Given I have a command with event ID 100 run at "2024-01-15 14:30:00"
+    When I run "shy history 100 -f"
+    Then the output should contain "01/15/24 14:30"
+
+  Scenario 19: Display timestamps in European format
+    Given I have a command with event ID 100 run at "2024-01-15 14:30:00"
+    When I run "shy history 100 -E"
+    Then the output should contain "15.01.2024 14:30"
+
+  Scenario 20: Display timestamps with custom format
+    Given I have a command with event ID 100 run at "2024-01-15 14:30:00"
+    When I run "shy history 100 -t '%Y-%m-%d %H:%M:%S'"
+    Then the output should contain "2024-01-15 14:30:00"
+
+  Scenario 21: Display elapsed time since command
+    Given I have a command run 2 hours and 30 minutes ago
+    When I run "shy history -1 -D"
+    Then the output should show elapsed time information
+
+  Scenario 22: Combine timestamp format with elapsed time
+    Given I have a command run at a specific time
+    When I run "shy history -1 -i -D"
+    Then the output should show both ISO timestamp and elapsed time
+
+  # Phase 3: Pattern Matching & Filtering
+
+  Scenario 23: Filter range results with -m pattern (glob)
+    Given I have commands with event IDs 1 through 100
+    And events 10, 25, 40, 55, 70, 85 start with "git"
+    When I run "shy history 1 100 -m 'git*'"
+    Then the output should show only the 6 events that start with "git"
+    And all shown events should have IDs between 1 and 100
+
+  Scenario 24: Pattern matching applies to range results only
+    Given I have commands with event IDs 1 through 100
+    And events 10, 25, 40, 55, 70, 85 start with "git"
+    When I run "shy history 50 100 -m 'git*'"
+    Then the output should show events 55, 70, and 85
+    And events 10, 25, and 40 should not be shown
+
+  Scenario 25: Pattern with no matches in range returns empty
+    Given I have commands with event IDs 1 through 100
+    And events 10, 25, 40 start with "git"
+    When I run "shy history 50 100 -m 'git*'"
+    Then the output should be empty
+    And the exit status should be 0
+
+  Scenario 26: Combine pattern matching with reverse flag
+    Given I have commands with event IDs 1 through 50
+    And events 10, 20, 30, 40 start with "docker"
+    When I run "shy history -m 'docker*' -r"
+    Then the output should show the matching events in reverse order
+    And the first event shown should be 40
+    And the last event shown should be a docker command from the default range
+
+  Scenario 27: Pattern matching with string range
+    Given I have commands with event IDs 1 through 100
+    And event 50 has command "git init"
+    And events 60, 70, 80 start with "git"
+    And events 55, 65, 75 start with "docker"
+    When I run "shy history git -m 'docker*'"
+    Then the output should show only docker commands
+    And all shown events should be between event 80 and 100
+
+  # Edge Cases & Error Handling
+
+  Scenario 28: Invalid range (start > end)
+    Given I have commands with event IDs 1 through 100
+    When I run "shy history 75 50"
+    Then the output should be empty
+    Or an error message should be displayed
+
+  Scenario 29: Negative offset larger than history
+    Given I have 10 commands in my history
+    When I run "shy history -50"
+    Then all 10 commands should be displayed
+    And no error should occur
+
+  Scenario 30: Very large event ID that doesn't exist
+    Given I have commands with event IDs 1 through 100
+    When I run "shy history 9999"
+    Then the output should be empty
+    And the exit status should be 0
+
+  Scenario 31: Zero as event ID
+    Given I have commands with event IDs 1 through 100
+    When I run "shy history 0"
+    Then an error should occur or no output should be shown
+
+  Scenario 32: Combine multiple flags
+    Given I have commands from various times
+    When I run "shy history 50 100 -d -r -m 'git*'"
+    Then only git commands from events 50-100 should be shown
+    And they should be in reverse order
+    And timestamps should be displayed
+
+  # Backwards Compatibility
+
+  Scenario 33: shy list still works as before
+    Given I have 50 commands in my history
+    When I run "shy list"
+    Then the output should show 20 commands without event numbers
+    And it should work exactly as before
+
+  Scenario 34: shy list-all still works as before
+    Given I have 50 commands in my history
+    When I run "shy list-all"
+    Then the output should show all 50 commands without event numbers
+    And it should work exactly as before
+
+  # Integration with fc command
+
+  Scenario 35: shy fc -l behaves identically to shy history
+    Given I have commands in my history
+    When I run "shy fc -l"
+    Then the output should be identical to "shy history"
+
+  Scenario 36: shy fc -l with range arguments
+    Given I have commands with event IDs 1 through 100
+    When I run "shy fc -l 50 75"
+    Then the output should show events 50 through 75
+    And it should be identical to "shy history 50 75"
+
+  Scenario 37: shy fc -l with all flags
+    Given I have commands in my history
+    When I run "shy fc -l -n -r -d -m 'pattern'"
+    Then the output should match "shy history -n -r -d -m 'pattern'"
+
+  # Output Format Verification
+
+  Scenario 38: Default output format matches zsh history
+    Given I have a command "echo hello" with event ID 42
+    When I run "shy history 42 42"
+    Then the output should be " 42  echo hello"
+    And the format should match zsh's history output
+
+  Scenario 39: Output with -n flag has no leading spaces
+    Given I have a command "echo hello" with event ID 42
+    When I run "shy history 42 42 -n"
+    Then the output should be "echo hello"
+    And there should be no leading whitespace
+
+  Scenario 40: Multiple commands have aligned event numbers
+    Given I have commands with event IDs 8, 9, 10, 100, 1000
+    When I run "shy history 8 1000"
+    Then the event numbers should be right-aligned
+    And all command text should start at the same column
