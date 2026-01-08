@@ -167,8 +167,9 @@ func TestDurationScenario5_DurationIsNullForCommandsWithoutTimingData(t *testing
 	retrieved, err := database.GetCommand(id)
 	require.NoError(t, err)
 
-	// Then: the duration field should be null
-	assert.Nil(t, retrieved.Duration, "duration should be nil for commands without timing data")
+	// Then: the duration field should be 0
+	require.NotNil(t, retrieved.Duration, "duration should not be nil")
+	assert.Equal(t, int64(0), *retrieved.Duration, "duration should be 0 for commands without timing data")
 	// And: commands should display without errors
 	assert.NotZero(t, retrieved.ID, "command should be retrieved successfully")
 	assert.Equal(t, "old_command", retrieved.CommandText)
@@ -239,7 +240,8 @@ func TestDurationScenario7_ShyInsertWithoutDurationParameter(t *testing.T) {
 	cmd, err := database.GetCommand(1)
 	require.NoError(t, err)
 
-	assert.Nil(t, cmd.Duration, "duration should be nil when not provided")
+	require.NotNil(t, cmd.Duration, "duration should not be nil")
+	assert.Equal(t, int64(0), *cmd.Duration, "duration should be 0 when not provided")
 
 	rootCmd.SetArgs(nil)
 	duration = 0 // Reset package-level variable
@@ -284,10 +286,11 @@ func TestDurationScenario8_DatabaseMigrationAddsDurationColumn(t *testing.T) {
 	}
 	assert.True(t, hasDuration, "duration column should exist after migration")
 
-	// And: existing commands should have null duration
+	// And: existing commands should have 0 duration
 	retrieved, err := database2.GetCommand(id)
 	require.NoError(t, err)
-	assert.Nil(t, retrieved.Duration, "existing commands should have null duration after migration")
+	require.NotNil(t, retrieved.Duration, "duration should not be nil")
+	assert.Equal(t, int64(0), *retrieved.Duration, "existing commands should have 0 duration after migration")
 }
 
 // Integration test for shell hook duration capture

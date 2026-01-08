@@ -52,6 +52,7 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 		{"id", "INTEGER"},
 		{"timestamp", "INTEGER"},
 		{"exit_status", "INTEGER"},
+		{"duration", "INTEGER"},
 		{"command_text", "TEXT"},
 		{"working_dir", "TEXT"},
 		{"git_repo", "TEXT"},

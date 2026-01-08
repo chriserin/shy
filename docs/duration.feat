@@ -83,90 +83,36 @@ Feature: Command Duration Tracking
 
   # Phase 3: Duration in list command
 
-  Scenario 17: List command includes duration in format string
+  Scenario 17: List command includes duration in seconds in format string
     Given I have commands with durations
-    When I run "shy list --fmt 'cmd,timestamp,dur'"
-    Then each line should show command text, timestamp, and duration
+      - Command: "sleep 2" Duration: 2028ms
+      - Command: "sleep 2.7" Duration: 2528ms
+      - Command: "echo hello" Duration: 500ms
+      - Command: "sleep 72" Duration: 72028ms
+      - Command: "minsleep 72" Duration: 4320028ms
+      - Command: "hrsleep 28" Duration: 100800028ms
+    When I run "shy list --fmt 'cmd,durs'"
+    Then each line should show command text and duration
     And duration should be in human-readable format
+    And I see "sleep 2" with duration "2s"
+    And I see "sleep 2.5" with duration "2s"
+    And I see "echo hello" with duration "0s"
+    And I see "minsleep 72" with duration "1h12m0s"
+    And I see "hrsleep 28" with duration "1d4h0m0s"
 
-  Scenario 18: List command shows duration in seconds format
+  Scenario 17: List command includes duration in ms in format string
     Given I have commands with durations
-    When I run "shy list --fmt 'cmd,duration' --duration-format seconds"
-    Then durations should be shown as decimal seconds (e.g., "2.50")
-
-  # Phase 4: Database Schema
-
-  Scenario 19: Duration column is added to database
-    Given an existing database without duration column
-    When shy runs with duration support
-    Then the database should be migrated to add duration column
-    And existing commands should have null duration
-
-  Scenario 20: Duration is stored as milliseconds in database
-    Given I run a command that takes 2.5 seconds
-    When the command is inserted into the database
-    Then the duration column should contain 2500 (milliseconds)
-
-  Scenario 21: Duration precision handles sub-millisecond commands
-    Given I run a very fast command that takes 0.3 milliseconds
-    When the command is inserted
-    Then the duration should be stored with microsecond precision
-    Or rounded to nearest millisecond
-
-  # Phase 5: Shell Integration
-
-  Scenario 22: Zsh integration captures duration correctly
-    Given I am using zsh with shy integration
-    When I run "sleep 2"
-    Then the preexec hook should capture the start time
-    And the precmd hook should calculate duration as ~2000ms
-    And shy insert should receive the duration parameter
-
-  Scenario 23: Duration capture works with command substitution
-    Given I run a command with command substitution "echo $(sleep 1; echo done)"
-    When the command completes
-    Then the total duration should include the sleep time
-
-  Scenario 24: Duration handles interrupted commands
-    Given I start a long-running command
-    When I press Ctrl-C to interrupt it
-    Then the duration should reflect the time until interruption
-    And the exit status should show it was interrupted
-
-  # Phase 6: Edge Cases
-
-  Scenario 25: Duration handles clock changes
-    Given a command starts before a clock adjustment
-    When the system clock is adjusted during execution
-    Then the duration should be calculated using monotonic time
-    Or should handle the edge case gracefully
-
-  Scenario 26: Duration handles very long commands
-    Given I run a command that takes 7 days
-    When the command completes
-    Then the duration should be accurately recorded
-    And display as "7d" or "168h" in human-readable format
-
-  Scenario 27: Duration statistics
-    Given I have 100 commands in history
-    When I run "shy stats duration"
-    Then I should see average, median, min, max durations
-    And percentile breakdowns (p50, p95, p99)
-
-  # Phase 7: Privacy and Configuration
-
-  Scenario 28: Option to disable duration tracking
-    Given I set SHY_CAPTURE_DURATION=false
-    When I run commands
-    Then duration should not be captured
-    But other command data should still be recorded
-
-  Scenario 29: Duration format configuration
-    Given I set SHY_DURATION_FORMAT=hms
-    When I run "shy history -d"
-    Then durations should show as "1h 23m 45s" format
-
-  Scenario 30: Duration format configuration as seconds
-    Given I set SHY_DURATION_FORMAT=seconds
-    When I run "shy history -d"
-    Then durations should show as "125.00s" format
+      - Command: "sleep 2" Duration: 2028ms
+      - Command: "sleep 2.7" Duration: 2528ms
+      - Command: "echo hello" Duration: 500ms
+      - Command: "sleep 72" Duration: 72028ms
+      - Command: "minsleep 72" Duration: 4320028ms
+      - Command: "hrsleep 28" Duration: 100800028ms
+    When I run "shy list --fmt 'cmd,durms'"
+    Then each line should show command text, and duration in milliseconds
+    And duration should be in human-readable format
+    And I see "sleep 2" with duration "2s28ms"
+    And I see "sleep 2.5" with duration "2s28ms"
+    And I see "echo hello" with duration "500ms"
+    And I see "minsleep 72" with duration "1h12m0s28ms"
+    And I see "hrsleep 28" with duration "1d4h0m0s28ms"

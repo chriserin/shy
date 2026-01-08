@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -12,17 +13,17 @@ import (
 )
 
 const (
-	defaultDBPath = "~/.local/share/shy/history.db"
+	defaultDBPath  = "~/.local/share/shy/history.db"
 	createTableSQL = `
 		CREATE TABLE IF NOT EXISTS commands (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			timestamp INTEGER NOT NULL,
 			exit_status INTEGER NOT NULL,
+			duration INTEGER NOT NULL,
 			command_text TEXT NOT NULL,
 			working_dir TEXT NOT NULL,
 			git_repo TEXT,
-			git_branch TEXT,
-			duration INTEGER
+			git_branch TEXT
 		);
 	`
 )
@@ -125,7 +126,10 @@ func (db *DB) migrate() error {
 	// Add duration column if it doesn't exist
 	if !hasDuration {
 		if _, err := db.conn.Exec("ALTER TABLE commands ADD COLUMN duration INTEGER"); err != nil {
-			return fmt.Errorf("failed to add duration column: %w", err)
+			// Ignore error if column already exists (can happen with concurrent migrations)
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("failed to add duration column: %w", err)
+			}
 		}
 	}
 
@@ -144,6 +148,12 @@ func (db *DB) Path() string {
 
 // InsertCommand inserts a new command into the database
 func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
+	// Convert nil duration to 0
+	duration := int64(0)
+	if cmd.Duration != nil {
+		duration = *cmd.Duration
+	}
+
 	result, err := db.conn.Exec(`
 		INSERT INTO commands (timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -153,7 +163,7 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 		cmd.WorkingDir,
 		cmd.GitRepo,
 		cmd.GitBranch,
-		cmd.Duration,
+		duration,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert command: %w", err)

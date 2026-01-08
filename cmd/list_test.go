@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -183,5 +185,127 @@ func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
 	assert.Contains(t, output, expectedLine, "should match expected tab-separated format")
 
 	// Reset command for next test
+	rootCmd.SetArgs(nil)
+}
+
+// Phase 3: Duration in list command
+
+// Scenario 17a: List command includes duration in seconds in format string
+func TestDurationScenario17a_ListCommandIncludesDurationInSeconds(t *testing.T) {
+	// Given: I have commands with durations
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Test cases from the spec
+	testCases := []struct {
+		command    string
+		durationMs int64
+		expected   string
+	}{
+		{"sleep 2", 2028, "2s"},
+		{"sleep 2.7", 2528, "2s"},        // Rounds down
+		{"echo hello", 500, "0s"},        // Under 1 second
+		{"sleep 72", 72028, "1m12s"},     // 72 seconds
+		{"minsleep 72", 4320028, "1h12m0s"}, // 72 minutes
+		{"hrsleep 28", 100800028, "1d4h0m0s"}, // 28 hours
+	}
+
+	for _, tc := range testCases {
+		dur := tc.durationMs
+		cmd := &models.Command{
+			CommandText: tc.command,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   time.Now().Unix(),
+			Duration:    &dur,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy list --fmt 'cmd,durs'"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"list", "--fmt", "cmd,durs", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: each line should show command text and duration
+	require.Equal(t, len(testCases), len(lines), "should have correct number of lines")
+
+	// And: duration should be in human-readable format
+	for i, tc := range testCases {
+		assert.Contains(t, lines[i], tc.command, "line %d should contain command", i)
+		assert.Contains(t, lines[i], tc.expected, "line %d should contain duration %s", i, tc.expected)
+	}
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 17b: List command includes duration in milliseconds in format string
+func TestDurationScenario17b_ListCommandIncludesDurationInMilliseconds(t *testing.T) {
+	// Given: I have commands with durations
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Test cases from the spec
+	testCases := []struct {
+		command    string
+		durationMs int64
+		expected   string
+	}{
+		{"sleep 2", 2028, "2s28ms"},
+		{"sleep 2.7", 2528, "2s528ms"},        // With milliseconds
+		{"echo hello", 500, "500ms"},          // Just milliseconds
+		{"sleep 72", 72028, "1m12s28ms"},      // 72 seconds + 28ms
+		{"minsleep 72", 4320028, "1h12m0s28ms"}, // 72 minutes + 28ms
+		{"hrsleep 28", 100800028, "1d4h0m0s28ms"}, // 28 hours + 28ms
+	}
+
+	for _, tc := range testCases {
+		dur := tc.durationMs
+		cmd := &models.Command{
+			CommandText: tc.command,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   time.Now().Unix(),
+			Duration:    &dur,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy list --fmt 'cmd,durms'"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"list", "--fmt", "cmd,durms", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: each line should show command text and duration with milliseconds
+	require.Equal(t, len(testCases), len(lines), "should have correct number of lines")
+
+	// And: duration should be in human-readable format with milliseconds
+	for i, tc := range testCases {
+		assert.Contains(t, lines[i], tc.command, "line %d should contain command", i)
+		assert.Contains(t, lines[i], tc.expected, "line %d should contain duration %s", i, tc.expected)
+	}
+
 	rootCmd.SetArgs(nil)
 }
