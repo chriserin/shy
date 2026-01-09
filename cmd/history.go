@@ -8,11 +8,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// historyFlags holds parsed flag values for the history command
+type historyFlags struct {
+	noNum      bool
+	reverse    bool
+	last       int
+	showTime   bool
+	timeISO    bool
+	timeUS     bool
+	timeEU     bool
+	timeCustom string
+	elapsed    bool
+}
+
 // parseHistoryArgsAndFlags manually parses arguments to handle negative numbers correctly
-// Returns: positional args, parent flags (as alternating flag/value pairs), error
-func parseHistoryArgsAndFlags(args []string) ([]string, []string, error) {
+// Returns: positional args, parsed flags, parent flags (as alternating flag/value pairs), error
+func parseHistoryArgsAndFlags(args []string) ([]string, historyFlags, []string, error) {
 	var positional []string
 	var parentFlags []string
+	flags := historyFlags{}
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -29,35 +43,35 @@ func parseHistoryArgsAndFlags(args []string) ([]string, []string, error) {
 			// It's a flag
 			switch arg {
 			case "-n", "--no-numbers":
-				fcNoNum = true
+				flags.noNum = true
 			case "-r", "--reverse":
-				fcReverse = true
+				flags.reverse = true
 			case "--last":
 				if i+1 >= len(args) {
-					return nil, nil, fmt.Errorf("--last requires a value")
+					return nil, flags, nil, fmt.Errorf("--last requires a value")
 				}
 				i++
 				val, err := strconv.Atoi(args[i])
 				if err != nil {
-					return nil, nil, fmt.Errorf("--last value must be a number: %w", err)
+					return nil, flags, nil, fmt.Errorf("--last value must be a number: %w", err)
 				}
-				fcLast = val
+				flags.last = val
 			case "-d", "--time":
-				fcShowTime = true
+				flags.showTime = true
 			case "-i", "--iso":
-				fcTimeISO = true
+				flags.timeISO = true
 			case "-f", "--american":
-				fcTimeUS = true
+				flags.timeUS = true
 			case "-E", "--european":
-				fcTimeEU = true
+				flags.timeEU = true
 			case "-t", "--time-format":
 				if i+1 >= len(args) {
-					return nil, nil, fmt.Errorf("-t requires a format string")
+					return nil, flags, nil, fmt.Errorf("-t requires a format string")
 				}
 				i++
-				fcTimeCustom = args[i]
+				flags.timeCustom = args[i]
 			case "-D", "--elapsed":
-				fcElapsedTime = true
+				flags.elapsed = true
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -67,9 +81,9 @@ func parseHistoryArgsAndFlags(args []string) ([]string, []string, error) {
 			case "--":
 				// Everything after -- is positional
 				positional = append(positional, args[i+1:]...)
-				return positional, parentFlags, nil
+				return positional, flags, parentFlags, nil
 			default:
-				return nil, nil, fmt.Errorf("unknown flag: %s", arg)
+				return nil, flags, nil, fmt.Errorf("unknown flag: %s", arg)
 			}
 		} else {
 			// Positional argument
@@ -77,7 +91,7 @@ func parseHistoryArgsAndFlags(args []string) ([]string, []string, error) {
 		}
 	}
 
-	return positional, parentFlags, nil
+	return positional, flags, parentFlags, nil
 }
 
 // isNumeric checks if a string contains only digits
@@ -97,7 +111,7 @@ var historyCmd = &cobra.Command{
 	DisableFlagParsing: true, // We'll parse flags manually to handle negative numbers
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Manually parse flags to handle negative numbers correctly
-		parsedArgs, parentFlags, err := parseHistoryArgsAndFlags(args)
+		parsedArgs, flags, parentFlags, err := parseHistoryArgsAndFlags(args)
 		if err != nil {
 			return err
 		}
@@ -109,10 +123,26 @@ var historyCmd = &cobra.Command{
 			}
 		}
 
-		// Set fcList to true since history is equivalent to fc -l
-		fcList = true
+		// Set flags on fcCmd so runFc can read them
+		fcCmd.Flags().Set("list", "true") // history is equivalent to fc -l
+		fcCmd.Flags().Set("no-numbers", fmt.Sprintf("%t", flags.noNum))
+		fcCmd.Flags().Set("reverse", fmt.Sprintf("%t", flags.reverse))
+		fcCmd.Flags().Set("last", fmt.Sprintf("%d", flags.last))
+		fcCmd.Flags().Set("time", fmt.Sprintf("%t", flags.showTime))
+		fcCmd.Flags().Set("iso", fmt.Sprintf("%t", flags.timeISO))
+		fcCmd.Flags().Set("american", fmt.Sprintf("%t", flags.timeUS))
+		fcCmd.Flags().Set("european", fmt.Sprintf("%t", flags.timeEU))
+		fcCmd.Flags().Set("time-format", flags.timeCustom)
+		fcCmd.Flags().Set("elapsed", fmt.Sprintf("%t", flags.elapsed))
+
 		// Run fc command with parsed arguments
-		return runFc(cmd, parsedArgs)
+		// Pass fcCmd so it reads the flags we just set
+		err = runFc(fcCmd, parsedArgs)
+
+		// Reset fcCmd flags after use to avoid test pollution
+		resetFcFlags(fcCmd)
+
+		return err
 	},
 }
 

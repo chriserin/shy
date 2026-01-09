@@ -1,0 +1,472 @@
+Feature: fc Mode 1 - Internal Features (List Mode Extensions)
+
+  As a user, I want to filter and manipulate history listings
+  so that I can find specific commands and display them with modifications.
+
+  Background:
+    Given shy is properly initialized with recording enabled
+    And the database has commands from multiple sessions
+
+  Technical Details:
+    - The source field should be implemented as `source_app` and `source_pid` and `source_active` in the db
+    - all `shy fc` commands should provide the same output as the same `fc` commands with similar data, tests should utilize this symmetry where possible
+
+  # Phase 1: Pattern Filtering with -m
+
+  Scenario 1: Filter commands with simple wildcard prefix match
+    Given I have the following commands in history:
+      | command           | id  |
+      | git status        | 100 |
+      | git commit        | 101 |
+      | ls -la            | 102 |
+      | git push          | 103 |
+      | npm test          | 104 |
+    When I run "shy fc -l -m 'git*'"
+    Then the output should contain these commands in order:
+      | id  | command       |
+      | 100 | git status    |
+      | 101 | git commit    |
+      | 103 | git push      |
+    And the output should not contain "ls -la"
+    And the output should not contain "npm test"
+
+  Scenario 2: Filter commands with wildcard suffix match
+    Given I have the following commands in history:
+      | command           | id  |
+      | test-unit         | 200 |
+      | npm test          | 201 |
+      | pytest            | 202 |
+      | cargo test        | 203 |
+      | ls                | 204 |
+    When I run "shy fc -l -m '*test'"
+    Then the output should contain these commands in order:
+      | id  | command    |
+      | 201 | npm test   |
+      | 202 | pytest     |
+      | 203 | cargo test |
+    And the output should not contain "test-unit"
+
+  Scenario 3: Filter commands with wildcard in middle
+    Given I have the following commands in history:
+      | command                   | id  |
+      | git commit -m "fix"       | 300 |
+      | npm install               | 301 |
+      | git commit -m "feature"   | 302 |
+      | git status                | 303 |
+    When I run "shy fc -l -m 'git*commit*'"
+    Then the output should contain these commands in order:
+      | id  | command                 |
+      | 300 | git commit -m "fix"     |
+      | 302 | git commit -m "feature" |
+    And the output should not contain "npm install"
+    And the output should not contain "git status"
+
+  Scenario 4: Filter commands with single character wildcard
+    Given I have the following commands in history:
+      | command  | id  |
+      | git      | 400 |
+      | cat      | 401 |
+      | cut      | 402 |
+      | apt      | 403 |
+    When I run "shy fc -l -m '?at'"
+    Then the output should contain these commands in order:
+      | id  | command |
+      | 401 | cat     |
+    And the output should not contain "git"
+    And the output should not contain "cut"
+    And the output should not contain "apt"
+
+  Scenario 5: Filter commands with multiple wildcards
+    Given I have the following commands in history:
+      | command                  | id  |
+      | docker build -t app      | 500 |
+      | podman build -t service  | 501 |
+      | docker run app           | 502 |
+      | npm build                | 503 |
+    When I run "shy fc -l -m '*build*'"
+    Then the output should contain these commands in order:
+      | id  | command                 |
+      | 500 | docker build -t app     |
+      | 501 | podman build -t service |
+      | 503 | npm build               |
+    And the output should not contain "docker run app"
+
+  Scenario 6: Pattern filter with no matches
+    Given I have the following commands in history:
+      | command    | id  |
+      | ls         | 600 |
+      | pwd        | 601 |
+      | echo test  | 602 |
+    When I run "shy fc -l -m 'git*'"
+    And the exit code should be 1
+    and the output should be "shy fc: no matching events found"
+
+  Scenario: Too many arguments error
+    Given I have the following commands in history:
+      | command    | id  |
+      | ls         | 600 |
+      | pwd        | 601 |
+      | echo test  | 602 |
+    When I run "shy fc -l 600 603 -m 'git*'"
+    And the exit code should be 1
+    and the output should be "shy fc: too many arguments"
+
+  Scenario 7: Pattern filter with range
+    Given I have the following commands in history:
+      | command      | id  |
+      | git status   | 700 |
+      | git commit   | 701 |
+      | ls           | 702 |
+      | git push     | 703 |
+      | git pull     | 704 |
+    When I run "shy fc -l -m 'git*' 700 703"
+    Then the output should contain these commands in order:
+      | id  | command     |
+      | 700 | git status  |
+      | 701 | git commit  |
+      | 703 | git push    |
+    And the output should not contain "git pull"
+
+  Scenario 8: Pattern filter with special characters in pattern
+    Given I have the following commands in history:
+      | command           | id  |
+      | echo "test"       | 800 |
+      | echo 'hello'      | 801 |
+      | test %value       | 802 |
+      | echo %PATH%       | 803 |
+    When I run "shy fc -l -m 'echo*'"
+    Then the output should contain these commands in order:
+      | id  | command      |
+      | 800 | echo "test"  |
+      | 801 | echo 'hello' |
+      | 803 | echo %PATH%  |
+    And the output should not contain "test %value"
+
+  Scenario 9: Pattern filter with SQL special characters
+    Given I have the following commands in history:
+      | command        | id  |
+      | test_file      | 900 |
+      | test-file      | 901 |
+      | testfile       | 902 |
+      | test file      | 903 |
+    When I run "shy fc -l -m 'test?file'"
+    Then the output should contain these commands in order:
+      | id  | command   |
+      | 900 | test_file |
+      | 901 | test-file |
+      | 903 | test file |
+    And the output should not contain "testfile"
+
+  Scenario 10: Pattern filter combined with other flags
+    Given I have the following commands in history:
+      | command      | id  | timestamp  |
+      | git status   | 1000 | 1704470400 |
+      | git commit   | 1001 | 1704470401 |
+      | git push     | 1002 | 1704470402 |
+    When I run "shy fc -n -r -l -m 'git*'"
+    Then the output should not contain event numbers
+    And the output should contain these commands in reverse order:
+      | command     |
+      | git push    |
+      | git commit  |
+      | git status  |
+
+  # Phase 2: Internal-only Filtering with -I
+
+  Scenario 11: Show only internal commands from current session
+    Given I have the following commands in history:
+      | command      | id   | source      | pid   |
+      | ls           | 1100 | zsh:12345   | 12345 |
+      | pwd          | 1101 | zsh:12345   | 12345 |
+      | echo test    | 1102 | zsh:67890   | 67890 |
+      | git status   | 1103 | zsh:12345   | 12345 |
+    And the current session has pid 12345
+    When I run "shy fc -l -I"
+    Then the output should contain these commands in order:
+      | id   | command    |
+      | 1100 | ls         |
+      | 1101 | pwd        |
+      | 1103 | git status |
+    And the output should not contain "echo test"
+
+  Scenario 12: Internal filter shows no commands from closed sessions
+    Given I have the following commands in history:
+      | command      | id   | source       | pid   |
+      | ls           | 1200 | zsh:12345:X  | 12345 |
+      | pwd          | 1201 | zsh:12345:X  | 12345 |
+      | echo test    | 1202 | zsh:67890    | 67890 |
+    And the current session has pid 67890
+    When I run "shy fc -l -I"
+    Then the output should only contain:
+      | id   | command   |
+      | 1202 | echo test |
+    And the output should not contain commands from session 12345
+
+  Scenario 13: Internal filter with range
+    Given I have the following commands in history:
+      | command      | id   | source      | pid   |
+      | cmd1         | 1300 | zsh:11111   | 11111 |
+      | cmd2         | 1301 | zsh:22222   | 22222 |
+      | cmd3         | 1302 | zsh:22222   | 22222 |
+      | cmd4         | 1303 | zsh:11111   | 11111 |
+      | cmd5         | 1304 | zsh:22222   | 22222 |
+    And the current session has pid 22222
+    When I run "shy fc -l 1301 1304 -I"
+    Then the output should contain these commands in order:
+      | id   | command |
+      | 1301 | cmd2    |
+      | 1302 | cmd3    |
+      | 1304 | cmd5    |
+    And the output should not contain "cmd1"
+    And the output should not contain "cmd4"
+
+  Scenario 14: Internal filter combined with pattern filter
+    Given I have the following commands in history:
+      | command      | id   | source      | pid   |
+      | git status   | 1400 | zsh:12345   | 12345 |
+      | git commit   | 1401 | zsh:67890   | 67890 |
+      | git push     | 1402 | zsh:12345   | 12345 |
+      | ls           | 1403 | zsh:12345   | 12345 |
+    And the current session has pid 12345
+    When I run "shy fc -l -I -m 'git*'"
+    Then the output should contain these commands in order:
+      | id   | command    |
+      | 1400 | git status |
+      | 1402 | git push   |
+    And the output should not contain "git commit"
+    And the output should not contain "ls"
+
+  Scenario 15: Internal filter with different shell sources
+    Given I have the following commands in history:
+      | command      | id   | source       | pid   |
+      | bash-cmd     | 1500 | bash:11111   | 11111 |
+      | zsh-cmd1     | 1501 | zsh:22222    | 22222 |
+      | zsh-cmd2     | 1502 | zsh:22222    | 22222 |
+      | bash-cmd2    | 1503 | bash:11111   | 11111 |
+    And the current session is zsh with pid 22222
+    When I run "shy fc -l -I"
+    Then the output should contain these commands in order:
+      | id   | command  |
+      | 1501 | zsh-cmd1 |
+      | 1502 | zsh-cmd2 |
+    And the output should not contain "bash-cmd"
+
+  Scenario 16: Internal filter when session is closed
+    Given I have the following commands in history:
+      | command      | id   | source      | pid   |
+      | cmd1         | 1600 | zsh:12345   | 12345 |
+      | cmd2         | 1601 | zsh:12345   | 12345 |
+    When the session with pid 12345 closes
+    Then the source should be updated to "zsh:12345:X"
+    When I start a new session with pid 12345
+    And I run "shy fc -l -I"
+    Then the output should not contain any commands from the previous session
+
+  # Phase 3: Local-only Filtering with -L
+
+  Scenario 17: Local filter behaves identically to no filter
+    Given I have the following commands in history:
+      | command      | id   | source      |
+      | ls           | 1700 | zsh:12345   |
+      | pwd          | 1701 | zsh:67890   |
+      | echo test    | 1702 | bash:11111  |
+    When I run "shy fc -l"
+    And I save the output as "output_no_flag"
+    And I run "shy fc -l -L"
+    And I save the output as "output_with_L"
+    Then "output_no_flag" should equal "output_with_L"
+
+  Scenario 18: Local filter with range produces same results as without
+    Given I have the following commands in history:
+      | command      | id   |
+      | cmd1         | 1800 |
+      | cmd2         | 1801 |
+      | cmd3         | 1802 |
+      | cmd4         | 1803 |
+    When I run "shy fc -l 1801 1803"
+    And I save the output as "output_no_flag"
+    And I run "shy fc -l 1801 1803 -L"
+    And I save the output as "output_with_L"
+    Then "output_no_flag" should equal "output_with_L"
+
+  # Phase 4: old=new Substitutions in List Mode
+
+  Scenario: No substitution as part of range
+    Given I have the following commands in history:
+      | command      | id   |
+      | git status   | 1850 |
+    When I run "shy fc -l 1850 git=svn"
+    Then I see error message "shy fc: event not found: git=svn"
+
+  Scenario: No substitution after range
+    Given I have the following commands in history:
+      | command      | id   |
+      | git status   | 1850 |
+    When I run "shy fc -l 1850 1851 git=svn"
+    Then I see error message "shy fc: too many arguments"
+
+  Scenario 19: Simple string substitution in list output
+    Given I have the following commands in history:
+      | command           | id   |
+      | git status        | 1900 |
+      | git commit -m foo | 1901 |
+      | git push origin   | 1902 |
+    When I run "shy fc -l git=svn 1900 1902"
+    Then the output should contain these commands in order:
+      | id   | command           |
+      | 1900 | svn status        |
+      | 1901 | svn commit -m foo |
+      | 1902 | svn push origin   |
+
+  Scenario 20: Multiple substitutions applied to same command
+    Given I have the following commands in history:
+      | command                  | id   |
+      | echo hello world         | 2000 |
+      | test hello world         | 2001 |
+    When I run "shy fc -lhello=goodbye world=universe 2000 2001"
+    Then the output should contain these commands in order:
+      | id   | command                  |
+      | 2000 | echo goodbye universe    |
+      | 2001 | test goodbye universe    |
+
+  Scenario 21: Substitution with pattern filter
+    Given I have the following commands in history:
+      | command           | id   |
+      | git status        | 2100 |
+      | git commit        | 2101 |
+      | ls -la            | 2102 |
+      | git push          | 2103 |
+    When I run "shy fc -l -m 'git*' git=svn"
+    Then the output should contain these commands in order:
+      | id   | command    |
+      | 2100 | svn status |
+      | 2101 | svn commit |
+      | 2103 | svn push   |
+    And the output should not contain "ls -la"
+
+  Scenario 22: Substitution does not modify database
+    Given I have the following commands in history:
+      | command      | id   |
+      | git status   | 2200 |
+    When I run "shy fc -l git=svn 2200"
+    Then the output should show "svn status"
+    When I run "shy fc -l 2200"
+    Then the output should show "git status"
+
+  Scenario 23: Substitution with no match
+    Given I have the following commands in history:
+      | command      | id   |
+      | git status   | 2300 |
+      | git commit   | 2301 |
+    When I run "shy fc -l foo=bar 2300 2301"
+    Then the output should contain these commands in order:
+      | id   | command    |
+      | 2300 | git status |
+      | 2301 | git commit |
+
+  Scenario 24: Substitution with special characters
+    Given I have the following commands in history:
+      | command              | id   |
+      | echo $HOME           | 2400 |
+      | test $USER           | 2401 |
+    When I run "shy fc -l '$HOME'='$PWD' 2400 2401"
+    Then the output should contain these commands in order:
+      | id   | command    |
+      | 2400 | echo $PWD  |
+      | 2401 | test $USER |
+
+  Scenario 25: Substitution order matters (first match wins)
+    Given I have the following commands in history:
+      | command           | id   |
+      | test test test    | 2500 |
+    When I run "shy fc -l 2500 test=foo"
+    Then the output should show "foo foo foo"
+
+  Scenario 26: Empty substitution removes text
+    Given I have the following commands in history:
+      | command        | id   |
+      | git --verbose  | 2600 |
+    When I run "shy fc -l 2600 '--verbose'=''"
+    Then the output should show "git "
+
+  Scenario 27: Substitution with reverse flag
+    Given I have the following commands in history:
+      | command      | id   |
+      | git status   | 2700 |
+      | git commit   | 2701 |
+      | git push     | 2702 |
+    When I run "shy fc -l -r git=svn"
+    Then the output should contain these commands in reverse order:
+      | id   | command    |
+      | 2702 | svn push   |
+      | 2701 | svn commit |
+      | 2700 | svn status |
+
+  Scenario 28: Substitution with timestamp display
+    Given I have the following commands in history:
+      | command      | id   | timestamp  |
+      | git status   | 2800 | <timestamp> |
+    And the timestamp for command 2800 is today at 4pm
+    When I run "shy fc -l -d git=svn 2800"
+    Then the output should show timestamp "16:00"
+    And the output should show command "svn status"
+
+  Scenario 29: Substitution combined with -I flag
+    Given I have the following commands in history:
+      | command      | id   | source      | pid   |
+      | git status   | 2900 | zsh:12345   | 12345 |
+      | git commit   | 2901 | zsh:67890   | 67890 |
+      | git push     | 2902 | zsh:12345   | 12345 |
+    And the current session has pid 12345
+    When I run "shy fc -l -I git=svn"
+    Then the output should contain these commands in order:
+      | id   | command    |
+      | 2900 | svn status |
+      | 2902 | svn push   |
+    And the output should not contain "svn commit"
+
+  Scenario 30: Multiple old=new pairs with overlapping patterns
+    Given I have the following commands in history:
+      | command        | id   |
+      | git status     | 3000 |
+    When I run "shy fc -l 3000 git=svn status=stat"
+    Then the output should show "svn stat"
+
+  # Phase 5: Database Schema for Session Tracking
+
+  Scenario 31: Database captures session source on insert
+    Given shy is integrated with zsh
+    When I run a command "echo test" with pid 12345
+    Then the database should record source_app as "zsh"
+    And the database should record source_pid as 12345
+
+  Scenario 32: Session close marks all internal commands
+    Given I have the following commands in history:
+      | command      | id   | source      | pid   |
+      | cmd1         | 3200 | zsh:12345   | 12345 |
+      | cmd2         | 3201 | zsh:12345   | 12345 |
+      | cmd3         | 3202 | zsh:67890   | 67890 |
+    When the session with pid 12345 closes
+    Then commands 3200 and 3201 should have source_active as false
+    And command 3202 should still have source_active as true
+
+  Scenario 33: Bash session tracking works independently
+    Given I have zsh session with pid 11111
+    And I have bash session with pid 22222
+    When I run command "zsh-cmd" in zsh session
+    And I run command "bash-cmd" in bash session
+    Then "zsh-cmd" should have source "zsh:11111"
+    And "bash-cmd" should have source "bash:22222"
+    When I run "shy fc -l -I" in zsh session
+    Then I should only see "zsh-cmd"
+
+  Scenario 34: PID reuse prevention with closed session marker
+    Given I have the following commands in history:
+      | command      | id   | source        | pid   |
+      | old-cmd      | 3400 | zsh:12345:X   | 12345 |
+    When I start a new session with pid 12345
+    And I run command "new-cmd"
+    Then "new-cmd" should have source "zsh:12345"
+    When I run "shy fc -l -I"
+    Then the output should only contain "new-cmd"
+    And the output should not contain "old-cmd"

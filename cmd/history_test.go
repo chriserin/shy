@@ -452,7 +452,6 @@ func TestScenario9_SuppressEventNumbersWithNFlag(t *testing.T) {
 	}
 
 	rootCmd.SetArgs(nil)
-	fcNoNum = false // Reset flag
 }
 
 // Scenario 10: Reverse chronological order with -r flag
@@ -499,7 +498,6 @@ func TestScenario10_ReverseChronologicalOrderWithRFlag(t *testing.T) {
 	assert.Contains(t, lines[15], "cmd5")
 
 	rootCmd.SetArgs(nil)
-	fcReverse = false // Reset flag
 }
 
 // Scenario 11: Empty history displays nothing
@@ -690,7 +688,6 @@ func TestScenario15_CombineNegativeOffsetWithReverseFlag(t *testing.T) {
 	assert.Contains(t, lines[9], "cmd41")
 
 	rootCmd.SetArgs(nil)
-	fcReverse = false // Reset flag
 }
 // Phase 2: Timestamp Formatting Tests
 
@@ -743,7 +740,6 @@ func TestScenario16_DisplayTimestampsWithDFlag(t *testing.T) {
 	assert.Contains(t, output, "2024-01-15 14:30:00", "should show timestamp in default format")
 
 	rootCmd.SetArgs(nil)
-	fcShowTime = false // Reset flag
 }
 
 // Scenario 17: Display timestamps in ISO8601 format
@@ -782,7 +778,6 @@ func TestScenario17_DisplayTimestampsISO8601(t *testing.T) {
 	assert.Contains(t, output, "2024-01-15 14:30", "should show timestamp in ISO8601 format")
 
 	rootCmd.SetArgs(nil)
-	fcTimeISO = false // Reset flag
 }
 
 // Scenario 18: Display timestamps in US format
@@ -821,7 +816,6 @@ func TestScenario18_DisplayTimestampsUSFormat(t *testing.T) {
 	assert.Contains(t, output, "01/15/24 14:30", "should show timestamp in US format")
 
 	rootCmd.SetArgs(nil)
-	fcTimeUS = false // Reset flag
 }
 
 // Scenario 19: Display timestamps in European format
@@ -860,7 +854,6 @@ func TestScenario19_DisplayTimestampsEuropeanFormat(t *testing.T) {
 	assert.Contains(t, output, "15.01.2024 14:30", "should show timestamp in European format")
 
 	rootCmd.SetArgs(nil)
-	fcTimeEU = false // Reset flag
 }
 
 // Scenario 20: Display timestamps with custom format
@@ -899,7 +892,6 @@ func TestScenario20_DisplayTimestampsCustomFormat(t *testing.T) {
 	assert.Contains(t, output, "2024-01-15 14:30:00", "should show timestamp in custom format")
 
 	rootCmd.SetArgs(nil)
-	fcTimeCustom = "" // Reset flag
 }
 
 // Scenario 21: Display duration with -D flag
@@ -939,7 +931,6 @@ func TestScenario21_DisplayDuration(t *testing.T) {
 	assert.Contains(t, output, "02:30", "should show duration as 02:30")
 
 	rootCmd.SetArgs(nil)
-	fcElapsedTime = false // Reset flag
 }
 
 // Scenario 22: Combine timestamp format with duration
@@ -983,8 +974,6 @@ func TestScenario22_CombineTimestampAndDuration(t *testing.T) {
 	assert.Contains(t, output, "00:30", "should show duration")
 
 	rootCmd.SetArgs(nil)
-	fcTimeISO = false    // Reset flag
-	fcElapsedTime = false // Reset flag
 }
 
 // Phase 2: Duration Display Tests
@@ -1034,7 +1023,6 @@ func TestDurationScenario9_DisplayDurationWithDFlag(t *testing.T) {
 	assert.Contains(t, lines[2], "02:00", "120s should show as 02:00")
 
 	rootCmd.SetArgs(nil)
-	fcElapsedTime = false
 }
 
 // Scenario 11: Display duration in human-readable format
@@ -1096,7 +1084,6 @@ func TestDurationScenario11_DisplayDurationInHumanReadableFormat(t *testing.T) {
 	}
 
 	rootCmd.SetArgs(nil)
-	fcElapsedTime = false
 }
 
 // Scenario 12: Display duration alongside timestamps
@@ -1143,8 +1130,6 @@ func TestDurationScenario12_DisplayDurationAlongsideTimestamps(t *testing.T) {
 	assert.Regexp(t, `\s+1\s+2024-01-15 14:30\s+02:05\s+test command`, output)
 
 	rootCmd.SetArgs(nil)
-	fcTimeISO = false
-	fcElapsedTime = false
 }
 
 // Scenario 13: Commands without duration show 00:00
@@ -1198,5 +1183,4 @@ func TestDurationScenario13_CommandsWithoutDurationShow0000(t *testing.T) {
 	assert.Contains(t, lines[1], "00:00", "command without duration should show 00:00")
 
 	rootCmd.SetArgs(nil)
-	fcElapsedTime = false
 }

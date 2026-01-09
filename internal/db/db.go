@@ -22,7 +22,10 @@ const (
 			command_text TEXT NOT NULL,
 			working_dir TEXT NOT NULL,
 			git_repo TEXT,
-			git_branch TEXT
+			git_branch TEXT,
+			source_app TEXT,
+			source_pid INTEGER,
+			source_active INTEGER DEFAULT 1
 		);
 	`
 )
@@ -147,25 +150,32 @@ func (db *DB) migrate() error {
 	}
 	rows.Close()
 
-	// Check if migration is needed and if duration column exists
+	// Check if migration is needed
 	needsMigration := false
 	hasDuration := false
+	hasSourceApp := false
+	hasSourcePid := false
+	hasSourceActive := false
 
 	for _, col := range columns {
-		if col.name == "duration" {
+		switch col.name {
+		case "duration":
 			hasDuration = true
-			break
+		case "source_app":
+			hasSourceApp = true
+		case "source_pid":
+			hasSourcePid = true
+		case "source_active":
+			hasSourceActive = true
 		}
 	}
 
-	if len(columns) < 8 {
-		// Missing duration column
+	// Expected columns: id, timestamp, exit_status, duration, command_text, working_dir, git_repo, git_branch, source_app, source_pid, source_active (11 total)
+	if len(columns) < 11 {
 		needsMigration = true
-	} else {
+	} else if len(columns) >= 4 && columns[3].name != "duration" {
 		// Check if duration is in correct position (column 3, 0-indexed)
-		if len(columns) >= 4 && columns[3].name != "duration" {
-			needsMigration = true
-		}
+		needsMigration = true
 	}
 
 	if !needsMigration {
@@ -196,27 +206,38 @@ func (db *DB) migrate() error {
 			command_text TEXT NOT NULL,
 			working_dir TEXT NOT NULL,
 			git_repo TEXT,
-			git_branch TEXT
+			git_branch TEXT,
+			source_app TEXT,
+			source_pid INTEGER,
+			source_active INTEGER DEFAULT 1
 		);
 	`
 	if _, err := db.conn.Exec(createNewTableSQL); err != nil {
 		return fmt.Errorf("failed to create new table: %w", err)
 	}
 
-	// Copy data from old table to new table (duration defaults to 0 for old records)
+	// Copy data from old table to new table
+	// Default values: duration=0, source_app=NULL, source_pid=NULL, source_active=1
 	var copyDataSQL string
-	if hasDuration {
-		// Duration column exists, use COALESCE
+	if hasDuration && hasSourceApp && hasSourcePid && hasSourceActive {
+		// All columns exist
 		copyDataSQL = `
-			INSERT INTO commands_new (id, timestamp, exit_status, duration, command_text, working_dir, git_repo, git_branch)
-			SELECT id, timestamp, exit_status, COALESCE(duration, 0), command_text, working_dir, git_repo, git_branch
+			INSERT INTO commands_new (id, timestamp, exit_status, duration, command_text, working_dir, git_repo, git_branch, source_app, source_pid, source_active)
+			SELECT id, timestamp, exit_status, COALESCE(duration, 0), command_text, working_dir, git_repo, git_branch, source_app, source_pid, COALESCE(source_active, 1)
+			FROM commands;
+		`
+	} else if hasDuration {
+		// Duration exists, but source columns don't
+		copyDataSQL = `
+			INSERT INTO commands_new (id, timestamp, exit_status, duration, command_text, working_dir, git_repo, git_branch, source_app, source_pid, source_active)
+			SELECT id, timestamp, exit_status, COALESCE(duration, 0), command_text, working_dir, git_repo, git_branch, NULL, NULL, 1
 			FROM commands;
 		`
 	} else {
-		// Duration column doesn't exist, use constant 0
+		// Duration doesn't exist
 		copyDataSQL = `
-			INSERT INTO commands_new (id, timestamp, exit_status, duration, command_text, working_dir, git_repo, git_branch)
-			SELECT id, timestamp, exit_status, 0, command_text, working_dir, git_repo, git_branch
+			INSERT INTO commands_new (id, timestamp, exit_status, duration, command_text, working_dir, git_repo, git_branch, source_app, source_pid, source_active)
+			SELECT id, timestamp, exit_status, 0, command_text, working_dir, git_repo, git_branch, NULL, NULL, 1
 			FROM commands;
 		`
 	}
@@ -261,9 +282,21 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 		duration = *cmd.Duration
 	}
 
+	// Convert source_active bool pointer to integer for SQLite
+	var sourceActive interface{}
+	if cmd.SourceActive != nil {
+		if *cmd.SourceActive {
+			sourceActive = 1
+		} else {
+			sourceActive = 0
+		}
+	} else {
+		sourceActive = nil
+	}
+
 	result, err := db.conn.Exec(`
-		INSERT INTO commands (timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO commands (timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		cmd.Timestamp,
 		cmd.ExitStatus,
 		cmd.CommandText,
@@ -271,6 +304,9 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 		cmd.GitRepo,
 		cmd.GitBranch,
 		duration,
+		cmd.SourceApp,
+		cmd.SourcePid,
+		sourceActive,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert command: %w", err)
@@ -287,8 +323,9 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 // GetCommand retrieves a command by ID
 func (db *DB) GetCommand(id int64) (*models.Command, error) {
 	cmd := &models.Command{}
+	var sourceActive *int64
 	err := db.conn.QueryRow(`
-		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
 		FROM commands WHERE id = ?`,
 		id,
 	).Scan(
@@ -300,9 +337,18 @@ func (db *DB) GetCommand(id int64) (*models.Command, error) {
 		&cmd.GitRepo,
 		&cmd.GitBranch,
 		&cmd.Duration,
+		&cmd.SourceApp,
+		&cmd.SourcePid,
+		&sourceActive,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get command: %w", err)
+	}
+
+	// Convert source_active from integer to bool pointer
+	if sourceActive != nil {
+		active := *sourceActive != 0
+		cmd.SourceActive = &active
 	}
 
 	return cmd, nil
@@ -461,7 +507,7 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 	}
 
 	query := `
-		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
 		FROM commands
 		WHERE id >= ? AND id <= ?
 		ORDER BY id ASC`
@@ -475,6 +521,7 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 	var commands []models.Command
 	for rows.Next() {
 		var cmd models.Command
+		var sourceActive *int64
 		if err := rows.Scan(
 			&cmd.ID,
 			&cmd.Timestamp,
@@ -484,8 +531,72 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 			&cmd.GitRepo,
 			&cmd.GitBranch,
 			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
+		}
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}
+
+// GetCommandsByRangeWithPattern retrieves commands by event ID range (inclusive) that match a pattern
+// Returns commands ordered by ID ascending
+// The pattern uses glob syntax (* for any chars, ? for single char) and is translated to SQL LIKE
+func (db *DB) GetCommandsByRangeWithPattern(first, last int64, pattern string) ([]models.Command, error) {
+	// Handle invalid range
+	if first > last {
+		return []models.Command{}, nil
+	}
+
+	query := `
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+		FROM commands
+		WHERE id >= ? AND id <= ?
+		AND command_text LIKE ? ESCAPE '\'
+		ORDER BY id ASC`
+
+	rows, err := db.conn.Query(query, first, last, pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands by range with pattern: %w", err)
+	}
+	defer rows.Close()
+
+	var commands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		var sourceActive *int64
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
 		}
 		commands = append(commands, cmd)
 	}
@@ -541,4 +652,141 @@ func (db *DB) FindMostRecentMatchingBefore(prefix string, beforeID int64) (int64
 	}
 
 	return id, nil
+}
+
+// GetCommandsByRangeInternal retrieves commands by event ID range (inclusive) filtered by session
+// Only returns commands from the active session with the given PID
+// Returns commands ordered by ID ascending
+func (db *DB) GetCommandsByRangeInternal(first, last, sessionPid int64) ([]models.Command, error) {
+	// Handle invalid range
+	if first > last {
+		return []models.Command{}, nil
+	}
+
+	query := `
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+		FROM commands
+		WHERE id >= ? AND id <= ?
+		AND source_pid = ?
+		AND source_active = 1
+		ORDER BY id ASC`
+
+	rows, err := db.conn.Query(query, first, last, sessionPid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands by range (internal): %w", err)
+	}
+	defer rows.Close()
+
+	var commands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		var sourceActive *int64
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
+		}
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}
+
+// GetCommandsByRangeWithPatternInternal retrieves commands by event ID range (inclusive) that match a pattern
+// and are from the active session with the given PID
+// Returns commands ordered by ID ascending
+// The pattern uses glob syntax (* for any chars, ? for single char) and is translated to SQL LIKE
+func (db *DB) GetCommandsByRangeWithPatternInternal(first, last, sessionPid int64, pattern string) ([]models.Command, error) {
+	// Handle invalid range
+	if first > last {
+		return []models.Command{}, nil
+	}
+
+	query := `
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+		FROM commands
+		WHERE id >= ? AND id <= ?
+		AND command_text LIKE ? ESCAPE '\'
+		AND source_pid = ?
+		AND source_active = 1
+		ORDER BY id ASC`
+
+	rows, err := db.conn.Query(query, first, last, pattern, sessionPid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands by range with pattern (internal): %w", err)
+	}
+	defer rows.Close()
+
+	var commands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		var sourceActive *int64
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
+		}
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}
+
+// CloseSession marks all active commands from a session as inactive
+// Returns the number of commands updated
+func (db *DB) CloseSession(sessionPid int64) (int64, error) {
+	result, err := db.conn.Exec(`
+		UPDATE commands
+		SET source_active = 0
+		WHERE source_pid = ? AND source_active = 1`,
+		sessionPid,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to close session: %w", err)
+	}
+
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	return count, nil
 }

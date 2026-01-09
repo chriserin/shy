@@ -216,3 +216,152 @@ func TestScenario14_DatabaseHandlesConcurrentInserts(t *testing.T) {
 	require.NoError(t, err, "failed to get command 2")
 	assert.NotEqual(t, cmd1.ID, cmd2.ID, "commands should have unique IDs")
 }
+
+// Scenario 31: Database captures session source on insert
+func TestScenario31_DatabaseCapturesSessionSourceOnInsert(t *testing.T) {
+	// Given: shy is integrated with zsh
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// When: I run a command "echo test" with pid 12345
+	sourceApp := "zsh"
+	sourcePid := int64(12345)
+	sourceActive := true
+
+	cmd := &models.Command{
+		CommandText:  "echo test",
+		WorkingDir:   "/home/test",
+		ExitStatus:   0,
+		Timestamp:    1704470400,
+		SourceApp:    &sourceApp,
+		SourcePid:    &sourcePid,
+		SourceActive: &sourceActive,
+	}
+	id, err := database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// Then: the database should record source_app as "zsh"
+	retrievedCmd, err := database.GetCommand(id)
+	require.NoError(t, err)
+	require.NotNil(t, retrievedCmd.SourceApp)
+	assert.Equal(t, "zsh", *retrievedCmd.SourceApp)
+
+	// And: the database should record source_pid as 12345
+	require.NotNil(t, retrievedCmd.SourcePid)
+	assert.Equal(t, int64(12345), *retrievedCmd.SourcePid)
+
+	// And: source_active should be true
+	require.NotNil(t, retrievedCmd.SourceActive)
+	assert.True(t, *retrievedCmd.SourceActive)
+}
+
+// Test insert command with source tracking flags
+func TestInsertCommandWithSourceTracking(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	// Run insert command with source tracking flags
+	rootCmd.SetArgs([]string{
+		"insert",
+		"--command", "git status",
+		"--dir", tempDir,
+		"--status", "0",
+		"--source-app", "zsh",
+		"--source-pid", "54321",
+		"--db", dbPath,
+	})
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify the command was inserted with source tracking
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	cmd, err := database.GetCommand(1)
+	require.NoError(t, err)
+
+	assert.Equal(t, "git status", cmd.CommandText)
+	require.NotNil(t, cmd.SourceApp)
+	assert.Equal(t, "zsh", *cmd.SourceApp)
+	require.NotNil(t, cmd.SourcePid)
+	assert.Equal(t, int64(54321), *cmd.SourcePid)
+	require.NotNil(t, cmd.SourceActive)
+	assert.True(t, *cmd.SourceActive)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 33: Bash session tracking works independently
+func TestScenario33_BashSessionTrackingWorksIndependently(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Given: I have zsh session with pid 11111
+	zshApp := "zsh"
+	zshPid := int64(11111)
+	zshActive := true
+
+	// And: I have bash session with pid 22222
+	bashApp := "bash"
+	bashPid := int64(22222)
+	bashActive := true
+
+	// When: I run command "zsh-cmd" in zsh session
+	zshCmd := &models.Command{
+		CommandText:  "zsh-cmd",
+		WorkingDir:   "/home/test",
+		ExitStatus:   0,
+		Timestamp:    1704470400,
+		SourceApp:    &zshApp,
+		SourcePid:    &zshPid,
+		SourceActive: &zshActive,
+	}
+	_, err = database.InsertCommand(zshCmd)
+	require.NoError(t, err)
+
+	// And: I run command "bash-cmd" in bash session
+	bashCmd := &models.Command{
+		CommandText:  "bash-cmd",
+		WorkingDir:   "/home/test",
+		ExitStatus:   0,
+		Timestamp:    1704470401,
+		SourceApp:    &bashApp,
+		SourcePid:    &bashPid,
+		SourceActive: &bashActive,
+	}
+	_, err = database.InsertCommand(bashCmd)
+	require.NoError(t, err)
+
+	// Then: "zsh-cmd" should have source "zsh:11111"
+	cmd1, err := database.GetCommand(1)
+	require.NoError(t, err)
+	require.NotNil(t, cmd1.SourceApp)
+	assert.Equal(t, "zsh", *cmd1.SourceApp)
+	require.NotNil(t, cmd1.SourcePid)
+	assert.Equal(t, int64(11111), *cmd1.SourcePid)
+
+	// And: "bash-cmd" should have source "bash:22222"
+	cmd2, err := database.GetCommand(2)
+	require.NoError(t, err)
+	require.NotNil(t, cmd2.SourceApp)
+	assert.Equal(t, "bash", *cmd2.SourceApp)
+	require.NotNil(t, cmd2.SourcePid)
+	assert.Equal(t, int64(22222), *cmd2.SourcePid)
+
+	// When: I run "shy fc -l -I" in zsh session (PID 11111)
+	// Then: I should only see "zsh-cmd"
+	commands, err := database.GetCommandsByRangeInternal(1, 100, 11111)
+	require.NoError(t, err)
+	assert.Len(t, commands, 1)
+	assert.Equal(t, "zsh-cmd", commands[0].CommandText)
+}

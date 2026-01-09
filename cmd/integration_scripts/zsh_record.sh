@@ -16,6 +16,9 @@
 # Uninstall:
 #   Remove the eval line from your ~/.zshrc and restart your shell
 
+# Export session PID for internal filtering (-I flag)
+export SHY_SESSION_PID=$$
+
 # Store command for tracking
 __shy_cmd=""
 __shy_cmd_dir=""
@@ -96,6 +99,10 @@ __shy_precmd() {
 		shy_args+=("--duration" "$duration")
 	fi
 
+	# Add source tracking fields
+	shy_args+=("--source-app" "zsh")
+	shy_args+=("--source-pid" "$$")
+
 	# Add custom database path if set
 	if [[ -n "$SHY_DB_PATH" ]]; then
 		shy_args+=("--db" "$SHY_DB_PATH")
@@ -124,7 +131,31 @@ __shy_precmd() {
 	__shy_cmd_start=""
 }
 
+# Hook called when shell exits
+__shy_session_close() {
+	# Check if tracking is disabled
+	if [[ -n "$SHY_DISABLE" ]]; then
+		return 0
+	fi
+
+	# Build close-session command
+	local shy_args=(
+		"close-session"
+		"--pid" "$$"
+	)
+
+	# Add custom database path if set
+	if [[ -n "$SHY_DB_PATH" ]]; then
+		shy_args+=("--db" "$SHY_DB_PATH")
+	fi
+
+	# Execute shy close-session in background
+	# Use &! to disown the process so it continues even if shell exits
+	(shy "${shy_args[@]}" 2>/dev/null) &!
+}
+
 # Register hooks using zsh's standard hook system
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec __shy_preexec
 add-zsh-hook precmd __shy_precmd
+add-zsh-hook zshexit __shy_session_close

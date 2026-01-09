@@ -57,6 +57,9 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 		{"working_dir", "TEXT"},
 		{"git_repo", "TEXT"},
 		{"git_branch", "TEXT"},
+		{"source_app", "TEXT"},
+		{"source_pid", "INTEGER"},
+		{"source_active", "INTEGER"},
 	}
 
 	require.Len(t, schema, len(expectedColumns), "should have correct number of columns")

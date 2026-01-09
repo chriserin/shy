@@ -18,6 +18,8 @@ var (
 	gitBranch  string
 	timestamp  int64
 	duration   int64
+	sourceApp  string
+	sourcePid  int64
 )
 
 var insertCmd = &cobra.Command{
@@ -37,6 +39,8 @@ func init() {
 	insertCmd.Flags().StringVar(&gitBranch, "git-branch", "", "Git branch name")
 	insertCmd.Flags().Int64Var(&timestamp, "timestamp", 0, "Unix timestamp (default: current time)")
 	insertCmd.Flags().Int64Var(&duration, "duration", 0, "Command duration in milliseconds")
+	insertCmd.Flags().StringVar(&sourceApp, "source-app", "", "Source shell application (e.g., 'zsh', 'bash')")
+	insertCmd.Flags().Int64Var(&sourcePid, "source-pid", 0, "Source shell session PID")
 
 	insertCmd.MarkFlagRequired("command")
 	insertCmd.MarkFlagRequired("dir")
@@ -98,6 +102,17 @@ func runInsert(cmd *cobra.Command, args []string) error {
 
 	cmdModel.GitRepo = finalGitRepo
 	cmdModel.GitBranch = finalGitBranch
+
+	// Set source tracking fields if provided
+	if sourceApp != "" {
+		cmdModel.SourceApp = &sourceApp
+	}
+	if sourcePid > 0 {
+		cmdModel.SourcePid = &sourcePid
+		// If source PID is provided, assume session is active
+		active := true
+		cmdModel.SourceActive = &active
+	}
 
 	// Insert command
 	id, err := database.InsertCommand(cmdModel)
