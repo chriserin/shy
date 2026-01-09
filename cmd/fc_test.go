@@ -965,3 +965,135 @@ func TestInternalScenario16_InternalFilterWhenSessionIsClosed(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 }
+
+// Scenario 17: Local filter behaves identically to no filter
+func TestLocalScenario17_LocalFilterBehavesIdenticallyToNoFilter(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Setup test data
+	sourceApp1 := "zsh"
+	sourcePid1 := int64(12345)
+	sourceActive1 := true
+
+	sourceApp2 := "zsh"
+	sourcePid2 := int64(67890)
+	sourceActive2 := true
+
+	sourceApp3 := "bash"
+	sourcePid3 := int64(11111)
+	sourceActive3 := true
+
+	commands := []struct {
+		text   string
+		app    *string
+		pid    *int64
+		active *bool
+	}{
+		{"ls", &sourceApp1, &sourcePid1, &sourceActive1},
+		{"pwd", &sourceApp2, &sourcePid2, &sourceActive2},
+		{"echo test", &sourceApp3, &sourcePid3, &sourceActive3},
+	}
+
+	for _, cmd := range commands {
+		c := &models.Command{
+			CommandText:  cmd.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    int64(1704470400),
+			SourceApp:    cmd.app,
+			SourcePid:    cmd.pid,
+			SourceActive: cmd.active,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+	}
+
+	// Run "shy fc -l" without -L flag
+	var bufNoFlag bytes.Buffer
+	rootCmd.SetOut(&bufNoFlag)
+	rootCmd.SetArgs([]string{"fc", "-l", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	outputNoFlag := bufNoFlag.String()
+
+	// Run "shy fc -l -L" with -L flag
+	var bufWithL bytes.Buffer
+	rootCmd.SetOut(&bufWithL)
+	rootCmd.SetArgs([]string{"fc", "-l", "-L", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	outputWithL := bufWithL.String()
+
+	// Then: outputs should be identical
+	assert.Equal(t, outputNoFlag, outputWithL, "-L flag should produce identical output to no flag")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 18: Local filter with range produces same results as without
+func TestLocalScenario18_LocalFilterWithRangeProducesSameResults(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Setup test data
+	commands := []string{"cmd1", "cmd2", "cmd3", "cmd4"}
+
+	for _, cmdText := range commands {
+		c := &models.Command{
+			CommandText: cmdText,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400),
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+	}
+
+	// Run "shy fc -l 2 4" without -L flag (IDs 2-4)
+	var bufNoFlag bytes.Buffer
+	rootCmd.SetOut(&bufNoFlag)
+	rootCmd.SetArgs([]string{"fc", "-l", "2", "4", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	outputNoFlag := bufNoFlag.String()
+
+	// Run "shy fc -l 2 4 -L" with -L flag
+	var bufWithL bytes.Buffer
+	rootCmd.SetOut(&bufWithL)
+	rootCmd.SetArgs([]string{"fc", "-l", "2", "4", "-L", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	outputWithL := bufWithL.String()
+
+	// Then: outputs should be identical
+	assert.Equal(t, outputNoFlag, outputWithL, "-L flag with range should produce identical output to no flag")
+
+	// Verify the output contains the expected commands
+	assert.Contains(t, outputWithL, "cmd2")
+	assert.Contains(t, outputWithL, "cmd3")
+	assert.Contains(t, outputWithL, "cmd4")
+	assert.NotContains(t, outputWithL, "cmd1")
+
+	rootCmd.SetArgs(nil)
+}

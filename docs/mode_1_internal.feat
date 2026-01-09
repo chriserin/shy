@@ -285,7 +285,7 @@ Feature: fc Mode 1 - Internal Features (List Mode Extensions)
       | cmd4         | 1803 |
     When I run "shy fc -l 1801 1803"
     And I save the output as "output_no_flag"
-    And I run "shy fc -l 1801 1803 -L"
+    And I run "shy fc -l -L 1801 1803"
     And I save the output as "output_with_L"
     Then "output_no_flag" should equal "output_with_L"
 

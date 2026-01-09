@@ -51,6 +51,7 @@ var fcCmd = &cobra.Command{
 		cmd.Flags().Set("elapsed", fmt.Sprintf("%t", flags.elapsed))
 		cmd.Flags().Set("match", flags.pattern)
 		cmd.Flags().Set("internal", fmt.Sprintf("%t", flags.internal))
+		cmd.Flags().Set("local", fmt.Sprintf("%t", flags.local))
 
 		// Run fc with parsed arguments
 		err = runFc(cmd, parsedArgs)
@@ -76,6 +77,7 @@ type fcFlags struct {
 	elapsed    bool
 	pattern    string
 	internal   bool
+	local      bool
 }
 
 // parseFcArgsAndFlags manually parses arguments to handle negative numbers correctly
@@ -139,6 +141,8 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				flags.pattern = args[i]
 			case "-I", "--internal":
 				flags.internal = true
+			case "-L", "--local":
+				flags.local = true
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -175,6 +179,7 @@ func init() {
 	fcCmd.Flags().BoolP("elapsed", "D", false, "Display elapsed time since command")
 	fcCmd.Flags().StringP("match", "m", "", "Filter by glob pattern")
 	fcCmd.Flags().BoolP("internal", "I", false, "Show only commands from current session")
+	fcCmd.Flags().BoolP("local", "L", false, "Show only local commands (currently same as no filter)")
 }
 
 // resetFcFlags resets all fc flags to their default values (for testing)
@@ -191,6 +196,7 @@ func resetFcFlags(cmd *cobra.Command) {
 	cmd.Flags().Set("elapsed", "false")
 	cmd.Flags().Set("match", "")
 	cmd.Flags().Set("internal", "false")
+	cmd.Flags().Set("local", "false")
 }
 
 // getSessionPid retrieves the current session PID from the SHY_SESSION_PID environment variable
@@ -286,6 +292,10 @@ func runFc(cmd *cobra.Command, args []string) error {
 	fcElapsedTime, _ := cmd.Flags().GetBool("elapsed")
 	fcPattern, _ := cmd.Flags().GetString("match")
 	fcInternal, _ := cmd.Flags().GetBool("internal")
+	fcLocal, _ := cmd.Flags().GetBool("local")
+
+	// -L (local) flag is currently a no-op placeholder for future remote sync functionality
+	_ = fcLocal
 
 	// For now, only implement -l (list) mode
 	if !fcList {
