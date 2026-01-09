@@ -1,0 +1,243 @@
+Feature: shy fc Mode 2 - Edit-and-Execute Mode
+  As a user of shy
+  I want to edit and re-execute historical commands
+  So that I can modify and run previous commands efficiently
+
+  Background:
+    Given a shy history database exists
+    And the database contains the following commands:
+      | id  | command                        | timestamp  |
+      | 100 | echo "hello world"             | 1234567890 |
+      | 101 | git status                     | 1234567891 |
+      | 102 | npm install lodash             | 1234567892 |
+      | 103 | docker ps -a                   | 1234567893 |
+      | 104 | kubectl get pods               | 1234567894 |
+      | 105 | echo "test\nmultiline\ncommand"| 1234567895 |
+
+  # Basic Edit-and-Execute
+  Scenario: Edit and execute a single command by event ID
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 101"
+    Then a temporary file should be created with content "git status"
+    And the editor "vim" should be opened with the temporary file
+    And after the user saves and exits the editor
+    And the modified command should be executed
+    And the temporary file should be cleaned up
+
+  Scenario: Edit and execute using a negative offset
+    Given the EDITOR environment variable is set to "nano"
+    When I run "shy fc -1"
+    Then a temporary file should be created with content "kubectl get pods"
+    And the editor "nano" should be opened with the temporary file
+    And after the user saves and exits the editor
+    And the modified command should be executed
+
+  Scenario: Edit and execute a range of commands
+    Given the EDITOR environment variable is set to "vi"
+    When I run "shy fc 101 102"
+    Then a temporary file should be created with content:
+      """
+      git status
+      npm install lodash
+      """
+    And the editor "vi" should be opened with the temporary file
+    And after the user saves and exits the editor
+    And each modified command should be executed in order
+
+  Scenario: Edit and execute with string-based event lookup
+    Given the EDITOR environment variable is set to "emacs"
+    When I run "shy fc docker"
+    Then a temporary file should be created with content "docker ps -a"
+    And the editor "emacs" should be opened with the temporary file
+    And after the user saves and exits the editor
+    And the modified command should be executed
+
+  # Multi-line Command Handling
+  Scenario: Edit and execute a multi-line command
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 105"
+    Then a temporary file should be created with content:
+      """
+      echo "test
+      multiline
+      command"
+      """
+    And the editor "vim" should be opened with the temporary file
+    And after the user saves and exits the editor
+    And the multi-line command should be executed correctly
+
+  # Editor Selection with -e flag
+  Scenario: Specify editor using -e flag overrides EDITOR environment variable
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc -e nano 101"
+    Then the editor "nano" should be opened with the temporary file
+    And not the editor "vim"
+
+  Scenario: Specify editor with absolute path
+    When I run "shy fc -e /usr/bin/nano 101"
+    Then the editor "/usr/bin/nano" should be opened with the temporary file
+
+  # Quick Execute with -s flag
+  Scenario: Quick execute without editing using -s flag
+    When I run "shy fc -s 101"
+    Then no editor should be opened
+    And the command "git status" should be executed immediately
+
+  Scenario: Quick execute with old=new substitution
+    When I run "shy fc -s git=svn 101"
+    Then no editor should be opened
+    And the command "svn status" should be executed immediately
+
+  Scenario: Quick execute with multiple old=new substitutions
+    When I run "shy fc -s npm=yarn install=add 102"
+    Then no editor should be opened
+    And the command "yarn add lodash" should be executed immediately
+
+  # old=new Substitutions
+  Scenario: Edit with single old=new substitution pre-applied
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc echo=printf 100"
+    Then a temporary file should be created with content "printf \"hello world\""
+    And the editor "vim" should be opened with the temporary file
+    And after the user saves and exits the editor
+    And the modified command should be executed
+
+  Scenario: Edit with multiple old=new substitutions pre-applied
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc docker=podman ps=ls 103"
+    Then a temporary file should be created with content "podman ls -a"
+    And the editor "vim" should be opened with the temporary file
+
+  Scenario: Substitution with no match in command
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc foo=bar 101"
+    Then a temporary file should be created with content "git status"
+    And no substitution should occur
+    And the editor "vim" should be opened with the temporary file
+
+  Scenario: Substitution with empty replacement
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc world= 100"
+    Then a temporary file should be created with content "echo \"hello \""
+    And the editor "vim" should be opened with the temporary file
+
+  Scenario: Multiple substitutions applied in order
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc echo=print hello=hi 100"
+    Then a temporary file should be created with content "print \"hi world\""
+    And the editor "vim" should be opened with the temporary file
+
+  # Range Support with Edit-and-Execute
+  Scenario: Edit range using negative offsets
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc -3 -1"
+    Then a temporary file should be created with content:
+      """
+      docker ps -a
+      kubectl get pods
+      echo "test
+      multiline
+      command"
+      """
+    And the editor "vim" should be opened with the temporary file
+
+  Scenario: Edit range from string match to end
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc npm"
+    Then a temporary file should be created with content "npm install lodash"
+    And the editor "vim" should be opened with the temporary file
+
+  Scenario: Edit range from first to string match
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 101 docker"
+    Then a temporary file should be created with content:
+      """
+      git status
+      npm install lodash
+      docker ps -a
+      """
+    And the editor "vim" should be opened with the temporary file
+
+  # Security and Edge Cases
+  Scenario: User aborts edit by not saving changes
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 101"
+    And the user exits the editor without saving
+    Then no command should be executed
+    And the temporary file should be cleaned up
+
+  Scenario: User creates empty file in editor
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 101"
+    And the user deletes all content and saves
+    Then no command should be executed
+    And the temporary file should be cleaned up
+
+  Scenario: Editor path with spaces is handled correctly
+    When I run "shy fc -e '/usr/local/My Editor/editor' 101"
+    Then the editor "/usr/local/My Editor/editor" should be opened correctly
+
+  Scenario: Command with special shell characters is handled safely
+    Given the database contains a command with id 106: "echo $HOME && ls"
+    And the EDITOR environment variable is set to "vim"
+    When I run "shy fc 106"
+    Then a temporary file should be created with content "echo $HOME && ls"
+    And special characters should not be interpreted during file creation
+
+  Scenario: Temporary file uses secure permissions
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 101"
+    Then the temporary file should be created with mode 0600
+    And only the current user should have read/write access
+
+  # Error Scenarios
+  Scenario: Invalid event ID is provided
+    When I run "shy fc 999"
+    Then an error should be displayed: "fc: current history line would recurse endlessly, aborted"
+    And no editor should be opened
+    And the exit code should be 1
+
+  Scenario: Invalid range is provided
+    When I run "shy fc 105 100"
+    Then an error should be displayed: "fc: history events can't be executed backwards, aborted"
+    And no editor should be opened
+    And the exit code should be 1
+
+  Scenario: Editor command not found
+    Given the EDITOR environment variable is set to "nonexistent-editor"
+    When I run "shy fc 101"
+    Then an error should be displayed: "zsh: command not found: nonexistent-editor"
+    And the exit code should be 1
+
+  Scenario: Editor exits with non-zero status
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc 101"
+    And the editor exits with status code 1 (in vim `:cq`)
+    Then no command should be executed
+    And an error should be displayed
+    And the temporary file should be cleaned up
+
+  # Integration with other flags
+  Scenario: Cannot combine -s with -e
+    When I run "shy fc -s -e nano 101"
+    Then an error should be displayed: "cannot use -s and -e together"
+    And the exit code should be 1
+
+  Scenario: Using -m pattern filter with edit mode
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc -m "git*" 100 105"
+    Then a temporary file should be created with content "git status"
+    And only commands matching the pattern should be included
+
+  Scenario: Using -L flag with edit mode (local only)
+    Given the EDITOR environment variable is set to "vim"
+    When I run "shy fc -L 100 105"
+    Then only local commands from the current session should be included
+    And the editor should open with those commands
+
+  Scenario: Using -I flag with edit mode (internal only)
+    Given the EDITOR environment variable is set to "vim"
+    And the current shell PID is 12345
+    When I run "shy fc -I 100 105"
+    Then only commands from PID 12345 should be included
+    And the editor should open with those commands

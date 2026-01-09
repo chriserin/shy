@@ -52,6 +52,8 @@ var fcCmd = &cobra.Command{
 		cmd.Flags().Set("match", flags.pattern)
 		cmd.Flags().Set("internal", fmt.Sprintf("%t", flags.internal))
 		cmd.Flags().Set("local", fmt.Sprintf("%t", flags.local))
+		cmd.Flags().Set("editor", flags.editor)
+		cmd.Flags().Set("quick-exec", fmt.Sprintf("%t", flags.quickExec))
 
 		// Run fc with parsed arguments
 		err = runFc(cmd, parsedArgs)
@@ -78,6 +80,8 @@ type fcFlags struct {
 	pattern    string
 	internal   bool
 	local      bool
+	editor     string // -e flag: specify editor to use
+	quickExec  bool   // -s flag: re-execute without editing
 }
 
 // parseFcArgsAndFlags manually parses arguments to handle negative numbers correctly
@@ -164,6 +168,14 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				flags.internal = true
 			case "-L", "--local":
 				flags.local = true
+			case "-e", "--editor":
+				if i+1 >= len(args) {
+					return nil, flags, nil, fmt.Errorf("-e requires an editor path")
+				}
+				i++
+				flags.editor = args[i]
+			case "-s", "--quick-exec":
+				flags.quickExec = true
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -201,6 +213,8 @@ func init() {
 	fcCmd.Flags().StringP("match", "m", "", "Filter by glob pattern")
 	fcCmd.Flags().BoolP("internal", "I", false, "Show only commands from current session")
 	fcCmd.Flags().BoolP("local", "L", false, "Show only local commands (currently same as no filter)")
+	fcCmd.Flags().StringP("editor", "e", "", "Specify editor to use")
+	fcCmd.Flags().BoolP("quick-exec", "s", false, "Re-execute without editing")
 }
 
 // resetFcFlags resets all fc flags to their default values (for testing)
@@ -218,6 +232,8 @@ func resetFcFlags(cmd *cobra.Command) {
 	cmd.Flags().Set("match", "")
 	cmd.Flags().Set("internal", "false")
 	cmd.Flags().Set("local", "false")
+	cmd.Flags().Set("editor", "")
+	cmd.Flags().Set("quick-exec", "false")
 }
 
 // getSessionPid retrieves the current session PID from the SHY_SESSION_PID environment variable
@@ -314,16 +330,18 @@ func runFc(cmd *cobra.Command, args []string) error {
 	fcPattern, _ := cmd.Flags().GetString("match")
 	fcInternal, _ := cmd.Flags().GetBool("internal")
 	fcLocal, _ := cmd.Flags().GetBool("local")
+	fcEditor, _ := cmd.Flags().GetString("editor")
+	fcQuickExec, _ := cmd.Flags().GetBool("quick-exec")
 
 	// -L (local) flag is currently a no-op placeholder for future remote sync functionality
 	_ = fcLocal
 
-	// For now, only implement -l (list) mode
-	if !fcList {
-		return fmt.Errorf("fc: editing mode not yet implemented, use -l flag")
+	// Validate flag combinations
+	if fcQuickExec && fcEditor != "" {
+		return fmt.Errorf("cannot use -s and -e together")
 	}
 
-	// Open database
+	// Open database BEFORE branching to list/edit mode
 	database, err := db.New(dbPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -340,7 +358,8 @@ func runFc(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse range arguments (after extracting substitutions)
-	first, last, err := parseHistoryRange(remainingArgs, database, fcLast)
+	// Pass fcList to determine default behavior: edit mode defaults to last 1 command, list mode to last 16
+	first, last, err := parseHistoryRange(remainingArgs, database, fcLast, fcList)
 	if err != nil {
 		// Print error cleanly without usage
 		fmt.Fprintln(cmd.OutOrStderr(), "shy", err.Error())
@@ -349,6 +368,14 @@ func runFc(cmd *cobra.Command, args []string) error {
 		osExit(1)
 		return nil
 	}
+
+	// Branch based on mode
+	if !fcList {
+		// Edit-and-execute mode
+		return editAndExecuteMode(cmd, database, first, last, substitutions, fcPattern, fcInternal, fcEditor, fcQuickExec)
+	}
+
+	// List mode continues below
 
 	// Get commands in range, with optional pattern filtering and/or internal filtering
 	var commands []models.Command
@@ -517,7 +544,8 @@ func applySubstitutions(text string, subs []substitution) string {
 
 // parseHistoryRange parses the first and last arguments for history/fc commands
 // Returns (first_id, last_id, error)
-func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64, error) {
+// listMode: true for list mode (fc -l), false for edit mode (fc without -l)
+func parseHistoryRange(args []string, database *db.DB, lastN int, listMode bool) (int64, int64, error) {
 	// Get the most recent event ID
 	mostRecent, err := database.GetMostRecentEventID()
 	if err != nil {
@@ -543,10 +571,17 @@ func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64,
 
 	switch len(args) {
 	case 0:
-		// Default: last 16 events
-		first = mostRecent - 15
-		if first < 1 {
-			first = 1
+		// Default behavior depends on mode:
+		// - List mode (fc -l): last 16 events
+		// - Edit mode (fc): last 1 event
+		if listMode {
+			first = mostRecent - 15
+			if first < 1 {
+				first = 1
+			}
+		} else {
+			// Edit mode: just the last command
+			first = mostRecent
 		}
 		last = mostRecent
 
@@ -556,16 +591,31 @@ func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64,
 		if num, err := strconv.ParseInt(arg, 10, 64); err == nil {
 			// It's a number
 			if num < 0 {
-				// Negative: last N events
-				first = mostRecent + num + 1
-				if first < 1 {
-					first = 1
+				// Negative number: convert to event ID
+				eventID := mostRecent + num + 1
+				if eventID < 1 {
+					eventID = 1
 				}
-				last = mostRecent
+				first = eventID
+				// Behavior depends on mode
+				if listMode {
+					// List mode: from event to most recent
+					last = mostRecent
+				} else {
+					// Edit mode: just edit that event
+					last = eventID
+				}
 			} else {
-				// Positive: from N to most recent
-				first = num
-				last = mostRecent
+				// Positive number: behavior depends on mode
+				if listMode {
+					// List mode: from event num to most recent
+					first = num
+					last = mostRecent
+				} else {
+					// Edit mode: just edit event num
+					first = num
+					last = num
+				}
 			}
 		} else {
 			// It's a string: find most recent match
@@ -577,7 +627,13 @@ func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64,
 				return 0, 0, fmt.Errorf("fc: event not found: %s", arg)
 			}
 			first = matchID
-			last = mostRecent
+			if listMode {
+				// List mode: from matched event to most recent
+				last = mostRecent
+			} else {
+				// Edit mode: just edit the matched event
+				last = matchID
+			}
 		}
 
 	case 2:
