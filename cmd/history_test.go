@@ -629,6 +629,14 @@ func TestScenario14_StringNotFoundOutputsErrorMessage(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// Setup osExit override to capture exit code
+	exitCode := -1
+	oldOsExit := osExit
+	osExit = func(code int) {
+		exitCode = code
+	}
+	defer func() { osExit = oldOsExit }()
+
 	// When: I run "shy history nonexistent"
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
@@ -637,9 +645,11 @@ func TestScenario14_StringNotFoundOutputsErrorMessage(t *testing.T) {
 
 	err = rootCmd.Execute()
 
-	// Then: the output should show error message
-	assert.Error(t, err, "should return an error")
-	assert.Contains(t, err.Error(), "shy: event not found: nonexistent")
+	// Then: the command should exit with code 1
+	assert.Equal(t, 1, exitCode, "should exit with code 1")
+
+	// And: the output should show error message
+	assert.Contains(t, buf.String(), "shy fc: event not found: nonexistent")
 
 	rootCmd.SetArgs(nil)
 }

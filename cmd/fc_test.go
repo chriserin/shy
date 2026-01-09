@@ -1097,3 +1097,351 @@ func TestLocalScenario18_LocalFilterWithRangeProducesSameResults(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 }
+
+// Scenario: No substitution as part of range
+func TestSubstitutionNoSubstitutionAsPartOfRange(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "git status",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// Override osExit to capture the exit code instead of terminating the test
+	exitCode := -1
+	oldOsExit := osExit
+	osExit = func(code int) {
+		exitCode = code
+	}
+	defer func() { osExit = oldOsExit }()
+
+	// When: I run "shy fc -l 1 git=svn"
+	// git=svn appears as second range arg, should be treated as event ID
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "1", "git=svn", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	// Error may be nil because osExit is called instead of returning an error
+
+	// Then: should get exit code 1
+	assert.Equal(t, 1, exitCode, "Expected exit code 1 for event not found")
+
+	// And: should print error message
+	output := buf.String()
+	assert.Contains(t, output, "shy fc: event not found: git=svn")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario: No substitution after range
+func TestSubstitutionNoSubstitutionAfterRange(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "git status",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// Override osExit to capture the exit code instead of terminating the test
+	exitCode := -1
+	oldOsExit := osExit
+	osExit = func(code int) {
+		exitCode = code
+	}
+	defer func() { osExit = oldOsExit }()
+
+	// When: I run "shy fc -l 1 1 git=svn"
+	// git=svn appears after both range args
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "1", "1", "git=svn", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	// Error may be nil because osExit is called instead of returning an error
+
+	// Then: should get exit code 1
+	assert.Equal(t, 1, exitCode, "Expected exit code 1 for too many arguments")
+
+	// And: should print error message
+	output := buf.String()
+	assert.Contains(t, output, "shy fc: too many arguments")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 19: Simple string substitution in list output
+func TestSubstitutionScenario19_SimpleStringSubstitution(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	commands := []string{
+		"git status",
+		"git commit -m foo",
+		"git push origin",
+	}
+
+	for _, cmdText := range commands {
+		c := &models.Command{
+			CommandText: cmdText,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400),
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy fc -l git=svn 1 3"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "git=svn", "1", "3", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: output should have "git" replaced with "svn"
+	assert.Contains(t, output, "svn status")
+	assert.Contains(t, output, "svn commit -m foo")
+	assert.Contains(t, output, "svn push origin")
+	assert.NotContains(t, output, "git status")
+	assert.NotContains(t, output, "git commit")
+	assert.NotContains(t, output, "git push")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 20: Multiple substitutions applied to same command
+func TestSubstitutionScenario20_MultipleSubstitutions(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	commands := []string{
+		"echo hello world",
+		"test hello world",
+	}
+
+	for _, cmdText := range commands {
+		c := &models.Command{
+			CommandText: cmdText,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400),
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy fc -l hello=goodbye world=universe 1 2"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "hello=goodbye", "world=universe", "1", "2", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: both substitutions should be applied
+	assert.Contains(t, output, "echo goodbye universe")
+	assert.Contains(t, output, "test goodbye universe")
+	assert.NotContains(t, output, "hello")
+	assert.NotContains(t, output, "world")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 22: Substitution does not modify database
+func TestSubstitutionScenario22_DoesNotModifyDatabase(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "git status",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+	}
+	id, err := database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// When: I run "shy fc -l git=svn 1"
+	var buf1 bytes.Buffer
+	rootCmd.SetOut(&buf1)
+	rootCmd.SetArgs([]string{"fc", "-l", "git=svn", "1", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Then: output should show "svn status"
+	assert.Contains(t, buf1.String(), "svn status")
+
+	// When: I run "shy fc -l 1" without substitution
+	var buf2 bytes.Buffer
+	rootCmd.SetOut(&buf2)
+	rootCmd.SetArgs([]string{"fc", "-l", "1", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Then: output should show original "git status"
+	assert.Contains(t, buf2.String(), "git status")
+
+	// Verify database still has original command
+	cmd, err := database.GetCommand(id)
+	require.NoError(t, err)
+	assert.Equal(t, "git status", cmd.CommandText)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 25: Substitution order matters (all occurrences replaced)
+func TestSubstitutionScenario25_AllOccurrencesReplaced(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "test test test",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// When: I run "shy fc -l test=foo 1"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "test=foo", "1", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Then: all occurrences should be replaced
+	output := buf.String()
+	assert.Contains(t, output, "foo foo foo")
+	assert.NotContains(t, output, "test")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 26: Empty substitution removes text
+func TestSubstitutionScenario26_EmptySubstitutionRemovesText(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "git --verbose",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// When: I run "shy fc -l --verbose= 1" (empty replacement)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "--verbose=", "1", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Then: --verbose should be removed
+	output := buf.String()
+	assert.Contains(t, output, "git ")
+	assert.NotContains(t, output, "verbose")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Scenario 30: Multiple old=new pairs with overlapping patterns
+func TestSubstitutionScenario30_MultipleSubstitutionsWithOverlapping(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "git status",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1704470400),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// When: I run "shy fc -l git=svn status=stat 1"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-l", "git=svn", "status=stat", "1", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Then: both substitutions should be applied
+	output := buf.String()
+	assert.Contains(t, output, "svn stat")
+	assert.NotContains(t, output, "git")
+	assert.NotContains(t, output, "status")
+
+	rootCmd.SetArgs(nil)
+}

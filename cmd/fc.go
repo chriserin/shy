@@ -90,6 +90,27 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
+		// Check if it's a substitution pattern (contains '=' and not a flag value)
+		// This must be checked before flag parsing to handle cases like "--verbose="
+		if strings.Contains(arg, "=") && strings.HasPrefix(arg, "-") {
+			// This could be a substitution like "--verbose=" or a flag like "--flag=value"
+			// If there's no value after the flag name in a --flag=value pattern,
+			// treat it as a substitution
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts) == 2 {
+				// Check if this looks like a flag assignment (e.g., --db=path) vs substitution
+				// Substitutions will have the pattern on the left side
+				// Flags will have a flag name on the left side
+				// For now, we'll treat anything with = as a potential substitution
+				// and let the flag parser decide if it's a real flag
+
+				// Actually, for flags we handle explicitly (like --db), they're processed separately
+				// So we can treat things with = that start with - as substitutions
+				positional = append(positional, arg)
+				continue
+			}
+		}
+
 		// Check if it's a flag
 		if strings.HasPrefix(arg, "-") {
 			// Check if it's a negative number (starts with - and rest are digits)
@@ -312,10 +333,21 @@ func runFc(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
-	// Parse range arguments
-	first, last, err := parseHistoryRange(args, database, fcLast)
+	// Parse substitutions (old=new patterns)
+	substitutions, remainingArgs, err := parseSubstitutions(args)
 	if err != nil {
 		return err
+	}
+
+	// Parse range arguments (after extracting substitutions)
+	first, last, err := parseHistoryRange(remainingArgs, database, fcLast)
+	if err != nil {
+		// Print error cleanly without usage
+		fmt.Fprintln(cmd.OutOrStderr(), "shy", err.Error())
+		cmd.SilenceErrors = true
+		cmd.SilenceUsage = true
+		osExit(1)
+		return nil
 	}
 
 	// Get commands in range, with optional pattern filtering and/or internal filtering
@@ -383,6 +415,12 @@ func runFc(cmd *cobra.Command, args []string) error {
 
 	// Output commands
 	for _, c := range commands {
+		// Apply substitutions to command text
+		commandText := c.CommandText
+		if len(substitutions) > 0 {
+			commandText = applySubstitutions(commandText, substitutions)
+		}
+
 		// Build output line
 		var line string
 
@@ -409,16 +447,72 @@ func runFc(cmd *cobra.Command, args []string) error {
 			line += durationStr
 		}
 
-		// Add command text
+		// Add command text (with substitutions applied)
 		if line != "" {
 			line += "  "
 		}
-		line += c.CommandText
+		line += commandText
 
 		fmt.Fprintln(cmd.OutOrStdout(), line)
 	}
 
 	return nil
+}
+
+// substitution represents an old=new string substitution
+type substitution struct {
+	old string
+	new string
+}
+
+// parseSubstitutions extracts old=new substitution patterns from args
+// Substitutions MUST come before any range arguments
+// Returns the substitutions and the remaining args
+func parseSubstitutions(args []string) ([]substitution, []string, error) {
+	var substitutions []substitution
+	var remaining []string
+	foundNonSubstitution := false
+
+	for _, arg := range args {
+		// Check if this is a substitution (contains '=')
+		// Note: args starting with '-' that contain '=' were already filtered as substitutions
+		// by parseFcArgsAndFlags, so we don't need to exclude them here
+		isSubstitution := strings.Contains(arg, "=")
+
+		if isSubstitution {
+			// If we already found a non-substitution arg, substitutions are not allowed anymore
+			if foundNonSubstitution {
+				// This substitution came after range args, treat it as a regular arg
+				remaining = append(remaining, arg)
+			} else {
+				// Valid substitution before range args
+				parts := strings.SplitN(arg, "=", 2)
+				if len(parts) == 2 {
+					substitutions = append(substitutions, substitution{
+						old: parts[0],
+						new: parts[1],
+					})
+				} else {
+					return nil, nil, fmt.Errorf("invalid substitution format: %s", arg)
+				}
+			}
+		} else {
+			// Non-substitution argument (range arg)
+			foundNonSubstitution = true
+			remaining = append(remaining, arg)
+		}
+	}
+
+	return substitutions, remaining, nil
+}
+
+// applySubstitutions applies all substitutions to a command text
+func applySubstitutions(text string, subs []substitution) string {
+	result := text
+	for _, sub := range subs {
+		result = strings.ReplaceAll(result, sub.old, sub.new)
+	}
+	return result
 }
 
 // parseHistoryRange parses the first and last arguments for history/fc commands
@@ -480,7 +574,7 @@ func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64,
 				return 0, 0, err
 			}
 			if matchID == 0 {
-				return 0, 0, fmt.Errorf("shy: event not found: %s", arg)
+				return 0, 0, fmt.Errorf("fc: event not found: %s", arg)
 			}
 			first = matchID
 			last = mostRecent
@@ -509,7 +603,7 @@ func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64,
 				return 0, 0, err
 			}
 			if matchID == 0 {
-				return 0, 0, fmt.Errorf("shy: event not found: %s", arg1)
+				return 0, 0, fmt.Errorf("fc: event not found: %s", arg1)
 			}
 			first = matchID
 		}
@@ -532,7 +626,7 @@ func parseHistoryRange(args []string, database *db.DB, lastN int) (int64, int64,
 				return 0, 0, err
 			}
 			if matchID == 0 {
-				return 0, 0, fmt.Errorf("shy: event not found: %s", arg2)
+				return 0, 0, fmt.Errorf("fc: event not found: %s", arg2)
 			}
 			last = matchID
 		}
