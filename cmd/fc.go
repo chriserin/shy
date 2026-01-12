@@ -405,7 +405,7 @@ func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 		fileOpCount++
 	}
 	if fileOpCount > 1 {
-		return fmt.Errorf("cannot use -W, -A, and -R together")
+		return fmt.Errorf("cannot use -W, -A, or -R together")
 	}
 
 	// Handle -W without file path (no-op) - check if -W was in original args
