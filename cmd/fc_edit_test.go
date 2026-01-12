@@ -108,7 +108,7 @@ func TestScenario_EditAndExecuteSingleCommand(t *testing.T) {
 	// Verify command was added to history
 	commands, err := database.GetCommandsByRange(1, 100)
 	require.NoError(t, err)
-	assert.Equal(t, 2, len(commands))  // Original + executed
+	assert.Equal(t, 2, len(commands)) // Original + executed
 	assert.Equal(t, "git log", commands[1].CommandText)
 
 	rootCmd.SetArgs(nil)
@@ -534,7 +534,7 @@ func TestScenario_EditorExitsWithError(t *testing.T) {
 		// Simulate editor exiting with status 1 (e.g., vim :cq)
 		// Use a command that always exits with 1
 		cmd := exec.Command("false") // 'false' command always exits with 1
-		err := cmd.Run()              // This will be an *exec.ExitError
+		err := cmd.Run()             // This will be an *exec.ExitError
 		return err
 	}
 	defer func() {

@@ -18,6 +18,8 @@ var (
 	executeShellFunc = executeShellReal
 )
 
+var osExit = os.Exit
+
 // editAndExecuteMode orchestrates the edit-and-execute workflow
 func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 	substitutions []substitution, fcPattern string, fcInternal bool,
@@ -25,11 +27,7 @@ func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 
 	// 1. Validate range (backwards check)
 	if first > last {
-		fmt.Fprintf(os.Stderr, "Error: fc: history events can't be executed backwards, aborted\n")
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		osExit(1)
-		return nil
+		return fmt.Errorf("Error: fc: history events can't be executed backwards, aborted")
 	}
 
 	// 2. Get commands from database (respect pattern/internal filters)
@@ -60,11 +58,7 @@ func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 
 	// 3. Check if no commands found - use feat file error message
 	if len(commands) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: fc: current history line would recurse endlessly, aborted\n")
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		osExit(1)
-		return nil
+		return fmt.Errorf("Error: fc: current history line would recurse endlessly, aborted")
 	}
 
 	// 4. Check for recursive fc (trying to execute fc itself)
@@ -73,11 +67,7 @@ func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 		// Check for various invocations: "fc", "shy fc", "./shy fc", "/path/to/shy fc", etc.
 		if trimmed == "fc" || strings.HasPrefix(trimmed, "fc ") ||
 			strings.HasPrefix(trimmed, "shy fc") || strings.Contains(trimmed, "/shy fc") {
-			fmt.Fprintf(os.Stderr, "Error: fc: current history line would recurse endlessly, aborted\n")
-			cmd.SilenceErrors = true
-			cmd.SilenceUsage = true
-			osExit(1)
-			return nil
+			return fmt.Errorf("Error: fc: current history line would recurse endlessly, aborted")
 		}
 	}
 

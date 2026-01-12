@@ -1,22 +1,21 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ncruces/go-strftime"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/chris/shy/internal/db"
 	"github.com/chris/shy/pkg/models"
-)
-
-var (
-	// osExit is a variable that can be overridden in tests
-	osExit = os.Exit
 )
 
 var fcCmd = &cobra.Command{
@@ -25,11 +24,21 @@ var fcCmd = &cobra.Command{
 	Long:               "Process the command history list. With -l flag, lists commands. Without -l, edits and re-executes commands.",
 	DisableFlagParsing: true, // We'll parse flags manually to handle negative numbers
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Save original args for checking if -W was specified without file
+		originalArgs := args
 		// Manually parse flags to handle negative numbers correctly
 		parsedArgs, flags, parentFlags, err := parseFcArgsAndFlags(args)
 		if err != nil {
+			cmd.SilenceUsage = true
 			return err
 		}
+
+		if flags.help {
+			cmd.Help()
+			os.Exit(0)
+		}
+
+		cmd.SilenceUsage = true
 
 		// Process parent/root flags manually (like --db)
 		for i := 0; i < len(parentFlags); i += 2 {
@@ -54,9 +63,12 @@ var fcCmd = &cobra.Command{
 		cmd.Flags().Set("local", fmt.Sprintf("%t", flags.local))
 		cmd.Flags().Set("editor", flags.editor)
 		cmd.Flags().Set("quick-exec", fmt.Sprintf("%t", flags.quickExec))
+		cmd.Flags().Set("write", flags.writeFile)
+		cmd.Flags().Set("append", flags.appendFile)
+		cmd.Flags().Set("read", flags.readFile)
 
-		// Run fc with parsed arguments
-		err = runFc(cmd, parsedArgs)
+		// Run fc with parsed arguments and original args for checking
+		err = runFc(cmd, parsedArgs, originalArgs)
 
 		// Reset flags after use
 		resetFcFlags(cmd)
@@ -82,6 +94,10 @@ type fcFlags struct {
 	local      bool
 	editor     string // -e flag: specify editor to use
 	quickExec  bool   // -s flag: re-execute without editing
+	writeFile  string // -W flag: write history to file
+	appendFile string // -A flag: append history to file
+	readFile   string // -R flag: read history from file
+	help       bool
 }
 
 // parseFcArgsAndFlags manually parses arguments to handle negative numbers correctly
@@ -126,6 +142,8 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 
 			// It's a flag
 			switch arg {
+			case "-h", "--help":
+				flags.help = true
 			case "-l", "--list":
 				flags.list = true
 			case "-n", "--no-numbers":
@@ -176,6 +194,26 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				flags.editor = args[i]
 			case "-s", "--quick-exec":
 				flags.quickExec = true
+			case "-W", "--write":
+				// -W can be specified without an argument (no-op case)
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+					flags.writeFile = args[i]
+				} else {
+					flags.writeFile = "" // Empty string means -W without file
+				}
+			case "-A", "--append":
+				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+					return nil, flags, nil, fmt.Errorf("-A requires a file path")
+				}
+				i++
+				flags.appendFile = args[i]
+			case "-R", "--read":
+				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+					return nil, flags, nil, fmt.Errorf("-R requires a file path")
+				}
+				i++
+				flags.readFile = args[i]
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -187,7 +225,7 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				positional = append(positional, args[i+1:]...)
 				return positional, flags, parentFlags, nil
 			default:
-				return nil, flags, nil, fmt.Errorf("unknown flag: %s", arg)
+				return nil, flags, nil, fmt.Errorf("shy fc: bad option: %s", arg)
 			}
 		} else {
 			// Positional argument
@@ -215,6 +253,9 @@ func init() {
 	fcCmd.Flags().BoolP("local", "L", false, "Show only local commands (currently same as no filter)")
 	fcCmd.Flags().StringP("editor", "e", "", "Specify editor to use")
 	fcCmd.Flags().BoolP("quick-exec", "s", false, "Re-execute without editing")
+	fcCmd.Flags().StringP("write", "W", "", "Write history to file")
+	fcCmd.Flags().StringP("append", "A", "", "Append history to file")
+	fcCmd.Flags().StringP("read", "R", "", "Read history from file")
 }
 
 // resetFcFlags resets all fc flags to their default values (for testing)
@@ -234,6 +275,14 @@ func resetFcFlags(cmd *cobra.Command) {
 	cmd.Flags().Set("local", "false")
 	cmd.Flags().Set("editor", "")
 	cmd.Flags().Set("quick-exec", "false")
+	cmd.Flags().Set("write", "")
+	cmd.Flags().Set("append", "")
+	cmd.Flags().Set("read", "")
+
+	// Clear the "changed" status for all flags so they don't appear as modified
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		f.Changed = false
+	})
 }
 
 // getSessionPid retrieves the current session PID from the SHY_SESSION_PID environment variable
@@ -315,7 +364,7 @@ func globToLike(pattern string) string {
 	return escaped
 }
 
-func runFc(cmd *cobra.Command, args []string) error {
+func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 	// Get all flag values
 	fcList, _ := cmd.Flags().GetBool("list")
 	fcNoNum, _ := cmd.Flags().GetBool("no-numbers")
@@ -332,6 +381,9 @@ func runFc(cmd *cobra.Command, args []string) error {
 	fcLocal, _ := cmd.Flags().GetBool("local")
 	fcEditor, _ := cmd.Flags().GetString("editor")
 	fcQuickExec, _ := cmd.Flags().GetBool("quick-exec")
+	fcWriteFile, _ := cmd.Flags().GetString("write")
+	fcAppendFile, _ := cmd.Flags().GetString("append")
+	fcReadFile, _ := cmd.Flags().GetString("read")
 
 	// -L (local) flag is currently a no-op placeholder for future remote sync functionality
 	_ = fcLocal
@@ -339,6 +391,36 @@ func runFc(cmd *cobra.Command, args []string) error {
 	// Validate flag combinations
 	if fcQuickExec && fcEditor != "" {
 		return fmt.Errorf("cannot use -s and -e together")
+	}
+
+	// Check for mutually exclusive file operations
+	fileOpCount := 0
+	if fcWriteFile != "" {
+		fileOpCount++
+	}
+	if fcAppendFile != "" {
+		fileOpCount++
+	}
+	if fcReadFile != "" {
+		fileOpCount++
+	}
+	if fileOpCount > 1 {
+		return fmt.Errorf("cannot use -W, -A, and -R together")
+	}
+
+	// Handle -W without file path (no-op) - check if -W was in original args
+	// without being followed by a file path
+	if fcWriteFile == "" {
+		for i, arg := range originalArgs {
+			if arg == "-W" || arg == "--write" {
+				// -W was specified, check if it has a file path
+				hasFile := i+1 < len(originalArgs) && !strings.HasPrefix(originalArgs[i+1], "-")
+				if !hasFile {
+					// -W without file is a no-op
+					return nil
+				}
+			}
+		}
 	}
 
 	// Open database BEFORE branching to list/edit mode
@@ -351,6 +433,11 @@ func runFc(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
+	// Handle -R (read/import) mode
+	if fcReadFile != "" {
+		return readHistoryFromFile(fcReadFile, database)
+	}
+
 	// Parse substitutions (old=new patterns)
 	substitutions, remainingArgs, err := parseSubstitutions(args)
 	if err != nil {
@@ -359,23 +446,31 @@ func runFc(cmd *cobra.Command, args []string) error {
 
 	// Parse range arguments (after extracting substitutions)
 	// Pass fcList to determine default behavior: edit mode defaults to last 1 command, list mode to last 16
-	first, last, err := parseHistoryRange(remainingArgs, database, fcLast, fcList)
+	// File operations (-W, -A) should use list mode defaults
+	isFileOp := fcWriteFile != "" || fcAppendFile != ""
+	useListMode := fcList || isFileOp
+	first, last, err := parseHistoryRange(remainingArgs, database, fcLast, useListMode)
 	if err != nil {
-		// Print error cleanly without usage
-		fmt.Fprintln(cmd.OutOrStderr(), "shy", err.Error())
-		cmd.SilenceErrors = true
-		cmd.SilenceUsage = true
-		osExit(1)
-		return nil
+		return err
+	}
+
+	// For file operations with no explicit range, export ALL commands
+	if isFileOp && len(remainingArgs) == 0 && fcLast == 0 {
+		mostRecent, err := database.GetMostRecentEventID()
+		if err == nil && mostRecent > 0 {
+			first = 1
+			last = mostRecent
+		}
 	}
 
 	// Branch based on mode
-	if !fcList {
+	// File operations (-W, -A) act like list mode - they retrieve commands but don't edit or execute
+	if !fcList && !isFileOp {
 		// Edit-and-execute mode
 		return editAndExecuteMode(cmd, database, first, last, substitutions, fcPattern, fcInternal, fcEditor, fcQuickExec)
 	}
 
-	// List mode continues below
+	// List mode or file operation mode continues below
 
 	// Get commands in range, with optional pattern filtering and/or internal filtering
 	var commands []models.Command
@@ -401,13 +496,12 @@ func runFc(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		// Return exit code 1 if no matches found
+		// Return exit code 1 if no matches found (unless doing file operations)
 		if len(commands) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "shy fc: no matching events found")
-			cmd.SilenceErrors = true
-			cmd.SilenceUsage = true
-			osExit(1)
-			return nil
+			// For file operations, an empty result is okay - just write an empty file
+			if !isFileOp {
+				return fmt.Errorf("shy fc: no matching events found")
+			}
 		}
 	} else if fcPattern != "" {
 		// Pattern filtering only
@@ -416,13 +510,12 @@ func runFc(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get commands: %w", err)
 		}
-		// Return exit code 1 if pattern finds no matches
+		// Return exit code 1 if pattern finds no matches (unless doing file operations)
 		if len(commands) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "shy fc: no matching events found")
-			cmd.SilenceErrors = true
-			cmd.SilenceUsage = true
-			osExit(1)
-			return nil
+			// For file operations, an empty result is okay - just write an empty file
+			if !isFileOp {
+				return fmt.Errorf("shy fc: no matching events found")
+			}
 		}
 	} else {
 		// No filtering
@@ -438,6 +531,30 @@ func runFc(cmd *cobra.Command, args []string) error {
 		for i, j := 0, len(commands)-1; i < j; i, j = i+1, j-1 {
 			commands[i], commands[j] = commands[j], commands[i]
 		}
+	}
+
+	// Handle -W (write) or -A (append) mode
+	if fcWriteFile != "" || fcAppendFile != "" {
+		filePath := fcWriteFile
+		isAppend := false
+		if fcAppendFile != "" {
+			filePath = fcAppendFile
+			isAppend = true
+		}
+
+		var err error
+		if isAppend {
+			err = appendHistoryToFile(filePath, commands)
+		} else {
+			err = writeHistoryToFile(filePath, commands)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// File operations don't output commands to stdout
+		return nil
 	}
 
 	// Output commands
@@ -624,7 +741,7 @@ func parseHistoryRange(args []string, database *db.DB, lastN int, listMode bool)
 				return 0, 0, err
 			}
 			if matchID == 0 {
-				return 0, 0, fmt.Errorf("fc: event not found: %s", arg)
+				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg)
 			}
 			first = matchID
 			if listMode {
@@ -659,7 +776,7 @@ func parseHistoryRange(args []string, database *db.DB, lastN int, listMode bool)
 				return 0, 0, err
 			}
 			if matchID == 0 {
-				return 0, 0, fmt.Errorf("fc: event not found: %s", arg1)
+				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg1)
 			}
 			first = matchID
 		}
@@ -682,14 +799,216 @@ func parseHistoryRange(args []string, database *db.DB, lastN int, listMode bool)
 				return 0, 0, err
 			}
 			if matchID == 0 {
-				return 0, 0, fmt.Errorf("fc: event not found: %s", arg2)
+				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg2)
 			}
 			last = matchID
 		}
 
 	default:
-		return 0, 0, fmt.Errorf("fc: too many arguments")
+		return 0, 0, fmt.Errorf("shy fc: too many arguments")
 	}
 
 	return first, last, nil
+}
+
+// extendedHistoryRegex matches zsh extended history format: ": timestamp:duration;command"
+var extendedHistoryRegex = regexp.MustCompile(`^:\s*(\d+):(\d+);(.*)$`)
+
+// isExtendedFormat checks if a line is in zsh extended history format
+func isExtendedFormat(line string) bool {
+	return extendedHistoryRegex.MatchString(line)
+}
+
+// parseExtendedLine parses a line in zsh extended history format
+// Returns: timestamp, duration (in ms), command, error
+func parseExtendedLine(line string) (int64, int64, string, error) {
+	matches := extendedHistoryRegex.FindStringSubmatch(line)
+	if len(matches) != 4 {
+		return 0, 0, "", fmt.Errorf("invalid extended history format")
+	}
+
+	timestamp, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("invalid timestamp: %w", err)
+	}
+
+	// Duration in extended format is in seconds, but we store in milliseconds
+	durationSec, err := strconv.ParseInt(matches[2], 10, 64)
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("invalid duration: %w", err)
+	}
+	durationMs := durationSec * 1000
+
+	command := matches[3]
+	return timestamp, durationMs, command, nil
+}
+
+// formatExtendedLine formats a command in zsh extended history format
+// Duration should be in milliseconds, will be converted to seconds for output
+func formatExtendedLine(timestamp int64, durationMs int64, command string) string {
+	durationSec := durationMs / 1000
+	return fmt.Sprintf(": %d:%d;%s\n", timestamp, durationSec, command)
+}
+
+// writeHistoryToFile writes commands to a file in zsh extended history format
+func writeHistoryToFile(filePath string, commands []models.Command) error {
+	// Create parent directories if they don't exist
+	dir := filepath.Dir(filePath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
+	// Open file for writing (overwrites if exists)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("fc: cannot write %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	for _, cmd := range commands {
+		duration := int64(0)
+		if cmd.Duration != nil {
+			duration = *cmd.Duration
+		}
+		line := formatExtendedLine(cmd.Timestamp, duration, cmd.CommandText)
+
+		if _, err := writer.WriteString(line); err != nil {
+			return fmt.Errorf("failed to write to file: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// appendHistoryToFile appends commands to a file in zsh extended history format (creates if doesn't exist)
+func appendHistoryToFile(filePath string, commands []models.Command) error {
+	// Create parent directories if they don't exist
+	dir := filepath.Dir(filePath)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
+	// Open file for appending (creates if doesn't exist)
+	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open file for append: %w", err)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	defer writer.Flush()
+
+	for _, cmd := range commands {
+		duration := int64(0)
+		if cmd.Duration != nil {
+			duration = *cmd.Duration
+		}
+		line := formatExtendedLine(cmd.Timestamp, duration, cmd.CommandText)
+
+		if _, err := writer.WriteString(line); err != nil {
+			return fmt.Errorf("failed to write to file: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// readHistoryFromFile reads commands from a file and imports them into the database
+// Automatically detects simple vs extended format
+func readHistoryFromFile(filePath string, database *db.DB) error {
+	// Check if file exists and is readable
+	file, err := os.Open(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("fc: cannot read %s: no such file or directory", filePath)
+		}
+		if os.IsPermission(err) {
+			return fmt.Errorf("fc: cannot read %s: permission denied", filePath)
+		}
+		return fmt.Errorf("fc: cannot read %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	// Get current working directory for imported commands
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "" // Fall back to empty string if we can't get cwd
+	}
+
+	scanner := bufio.NewScanner(file)
+	currentTime := time.Now().Unix()
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip blank lines
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Skip comments (lines starting with #)
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+
+		// Try to parse as extended format first
+		if isExtendedFormat(line) {
+			timestamp, durationMs, command, err := parseExtendedLine(line)
+			if err != nil {
+				// If parsing fails, treat as simple format
+				cmd := &models.Command{
+					CommandText: line,
+					WorkingDir:  cwd,
+					ExitStatus:  0,
+					Timestamp:   currentTime,
+				}
+				_, err = database.InsertCommand(cmd)
+				if err != nil {
+					return fmt.Errorf("failed to insert command: %w", err)
+				}
+				continue
+			}
+
+			// Insert with parsed timestamp and duration
+			cmd := &models.Command{
+				CommandText: command,
+				WorkingDir:  cwd,
+				ExitStatus:  0,
+				Timestamp:   timestamp,
+				Duration:    &durationMs,
+			}
+			_, err = database.InsertCommand(cmd)
+			if err != nil {
+				return fmt.Errorf("failed to insert command: %w", err)
+			}
+		} else {
+			// Simple format: just the command
+			cmd := &models.Command{
+				CommandText: line,
+				WorkingDir:  cwd,
+				ExitStatus:  0,
+				Timestamp:   currentTime,
+			}
+			_, err = database.InsertCommand(cmd)
+			if err != nil {
+				return fmt.Errorf("failed to insert command: %w", err)
+			}
+		}
+
+		// Increment timestamp for next command to maintain order
+		currentTime++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading file: %w", err)
+	}
+
+	return nil
 }

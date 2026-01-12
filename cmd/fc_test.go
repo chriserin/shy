@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -311,26 +312,15 @@ func TestPatternScenario6_PatternFilterWithNoMatches(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Override osExit to capture the exit code instead of terminating the test
-	exitCode := -1
-	oldOsExit := osExit
-	osExit = func(code int) {
-		exitCode = code
-	}
-	defer func() { osExit = oldOsExit }()
-
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
 	rootCmd.SetArgs([]string{"fc", "-l", "-m", "git*", "--db", dbPath})
 
 	err = rootCmd.Execute()
-	// Error may be nil because osExit is called instead of returning an error
-
-	// Verify exit code 1 was called
-	assert.Equal(t, 1, exitCode, "Expected exit code 1 when pattern finds no matches")
+	if err != nil {
+		fmt.Println("Filter no matches Error:", err)
+	}
 
 	// Verify error message is printed
-	assert.Contains(t, buf.String(), "shy fc: no matching events found")
+	assert.Contains(t, err.Error(), "shy fc: no matching events found")
 
 	rootCmd.SetArgs(nil)
 }
@@ -1118,29 +1108,12 @@ func TestSubstitutionNoSubstitutionAsPartOfRange(t *testing.T) {
 	_, err = database.InsertCommand(c)
 	require.NoError(t, err)
 
-	// Override osExit to capture the exit code instead of terminating the test
-	exitCode := -1
-	oldOsExit := osExit
-	osExit = func(code int) {
-		exitCode = code
-	}
-	defer func() { osExit = oldOsExit }()
-
 	// When: I run "shy fc -l 1 git=svn"
 	// git=svn appears as second range arg, should be treated as event ID
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
 	rootCmd.SetArgs([]string{"fc", "-l", "1", "git=svn", "--db", dbPath})
 
 	err = rootCmd.Execute()
-	// Error may be nil because osExit is called instead of returning an error
-
-	// Then: should get exit code 1
-	assert.Equal(t, 1, exitCode, "Expected exit code 1 for event not found")
-
-	// And: should print error message
-	output := buf.String()
-	assert.Contains(t, output, "shy fc: event not found: git=svn")
+	assert.Contains(t, err.Error(), "shy fc: event not found: git=svn")
 
 	rootCmd.SetArgs(nil)
 }
@@ -1165,29 +1138,15 @@ func TestSubstitutionNoSubstitutionAfterRange(t *testing.T) {
 	_, err = database.InsertCommand(c)
 	require.NoError(t, err)
 
-	// Override osExit to capture the exit code instead of terminating the test
-	exitCode := -1
-	oldOsExit := osExit
-	osExit = func(code int) {
-		exitCode = code
-	}
-	defer func() { osExit = oldOsExit }()
-
 	// When: I run "shy fc -l 1 1 git=svn"
 	// git=svn appears after both range args
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
 	rootCmd.SetArgs([]string{"fc", "-l", "1", "1", "git=svn", "--db", dbPath})
 
 	err = rootCmd.Execute()
 	// Error may be nil because osExit is called instead of returning an error
 
-	// Then: should get exit code 1
-	assert.Equal(t, 1, exitCode, "Expected exit code 1 for too many arguments")
-
 	// And: should print error message
-	output := buf.String()
-	assert.Contains(t, output, "shy fc: too many arguments")
+	assert.Contains(t, err.Error(), "shy fc: too many arguments")
 
 	rootCmd.SetArgs(nil)
 }
@@ -1442,6 +1401,582 @@ func TestSubstitutionScenario30_MultipleSubstitutionsWithOverlapping(t *testing.
 	assert.Contains(t, output, "svn stat")
 	assert.NotContains(t, output, "git")
 	assert.NotContains(t, output, "status")
+
+	rootCmd.SetArgs(nil)
+}
+
+// ========== FILE OPERATIONS TESTS ==========
+
+// Test -W: Write history to file (always in extended format)
+func TestFileOp_WriteToFile(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "export.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert test commands
+	commands := []string{
+		"test 2",
+		"test 3",
+		"test 4",
+		"test 5",
+		"test 6",
+		"test 7",
+		"test 8",
+		"test 9",
+		"test 10",
+		"test 11",
+		"test 12",
+		"test 13",
+		"test 14",
+		"test 15",
+		"test 16",
+		"test 17",
+		"test 18",
+		"echo \"hello world\"",
+		"git status",
+		"npm install lodash",
+	}
+
+	timestamp := int64(1234567890)
+	for _, cmd := range commands {
+		c := &models.Command{
+			CommandText: cmd,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   timestamp,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+		timestamp++
+	}
+
+	// Run: shy fc -W /tmp/export.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-W", outputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify file was created
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+
+	// Check content (always extended format)
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	require.Len(t, lines, 20)
+
+	for i, command := range commands {
+		expectedLine := fmt.Sprintf(": %d:0;%s", 1234567890+int64(i), command)
+		assert.Equal(t, expectedLine, lines[i])
+	}
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -W: Write history in extended format
+func TestFileOp_WriteExtendedFormat(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "export.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert test commands with timestamps and durations
+	testData := []struct {
+		text      string
+		timestamp int64
+		duration  int64
+	}{
+		{"echo \"hello world\"", 1234567890, 500},
+		{"git status", 1234567891, 1200},
+		{"npm install lodash", 1234567892, 45000},
+	}
+
+	for _, td := range testData {
+		c := &models.Command{
+			CommandText: td.text,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   td.timestamp,
+			Duration:    &td.duration,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+	}
+
+	// Run: shy fc -W /tmp/export.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-W", outputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify file was created
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+
+	// Check extended format (always used now)
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	require.Len(t, lines, 3)
+	assert.Equal(t, ": 1234567890:0;echo \"hello world\"", lines[0])
+	assert.Equal(t, ": 1234567891:1;git status", lines[1])
+	assert.Equal(t, ": 1234567892:45;npm install lodash", lines[2])
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -W without arguments (no-op)
+func TestFileOp_WriteWithoutFile_NoOp(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Run: shy fc -W (no file argument)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-W", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Should succeed with no output
+	assert.Empty(t, buf.String())
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -W: Create parent directories
+func TestFileOp_WriteCreatesParentDirs(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "nested", "deep", "export.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "echo test",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1234567890),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// Run: shy fc -W /tmp/nested/deep/export.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-W", outputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify directories were created
+	_, err = os.Stat(filepath.Join(tempDir, "nested", "deep"))
+	require.NoError(t, err)
+
+	// Verify file was created
+	_, err = os.Stat(outputFile)
+	require.NoError(t, err)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -A: Append to existing file
+func TestFileOp_AppendToExistingFile(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "existing.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create existing file with content (in extended format)
+	existingContent := ": 1234567800:100;previous command 1\n: 1234567801:200;previous command 2\n"
+	err = os.WriteFile(outputFile, []byte(existingContent), 0600)
+	require.NoError(t, err)
+
+	// Insert test commands
+	timestamp := int64(1234567890)
+	commands := []string{"echo test", "git status"}
+	for _, cmd := range commands {
+		c := &models.Command{
+			CommandText: cmd,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   timestamp,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+		timestamp++
+	}
+
+	// Run: shy fc -A /tmp/existing.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-A", outputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify file content (all in extended format)
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	require.Len(t, lines, 4)
+	assert.Equal(t, ": 1234567800:100;previous command 1", lines[0])
+	assert.Equal(t, ": 1234567801:200;previous command 2", lines[1])
+	assert.Equal(t, ": 1234567890:0;echo test", lines[2])
+	assert.Equal(t, ": 1234567891:0;git status", lines[3])
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -A: Append to non-existent file (creates new)
+func TestFileOp_AppendToNewFile(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "new_append.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	c := &models.Command{
+		CommandText: "echo test",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   int64(1234567890),
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// Run: shy fc -A /tmp/new_append.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-A", outputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify file was created (in extended format)
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	assert.Equal(t, ": 1234567890:0;echo test\n", string(content))
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -R: Read simple format
+func TestFileOp_ReadSimpleFormat(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	inputFile := filepath.Join(tempDir, "import.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create import file
+	content := "echo \"imported 1\"\ngit clone repo\nmake build\n"
+	err = os.WriteFile(inputFile, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Run: shy fc -R /tmp/import.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-R", inputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify commands were imported
+	commands, err := database.GetCommandsByRange(1, 100)
+	require.NoError(t, err)
+	require.Len(t, commands, 3)
+	assert.Equal(t, "echo \"imported 1\"", commands[0].CommandText)
+	assert.Equal(t, "git clone repo", commands[1].CommandText)
+	assert.Equal(t, "make build", commands[2].CommandText)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -R: Read extended format
+func TestFileOp_ReadExtendedFormat(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	inputFile := filepath.Join(tempDir, "import.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create import file with extended format
+	content := ": 1600000000:1500;ls -la\n: 1600000001:2000;cd /tmp\n: 1600000002:500;pwd\n"
+	err = os.WriteFile(inputFile, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Run: shy fc -R /tmp/import.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-R", inputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify commands were imported with timestamps and durations
+	commands, err := database.GetCommandsByRange(1, 100)
+	require.NoError(t, err)
+	require.Len(t, commands, 3)
+
+	assert.Equal(t, "ls -la", commands[0].CommandText)
+	assert.Equal(t, int64(1600000000), commands[0].Timestamp)
+	assert.NotNil(t, commands[0].Duration)
+	assert.Equal(t, int64(1500000), *commands[0].Duration)
+
+	assert.Equal(t, "cd /tmp", commands[1].CommandText)
+	assert.Equal(t, int64(1600000001), commands[1].Timestamp)
+
+	assert.Equal(t, "pwd", commands[2].CommandText)
+	assert.Equal(t, int64(1600000002), commands[2].Timestamp)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -R: Read mixed format file
+func TestFileOp_ReadMixedFormat(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	inputFile := filepath.Join(tempDir, "mixed.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create import file with mixed formats
+	content := "echo \"simple format\"\n: 1600000000:1000;echo \"extended format\"\npwd\n"
+	err = os.WriteFile(inputFile, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Run: shy fc -R /tmp/mixed.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-R", inputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify all commands were imported
+	commands, err := database.GetCommandsByRange(1, 100)
+	require.NoError(t, err)
+	require.Len(t, commands, 3)
+
+	assert.Equal(t, "echo \"simple format\"", commands[0].CommandText)
+	assert.Equal(t, "echo \"extended format\"", commands[1].CommandText)
+	assert.Equal(t, int64(1600000000), commands[1].Timestamp)
+	assert.Equal(t, "pwd", commands[2].CommandText)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -R: Skip blank lines and comments
+func TestFileOp_ReadSkipsBlankLinesAndComments(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	inputFile := filepath.Join(tempDir, "with_blanks.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Create import file with blank lines and comments
+	content := "# This is a comment\necho \"line 1\"\n\n# Another comment\necho \"line 2\"\n\n\necho \"line 3\"\n"
+	err = os.WriteFile(inputFile, []byte(content), 0600)
+	require.NoError(t, err)
+
+	// Run: shy fc -R /tmp/with_blanks.txt
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-R", inputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify only commands were imported (no comments or blank lines)
+	commands, err := database.GetCommandsByRange(1, 100)
+	require.NoError(t, err)
+	require.Len(t, commands, 3)
+	assert.Equal(t, "echo \"line 1\"", commands[0].CommandText)
+	assert.Equal(t, "echo \"line 2\"", commands[1].CommandText)
+	assert.Equal(t, "echo \"line 3\"", commands[2].CommandText)
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -R: Non-existent file returns error
+func TestFileOp_ReadNonExistentFile_Error(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	inputFile := filepath.Join(tempDir, "does_not_exist.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Run: shy fc -R /tmp/does_not_exist.txt
+	rootCmd.SetArgs([]string{"fc", "-R", inputFile, "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no such file or directory")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -W with pattern filter
+func TestFileOp_WriteWithPatternFilter(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "filtered.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert test commands
+	timestamp := int64(1234567890)
+	commands := []string{"git status", "npm install", "git commit", "echo test"}
+	for _, cmd := range commands {
+		c := &models.Command{
+			CommandText: cmd,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   timestamp,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+		timestamp++
+	}
+
+	// Run: shy fc -W /tmp/filtered.txt -m 'git*'
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-W", outputFile, "-m", "git*", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify only git commands were written (in extended format)
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, ": 1234567890:0;git status", lines[0])
+	assert.Equal(t, ": 1234567892:0;git commit", lines[1])
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test -W with -I (internal/session filter)
+func TestFileOp_WriteWithInternalFilter(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	outputFile := filepath.Join(tempDir, "session.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands with different session PIDs
+	currentPID := int64(12345)
+	otherPID := int64(67890)
+
+	timestamp := int64(1234567890)
+	commands := []struct {
+		text string
+		pid  int64
+	}{
+		{"git status", currentPID},
+		{"npm install", otherPID},
+		{"git commit", currentPID},
+	}
+
+	sourceActive := true
+	for _, cmd := range commands {
+		c := &models.Command{
+			CommandText:  cmd.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    timestamp,
+			SourcePid:    &cmd.pid,
+			SourceActive: &sourceActive,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+		timestamp++
+	}
+
+	// Set SHY_SESSION_PID environment variable
+	os.Setenv("SHY_SESSION_PID", "12345")
+	defer os.Unsetenv("SHY_SESSION_PID")
+
+	// Run: shy fc -W /tmp/session.txt -I
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"fc", "-W", outputFile, "-I", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	// Verify only current session commands were written (in extended format)
+	content, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, ": 1234567890:0;git status", lines[0])
+	assert.Equal(t, ": 1234567892:0;git commit", lines[1])
 
 	rootCmd.SetArgs(nil)
 }

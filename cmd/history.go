@@ -137,7 +137,8 @@ var historyCmd = &cobra.Command{
 
 		// Run fc command with parsed arguments
 		// Pass fcCmd so it reads the flags we just set
-		err = runFc(fcCmd, parsedArgs)
+		// Pass args as originalArgs for checking -W flag
+		err = runFc(fcCmd, parsedArgs, args)
 
 		// Reset fcCmd flags after use to avoid test pollution
 		resetFcFlags(fcCmd)

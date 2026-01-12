@@ -1,0 +1,339 @@
+Feature: shy fc Mode 3 - History File Operations
+  As a user of shy
+  I want to import and export history from/to text files
+  So that I can share, backup, and migrate command history
+
+  Background:
+    Given a shy history database exists
+    And the database contains the following commands:
+      | id  | command                        | timestamp  | duration |
+      | 100 | echo "hello world"             | 1234567890 | 500      |
+      | 101 | git status                     | 1234567891 | 1200     |
+      | 102 | npm install lodash             | 1234567892 | 45000    |
+      | 103 | docker ps -a                   | 1234567893 | 800      |
+      | 104 | kubectl get pods               | 1234567894 | 2500     |
+
+  # -W: Write History to File
+
+  Scenario: Write history to file without arguments does nothing
+    When I run "shy fc -W"
+    Then the command should succeed
+    And no file should be created or modified
+    And the exit code should be 0
+
+  Scenario: Write all history to a text file in simple format
+    When I run "shy fc -W /tmp/history_export.txt"
+    Then a file should be created at "/tmp/history_export.txt"
+    And the file should contain:
+      """
+      echo "hello world"
+      git status
+      npm install lodash
+      docker ps -a
+      kubectl get pods
+      """
+    And each command should be on its own line
+    And the exit code should be 0
+
+  Scenario: Write history to file in zsh extended format
+    Given a zsh option of "EXTENDED_HISTORY" is enabled
+    When I run "shy fc -W /tmp/history_extended.zsh"
+    Then a file should be created at "/tmp/history_extended.zsh"
+    And the file should contain lines in format ": <timestamp>:<duration>;<command>"
+    And the file should contain:
+      """
+      : 1234567890:500;echo "hello world"
+      : 1234567891:1200;git status
+      : 1234567892:45000;npm install lodash
+      : 1234567893:800;docker ps -a
+      : 1234567894:2500;kubectl get pods
+      """
+    And the exit code should be 0
+
+  Scenario: Write history overwrites existing file
+    Given a file exists at "/tmp/existing.txt" with content "old content"
+    When I run "shy fc -W /tmp/existing.txt"
+    Then the file at "/tmp/existing.txt" should be overwritten
+    And the file should not contain "old content"
+    And the file should contain the current history
+
+  Scenario: Write creates parent directories if they don't exist
+    When I run "shy fc -W /tmp/nested/deep/history.txt"
+    Then the directory "/tmp/nested/deep" should be created
+    And a file should be created at "/tmp/nested/deep/history.txt"
+
+  # -A: Append History to File
+
+  Scenario: Append history to existing file
+    Given a file exists at "/tmp/existing.txt" with content:
+      """
+      previous command 1
+      previous command 2
+      """
+    When I run "shy fc -A /tmp/existing.txt"
+    Then the file at "/tmp/existing.txt" should contain:
+      """
+      previous command 1
+      previous command 2
+      echo "hello world"
+      git status
+      npm install lodash
+      docker ps -a
+      kubectl get pods
+      """
+    And the original content should be preserved at the beginning
+
+  Scenario: Append history to non-existent file creates new file
+    When I run "shy fc -A /tmp/new_append.txt"
+    Then a file should be created at "/tmp/new_append.txt"
+    And the file should contain all history commands
+
+  Scenario: Append with pattern filter
+    Given a file exists at "/tmp/filtered.txt" with content "# Git commands"
+    When I run "shy fc -A /tmp/filtered.txt -m 'git*'"
+    Then the file at "/tmp/filtered.txt" should contain:
+      """
+      # Git commands
+      git status
+      """
+    And the file should not contain "npm install"
+
+  Scenario: Append to file in zsh extended format
+    Given a file exists at "/tmp/extended" with content ": 1234567800:1000;previous command"
+    And a zsh option of "EXTENDED_HISTORY" is enabled
+    When I run "shy fc -A /tmp/extended"
+    Then the file should contain extended format entries
+    And new entries should be appended after existing content
+
+  # -R: Read History from File
+
+  Scenario: Read history from simple text file
+    Given a file exists at "/tmp/import.txt" with content:
+      """
+      echo "imported 1"
+      git clone repo
+      make build
+      """
+    When I run "shy fc -R /tmp/import.txt"
+    Then the database should contain "echo \"imported 1\""
+    And the database should contain "git clone repo"
+    And the database should contain "make build"
+    And new event IDs should be assigned (re-numbering)
+    And the exit code should be 0
+
+  Scenario: Read history from zsh extended format file
+    Given a file exists at "/tmp/zsh_import.txt" with content:
+      """
+      : 1600000000:1500;ls -la
+      : 1600000001:2000;cd /tmp
+      : 1600000002:500;pwd
+      """
+    When I run "shy fc -R /tmp/zsh_import.txt"
+    Then the database should contain "ls -la"
+    And the database should contain "cd /tmp"
+    And the database should contain "pwd"
+    And the timestamp for "ls -la" should be 1600000000
+    And the duration for "ls -la" should be 1500
+    And the timestamp for "cd /tmp" should be 1600000001
+    And the duration for "cd /tmp" should be 2000
+
+  Scenario: Read history from mixed format file
+    Given a file exists at "/tmp/mixed.txt" with content:
+      """
+      echo "simple format"
+      : 1600000000:1000;echo "extended format"
+      pwd
+      """
+    When I run "shy fc -R /tmp/mixed.txt"
+    Then the database should contain all 3 commands
+    And "echo \"simple format\"" should have a generated timestamp
+    And "echo \"extended format\"" should have timestamp 1600000000
+    And "pwd" should have a generated timestamp
+
+  Scenario: Read history preserves command order
+    Given a file exists at "/tmp/ordered.txt" with content:
+      """
+      first command
+      second command
+      third command
+      """
+    When I run "shy fc -R /tmp/ordered.txt"
+    Then commands should be inserted in order
+    And "first command" should have a lower ID than "second command"
+    And "second command" should have a lower ID than "third command"
+
+  Scenario: Read history from file with blank lines
+    Given a file exists at "/tmp/blanks.txt" with content:
+      """
+      echo "line 1"
+
+      echo "line 2"
+
+
+      echo "line 3"
+      """
+    When I run "shy fc -R /tmp/blanks.txt"
+    Then the database should contain exactly 3 commands
+    And blank lines should be ignored
+
+  Scenario: Read history from file with comments
+    Given a file exists at "/tmp/comments.txt" with content:
+      """
+      # This is a comment
+      echo "command 1"
+      # Another comment
+      echo "command 2"
+      """
+    When I run "shy fc -R /tmp/comments.txt"
+    Then the database should contain "echo \"command 1\""
+    And the database should contain "echo \"command 2\""
+    And the database should not contain "# This is a comment"
+    And comments should be ignored during import
+
+  Scenario: Read history from empty file
+    Given an empty file exists at "/tmp/empty.txt"
+    When I run "shy fc -R /tmp/empty.txt"
+    Then no commands should be imported
+    And the exit code should be 0
+
+  Scenario: Read history handles special characters
+    Given a file exists at "/tmp/special.txt" with content:
+      """
+      echo "hello $USER"
+      echo 'single quotes'
+      echo `command substitution`
+      echo $(modern substitution)
+      """
+    When I run "shy fc -R /tmp/special.txt"
+    Then all commands should be imported exactly as written
+    And special shell characters should be preserved
+
+  Scenario: Read history handles multiline commands in simple format
+    Given a file exists at "/tmp/multiline_simple.txt" with content:
+      """
+      echo "line 1"
+      echo "line 2"
+      """
+    When I run "shy fc -R /tmp/multiline_simple.txt"
+    Then each line should be imported as a separate command
+    And the database should contain 2 commands
+
+  Scenario: Read non-existent file returns error
+    When I run "shy fc -R /tmp/does_not_exist.txt"
+    Then an error should be displayed: "fc: cannot read /tmp/does_not_exist.txt: no such file or directory"
+    And the exit code should be 1
+
+  Scenario: Read from unreadable file returns error
+    Given a file exists at "/tmp/unreadable.txt" with permissions 000
+    When I run "shy fc -R /tmp/unreadable.txt"
+    Then an error should be displayed about permission denied
+    And the exit code should be 1
+
+  # Format Detection
+
+  Scenario: always write in extended format
+    When I run "shy fc -W /tmp/export.zsh"
+    Then the output file should use extended format ": <timestamp>:<duration>;<command>"
+
+  Scenario: Read automatically detects extended format
+    Given a file exists at "/tmp/auto.txt" with content:
+      """
+      : 1600000000:1000;echo "extended"
+      """
+    When I run "shy fc -R /tmp/auto.txt"
+    Then the format should be detected as extended
+    And the command should be imported with timestamp and duration
+
+  Scenario: Read automatically detects simple format
+    Given a file exists at "/tmp/auto.txt" with content:
+      """
+      echo "simple"
+      """
+    When I run "shy fc -R /tmp/auto.txt"
+    Then the format should be detected as simple
+    And the command should be imported with generated timestamp
+    And the command should have a duration of 0
+
+  # Integration with Other Flags
+
+  Scenario: Write with any flag used by fc valid but ignored
+    When I run "shy fc -l -d -n -W /tmp/output.txt"
+    Then the file should contain commands without line numbers
+    And the extra flags should have no effect on file output
+
+  Scenario: Write with any flag not used by fc is invalid and errors
+    When I run "shy fc -z -W /tmp/output.txt"
+    Then the file should not be created
+    And an error should be displayed: "shy fc: bad option: -z"
+
+  Scenario: Write with -I flag (internal only)
+    Given only events 101 and 103 are from the current session
+    When I run "shy fc -I -W /tmp/internal.txt"
+    Then the file should only contain commands from current session
+    And the file should contain "git status" and "docker ps -a"
+    And the file should contain the write command "shy fc -I -W /tmp/internal.txt"
+    And the file should not contain other commands
+
+  Scenario: Read does duplicate existing commands into the database
+    Given the database contains "git status"
+    And a file exists at "/tmp/import.txt" with content "git status"
+    When I run "shy fc -R /tmp/import.txt"
+    Then "git status" should be imported as a new entry
+    And the database should contain 2 instances of "git status"
+
+  # Edge Cases
+
+  Scenario: Write to file in use by another process
+    Given "/tmp/locked.txt" is opened for writing by another process
+    When I run "shy fc -W /tmp/locked.txt"
+    Then an error should be displayed about the file being in use
+    And the exit code should be 1
+
+  Scenario: Write very large history
+    Given the database contains 100000 commands
+    When I run "shy fc -W /tmp/large.txt"
+    Then all 100000 commands should be written to the database
+    And the operation should complete without errors
+
+  Scenario: Read very large file
+    Given a file exists at "/tmp/large.txt" with 100000 commands
+    When I run "shy fc -R /tmp/large.txt"
+    Then all 100000 commands should be imported
+    And memory usage should remain reasonable
+
+  Scenario: Write to file with space in path
+    When I run "shy fc -W '/tmp/my history.txt'"
+    Then a file should be created at "/tmp/my history.txt"
+    And the file should contain the history
+
+  Scenario: Read from file with space in path
+    Given a file exists at "/tmp/my history.txt" with content "echo test"
+    When I run "shy fc -R '/tmp/my history.txt'"
+    Then "echo test" should be imported into the database
+
+  # Working Directory Preservation
+
+  Scenario: Import working directory as current working directory
+    Given a file exists at "/tmp/with_pwd.zsh" with content:
+      """
+      : 1600000000:1000;cd /home/user
+      """
+    And the current working directory is ~/projects/shy
+    When I run "shy fc -R /tmp/with_pwd.zsh"
+    Then "cd /home/user" should be imported
+    And the working directory of the imported commands should be ~/projects/shy
+
+  # Session Source Filtering
+
+  Scenario: Write only commands from current session source
+    Given commands 100-102 are from the current zsh session
+    And commands 103-104 are from a different session
+    When I run "shy fc -W /tmp/current_session.txt -I"
+    Then the file should only contain commands from current session
+    And the file should contain exactly 3 commands
+
+  Scenario: Write respects session source when using range
+    Given the current session started at event 101
+    When I run "shy fc -W /tmp/session_range.txt -I 100 104"
+    Then only commands from the current session within the range should be written
+    And commands outside the session should be excluded
