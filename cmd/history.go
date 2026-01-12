@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,7 +11,6 @@ import (
 type historyFlags struct {
 	noNum      bool
 	reverse    bool
-	last       int
 	showTime   bool
 	timeISO    bool
 	timeUS     bool
@@ -46,16 +44,6 @@ func parseHistoryArgsAndFlags(args []string) ([]string, historyFlags, []string, 
 				flags.noNum = true
 			case "-r", "--reverse":
 				flags.reverse = true
-			case "--last":
-				if i+1 >= len(args) {
-					return nil, flags, nil, fmt.Errorf("--last requires a value")
-				}
-				i++
-				val, err := strconv.Atoi(args[i])
-				if err != nil {
-					return nil, flags, nil, fmt.Errorf("--last value must be a number: %w", err)
-				}
-				flags.last = val
 			case "-d", "--time":
 				flags.showTime = true
 			case "-i", "--iso":
@@ -127,7 +115,6 @@ var historyCmd = &cobra.Command{
 		fcCmd.Flags().Set("list", "true") // history is equivalent to fc -l
 		fcCmd.Flags().Set("no-numbers", fmt.Sprintf("%t", flags.noNum))
 		fcCmd.Flags().Set("reverse", fmt.Sprintf("%t", flags.reverse))
-		fcCmd.Flags().Set("last", fmt.Sprintf("%d", flags.last))
 		fcCmd.Flags().Set("time", fmt.Sprintf("%t", flags.showTime))
 		fcCmd.Flags().Set("iso", fmt.Sprintf("%t", flags.timeISO))
 		fcCmd.Flags().Set("american", fmt.Sprintf("%t", flags.timeUS))
@@ -149,5 +136,5 @@ var historyCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(historyCmd)
 	// Note: We use DisableFlagParsing and parse flags manually to support negative numbers like -10
-	// Supported flags: -n/--no-numbers, -r/--reverse, --last N, -d, -i, -f, -E, -t, -D
+	// Supported flags: -n/--no-numbers, -r/--reverse, -d, -i, -f, -E, -t, -D
 }

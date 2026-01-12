@@ -49,7 +49,6 @@ var fcCmd = &cobra.Command{
 		cmd.Flags().Set("list", fmt.Sprintf("%t", flags.list))
 		cmd.Flags().Set("no-numbers", fmt.Sprintf("%t", flags.noNum))
 		cmd.Flags().Set("reverse", fmt.Sprintf("%t", flags.reverse))
-		cmd.Flags().Set("last", fmt.Sprintf("%d", flags.last))
 		cmd.Flags().Set("time", fmt.Sprintf("%t", flags.showTime))
 		cmd.Flags().Set("iso", fmt.Sprintf("%t", flags.timeISO))
 		cmd.Flags().Set("american", fmt.Sprintf("%t", flags.timeUS))
@@ -81,7 +80,6 @@ type fcFlags struct {
 	list            bool
 	noNum           bool
 	reverse         bool
-	last            int
 	showTime        bool
 	timeISO         bool
 	timeUS          bool
@@ -150,16 +148,6 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				flags.noNum = true
 			case "-r", "--reverse":
 				flags.reverse = true
-			case "--last":
-				if i+1 >= len(args) {
-					return nil, flags, nil, fmt.Errorf("--last requires a value")
-				}
-				i++
-				val, err := strconv.Atoi(args[i])
-				if err != nil {
-					return nil, flags, nil, fmt.Errorf("--last value must be a number: %w", err)
-				}
-				flags.last = val
 			case "-d", "--time":
 				flags.showTime = true
 			case "-i", "--iso":
@@ -262,7 +250,6 @@ func init() {
 	fcCmd.Flags().BoolP("list", "l", false, "List commands instead of editing")
 	fcCmd.Flags().BoolP("no-numbers", "n", false, "Suppress event numbers when listing")
 	fcCmd.Flags().BoolP("reverse", "r", false, "Reverse order (oldest first)")
-	fcCmd.Flags().Int("last", 0, "Show last N commands (e.g., --last 10 instead of -- -10)")
 	fcCmd.Flags().BoolP("time", "d", false, "Display timestamps")
 	fcCmd.Flags().BoolP("iso", "i", false, "Display timestamps in ISO8601 format (yyyy-mm-dd hh:mm)")
 	fcCmd.Flags().BoolP("american", "f", false, "Display timestamps in US format (mm/dd/yy hh:mm)")
@@ -287,7 +274,6 @@ func resetFcFlags(cmd *cobra.Command) {
 	cmd.Flags().Set("list", "false")
 	cmd.Flags().Set("no-numbers", "false")
 	cmd.Flags().Set("reverse", "false")
-	cmd.Flags().Set("last", "0")
 	cmd.Flags().Set("time", "false")
 	cmd.Flags().Set("iso", "false")
 	cmd.Flags().Set("american", "false")
@@ -443,7 +429,6 @@ func runWriteMode(cmd *cobra.Command, args []string, database *db.DB, writeFile,
 	fcPattern, _ := cmd.Flags().GetString("match")
 	fcInternal, _ := cmd.Flags().GetBool("internal")
 	fcReverse, _ := cmd.Flags().GetBool("reverse")
-	fcLast, _ := cmd.Flags().GetInt("last")
 
 	// Parse substitutions
 	substitutions, remainingArgs, err := parseSubstitutions(args)
@@ -453,7 +438,7 @@ func runWriteMode(cmd *cobra.Command, args []string, database *db.DB, writeFile,
 	_ = substitutions // Not used in file operations
 
 	// Parse range - file operations default to ALL commands if no range specified
-	first, last, err := parseHistoryRangeForFileOp(remainingArgs, database, fcLast)
+	first, last, err := parseHistoryRangeForFileOp(remainingArgs, database)
 	if err != nil {
 		return err
 	}
@@ -488,7 +473,6 @@ func runListMode(cmd *cobra.Command, args []string, database *db.DB) error {
 	// Get flags needed for list mode
 	fcNoNum, _ := cmd.Flags().GetBool("no-numbers")
 	fcReverse, _ := cmd.Flags().GetBool("reverse")
-	fcLast, _ := cmd.Flags().GetInt("last")
 	fcShowTime, _ := cmd.Flags().GetBool("time")
 	fcTimeISO, _ := cmd.Flags().GetBool("iso")
 	fcTimeUS, _ := cmd.Flags().GetBool("american")
@@ -505,7 +489,7 @@ func runListMode(cmd *cobra.Command, args []string, database *db.DB) error {
 	}
 
 	// Parse range - list mode defaults to last 16 commands
-	first, last, err := parseHistoryRangeForList(remainingArgs, database, fcLast)
+	first, last, err := parseHistoryRangeForList(remainingArgs, database)
 	if err != nil {
 		return err
 	}
@@ -574,7 +558,6 @@ func runEditMode(cmd *cobra.Command, args []string, database *db.DB) error {
 	fcInternal, _ := cmd.Flags().GetBool("internal")
 	fcEditor, _ := cmd.Flags().GetString("editor")
 	fcQuickExec, _ := cmd.Flags().GetBool("quick-exec")
-	fcLast, _ := cmd.Flags().GetInt("last")
 
 	// Parse substitutions
 	substitutions, remainingArgs, err := parseSubstitutions(args)
@@ -583,7 +566,7 @@ func runEditMode(cmd *cobra.Command, args []string, database *db.DB) error {
 	}
 
 	// Parse range - edit mode defaults to last 1 command
-	first, last, err := parseHistoryRangeForEdit(remainingArgs, database, fcLast)
+	first, last, err := parseHistoryRangeForEdit(remainingArgs, database)
 	if err != nil {
 		return err
 	}
@@ -593,9 +576,9 @@ func runEditMode(cmd *cobra.Command, args []string, database *db.DB) error {
 }
 
 // parseHistoryRangeForFileOp parses range for file operations (defaults to ALL commands)
-func parseHistoryRangeForFileOp(args []string, database *db.DB, lastN int) (int64, int64, error) {
-	// If no range specified and no --last flag, export ALL commands
-	if len(args) == 0 && lastN == 0 {
+func parseHistoryRangeForFileOp(args []string, database *db.DB) (int64, int64, error) {
+	// If no range specified, export ALL commands
+	if len(args) == 0 {
 		mostRecent, err := database.GetMostRecentEventID()
 		if err != nil {
 			return 0, 0, fmt.Errorf("failed to get most recent event: %w", err)
@@ -607,17 +590,17 @@ func parseHistoryRangeForFileOp(args []string, database *db.DB, lastN int) (int6
 	}
 
 	// Otherwise use normal list mode parsing
-	return parseHistoryRange(args, database, lastN, true)
+	return parseHistoryRange(args, database, true)
 }
 
 // parseHistoryRangeForList parses range for list mode (defaults to last 16)
-func parseHistoryRangeForList(args []string, database *db.DB, lastN int) (int64, int64, error) {
-	return parseHistoryRange(args, database, lastN, true)
+func parseHistoryRangeForList(args []string, database *db.DB) (int64, int64, error) {
+	return parseHistoryRange(args, database, true)
 }
 
 // parseHistoryRangeForEdit parses range for edit mode (defaults to last 1)
-func parseHistoryRangeForEdit(args []string, database *db.DB, lastN int) (int64, int64, error) {
-	return parseHistoryRange(args, database, lastN, false)
+func parseHistoryRangeForEdit(args []string, database *db.DB) (int64, int64, error) {
+	return parseHistoryRange(args, database, false)
 }
 
 // getCommandsWithFilters retrieves commands with optional pattern and session filtering
@@ -729,7 +712,7 @@ func applySubstitutions(text string, subs []substitution) string {
 // parseHistoryRange parses the first and last arguments for history/fc commands
 // Returns (first_id, last_id, error)
 // listMode: true for list mode (fc -l), false for edit mode (fc without -l)
-func parseHistoryRange(args []string, database *db.DB, lastN int, listMode bool) (int64, int64, error) {
+func parseHistoryRange(args []string, database *db.DB, listMode bool) (int64, int64, error) {
 	// Get the most recent event ID
 	mostRecent, err := database.GetMostRecentEventID()
 	if err != nil {
@@ -742,16 +725,6 @@ func parseHistoryRange(args []string, database *db.DB, lastN int, listMode bool)
 	}
 
 	var first, last int64
-
-	// Handle --last flag (convenience for negative offset)
-	if lastN > 0 && len(args) == 0 {
-		first = mostRecent - int64(lastN) + 1
-		if first < 1 {
-			first = 1
-		}
-		last = mostRecent
-		return first, last, nil
-	}
 
 	switch len(args) {
 	case 0:
