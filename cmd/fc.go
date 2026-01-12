@@ -233,6 +233,26 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 		}
 	}
 
+	// Validate mutually exclusive file operations
+	fileOpCount := 0
+	if flags.writeFile != "" {
+		fileOpCount++
+	}
+	if flags.appendFile != "" {
+		fileOpCount++
+	}
+	if flags.readFile != "" {
+		fileOpCount++
+	}
+	if fileOpCount > 1 {
+		return nil, flags, nil, fmt.Errorf("cannot use -W, -A, or -R together")
+	}
+
+	// Validate -s and -e are not used together
+	if flags.quickExec && flags.editor != "" {
+		return nil, flags, nil, fmt.Errorf("cannot use -s and -e together")
+	}
+
 	return positional, flags, parentFlags, nil
 }
 
@@ -364,49 +384,22 @@ func globToLike(pattern string) string {
 	return escaped
 }
 
+// fcMode represents the operating mode of the fc command
+type fcMode int
+
+const (
+	modeRead  fcMode = iota // -R: Import history from file
+	modeWrite               // -W/-A: Export history to file
+	modeList                // -l: List history
+	modeEdit                // Default: Edit and execute
+)
+
 func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 	// Get all flag values
 	fcList, _ := cmd.Flags().GetBool("list")
-	fcNoNum, _ := cmd.Flags().GetBool("no-numbers")
-	fcReverse, _ := cmd.Flags().GetBool("reverse")
-	fcLast, _ := cmd.Flags().GetInt("last")
-	fcShowTime, _ := cmd.Flags().GetBool("time")
-	fcTimeISO, _ := cmd.Flags().GetBool("iso")
-	fcTimeUS, _ := cmd.Flags().GetBool("american")
-	fcTimeEU, _ := cmd.Flags().GetBool("european")
-	fcTimeCustom, _ := cmd.Flags().GetString("time-format")
-	fcElapsedTime, _ := cmd.Flags().GetBool("elapsed")
-	fcPattern, _ := cmd.Flags().GetString("match")
-	fcInternal, _ := cmd.Flags().GetBool("internal")
-	fcLocal, _ := cmd.Flags().GetBool("local")
-	fcEditor, _ := cmd.Flags().GetString("editor")
-	fcQuickExec, _ := cmd.Flags().GetBool("quick-exec")
 	fcWriteFile, _ := cmd.Flags().GetString("write")
 	fcAppendFile, _ := cmd.Flags().GetString("append")
 	fcReadFile, _ := cmd.Flags().GetString("read")
-
-	// -L (local) flag is currently a no-op placeholder for future remote sync functionality
-	_ = fcLocal
-
-	// Validate flag combinations
-	if fcQuickExec && fcEditor != "" {
-		return fmt.Errorf("cannot use -s and -e together")
-	}
-
-	// Check for mutually exclusive file operations
-	fileOpCount := 0
-	if fcWriteFile != "" {
-		fileOpCount++
-	}
-	if fcAppendFile != "" {
-		fileOpCount++
-	}
-	if fcReadFile != "" {
-		fileOpCount++
-	}
-	if fileOpCount > 1 {
-		return fmt.Errorf("cannot use -W, -A, or -R together")
-	}
 
 	// Handle -W without file path (no-op) - check if -W was in original args
 	// without being followed by a file path
@@ -423,7 +416,7 @@ func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 		}
 	}
 
-	// Open database BEFORE branching to list/edit mode
+	// Open database
 	database, err := db.New(dbPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -433,128 +426,123 @@ func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 	}
 	defer database.Close()
 
-	// Handle -R (read/import) mode
+	// Determine mode and dispatch to appropriate handler
+	var mode fcMode
 	if fcReadFile != "" {
-		return readHistoryFromFile(fcReadFile, database)
+		mode = modeRead
+	} else if fcWriteFile != "" || fcAppendFile != "" {
+		mode = modeWrite
+	} else if fcList {
+		mode = modeList
+	} else {
+		mode = modeEdit
 	}
 
-	// Parse substitutions (old=new patterns)
+	switch mode {
+	case modeRead:
+		return runReadMode(fcReadFile, database)
+
+	case modeWrite:
+		return runWriteMode(cmd, args, database, fcWriteFile, fcAppendFile)
+
+	case modeList:
+		return runListMode(cmd, args, database)
+
+	case modeEdit:
+		return runEditMode(cmd, args, database)
+
+	default:
+		return fmt.Errorf("unknown fc mode")
+	}
+}
+
+// runReadMode handles -R flag: import history from a file
+func runReadMode(filePath string, database *db.DB) error {
+	return readHistoryFromFile(filePath, database)
+}
+
+// runWriteMode handles -W/-A flags: export history to a file
+func runWriteMode(cmd *cobra.Command, args []string, database *db.DB, writeFile, appendFile string) error {
+	// Get flags needed for write mode
+	fcPattern, _ := cmd.Flags().GetString("match")
+	fcInternal, _ := cmd.Flags().GetBool("internal")
+	fcReverse, _ := cmd.Flags().GetBool("reverse")
+	fcLast, _ := cmd.Flags().GetInt("last")
+
+	// Parse substitutions
+	substitutions, remainingArgs, err := parseSubstitutions(args)
+	if err != nil {
+		return err
+	}
+	_ = substitutions // Not used in file operations
+
+	// Parse range - file operations default to ALL commands if no range specified
+	first, last, err := parseHistoryRangeForFileOp(remainingArgs, database, fcLast)
+	if err != nil {
+		return err
+	}
+
+	// Get commands from database with filters
+	commands, err := getCommandsWithFilters(database, first, last, fcPattern, fcInternal, true)
+	if err != nil {
+		return err
+	}
+
+	// Apply reverse if requested
+	if fcReverse {
+		reverseCommands(commands)
+	}
+
+	// Write or append to file
+	filePath := writeFile
+	isAppend := false
+	if appendFile != "" {
+		filePath = appendFile
+		isAppend = true
+	}
+
+	if isAppend {
+		return appendHistoryToFile(filePath, commands)
+	}
+	return writeHistoryToFile(filePath, commands)
+}
+
+// runListMode handles -l flag: list history commands
+func runListMode(cmd *cobra.Command, args []string, database *db.DB) error {
+	// Get flags needed for list mode
+	fcNoNum, _ := cmd.Flags().GetBool("no-numbers")
+	fcReverse, _ := cmd.Flags().GetBool("reverse")
+	fcLast, _ := cmd.Flags().GetInt("last")
+	fcShowTime, _ := cmd.Flags().GetBool("time")
+	fcTimeISO, _ := cmd.Flags().GetBool("iso")
+	fcTimeUS, _ := cmd.Flags().GetBool("american")
+	fcTimeEU, _ := cmd.Flags().GetBool("european")
+	fcTimeCustom, _ := cmd.Flags().GetString("time-format")
+	fcElapsedTime, _ := cmd.Flags().GetBool("elapsed")
+	fcPattern, _ := cmd.Flags().GetString("match")
+	fcInternal, _ := cmd.Flags().GetBool("internal")
+
+	// Parse substitutions
 	substitutions, remainingArgs, err := parseSubstitutions(args)
 	if err != nil {
 		return err
 	}
 
-	// Parse range arguments (after extracting substitutions)
-	// Pass fcList to determine default behavior: edit mode defaults to last 1 command, list mode to last 16
-	// File operations (-W, -A) should use list mode defaults
-	isFileOp := fcWriteFile != "" || fcAppendFile != ""
-	useListMode := fcList || isFileOp
-	first, last, err := parseHistoryRange(remainingArgs, database, fcLast, useListMode)
+	// Parse range - list mode defaults to last 16 commands
+	first, last, err := parseHistoryRangeForList(remainingArgs, database, fcLast)
 	if err != nil {
 		return err
 	}
 
-	// For file operations with no explicit range, export ALL commands
-	if isFileOp && len(remainingArgs) == 0 && fcLast == 0 {
-		mostRecent, err := database.GetMostRecentEventID()
-		if err == nil && mostRecent > 0 {
-			first = 1
-			last = mostRecent
-		}
+	// Get commands from database with filters
+	commands, err := getCommandsWithFilters(database, first, last, fcPattern, fcInternal, false)
+	if err != nil {
+		return err
 	}
 
-	// Branch based on mode
-	// File operations (-W, -A) act like list mode - they retrieve commands but don't edit or execute
-	if !fcList && !isFileOp {
-		// Edit-and-execute mode
-		return editAndExecuteMode(cmd, database, first, last, substitutions, fcPattern, fcInternal, fcEditor, fcQuickExec)
-	}
-
-	// List mode or file operation mode continues below
-
-	// Get commands in range, with optional pattern filtering and/or internal filtering
-	var commands []models.Command
-	if fcInternal {
-		// Get current session PID from environment variable
-		sessionPid, err := getSessionPid()
-		if err != nil {
-			return err
-		}
-
-		if fcPattern != "" {
-			// Both internal and pattern filtering
-			likePattern := globToLike(fcPattern)
-			commands, err = database.GetCommandsByRangeWithPatternInternal(first, last, sessionPid, likePattern)
-			if err != nil {
-				return fmt.Errorf("failed to get commands: %w", err)
-			}
-		} else {
-			// Internal filtering only
-			commands, err = database.GetCommandsByRangeInternal(first, last, sessionPid)
-			if err != nil {
-				return fmt.Errorf("failed to get commands: %w", err)
-			}
-		}
-
-		// Return exit code 1 if no matches found (unless doing file operations)
-		if len(commands) == 0 {
-			// For file operations, an empty result is okay - just write an empty file
-			if !isFileOp {
-				return fmt.Errorf("shy fc: no matching events found")
-			}
-		}
-	} else if fcPattern != "" {
-		// Pattern filtering only
-		likePattern := globToLike(fcPattern)
-		commands, err = database.GetCommandsByRangeWithPattern(first, last, likePattern)
-		if err != nil {
-			return fmt.Errorf("failed to get commands: %w", err)
-		}
-		// Return exit code 1 if pattern finds no matches (unless doing file operations)
-		if len(commands) == 0 {
-			// For file operations, an empty result is okay - just write an empty file
-			if !isFileOp {
-				return fmt.Errorf("shy fc: no matching events found")
-			}
-		}
-	} else {
-		// No filtering
-		commands, err = database.GetCommandsByRange(first, last)
-		if err != nil {
-			return fmt.Errorf("failed to get commands: %w", err)
-		}
-	}
-
-	// Apply reverse flag
+	// Apply reverse if requested
 	if fcReverse {
-		// Reverse the slice
-		for i, j := 0, len(commands)-1; i < j; i, j = i+1, j-1 {
-			commands[i], commands[j] = commands[j], commands[i]
-		}
-	}
-
-	// Handle -W (write) or -A (append) mode
-	if fcWriteFile != "" || fcAppendFile != "" {
-		filePath := fcWriteFile
-		isAppend := false
-		if fcAppendFile != "" {
-			filePath = fcAppendFile
-			isAppend = true
-		}
-
-		var err error
-		if isAppend {
-			err = appendHistoryToFile(filePath, commands)
-		} else {
-			err = writeHistoryToFile(filePath, commands)
-		}
-
-		if err != nil {
-			return err
-		}
-
-		// File operations don't output commands to stdout
-		return nil
+		reverseCommands(commands)
 	}
 
 	// Output commands
@@ -601,6 +589,109 @@ func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 	}
 
 	return nil
+}
+
+// runEditMode handles default mode: edit and execute commands
+func runEditMode(cmd *cobra.Command, args []string, database *db.DB) error {
+	// Get flags needed for edit mode
+	fcPattern, _ := cmd.Flags().GetString("match")
+	fcInternal, _ := cmd.Flags().GetBool("internal")
+	fcEditor, _ := cmd.Flags().GetString("editor")
+	fcQuickExec, _ := cmd.Flags().GetBool("quick-exec")
+	fcLast, _ := cmd.Flags().GetInt("last")
+
+	// Parse substitutions
+	substitutions, remainingArgs, err := parseSubstitutions(args)
+	if err != nil {
+		return err
+	}
+
+	// Parse range - edit mode defaults to last 1 command
+	first, last, err := parseHistoryRangeForEdit(remainingArgs, database, fcLast)
+	if err != nil {
+		return err
+	}
+
+	// Delegate to existing edit-and-execute handler
+	return editAndExecuteMode(cmd, database, first, last, substitutions, fcPattern, fcInternal, fcEditor, fcQuickExec)
+}
+
+// parseHistoryRangeForFileOp parses range for file operations (defaults to ALL commands)
+func parseHistoryRangeForFileOp(args []string, database *db.DB, lastN int) (int64, int64, error) {
+	// If no range specified and no --last flag, export ALL commands
+	if len(args) == 0 && lastN == 0 {
+		mostRecent, err := database.GetMostRecentEventID()
+		if err != nil {
+			return 0, 0, fmt.Errorf("failed to get most recent event: %w", err)
+		}
+		if mostRecent == 0 {
+			return 0, -1, nil // Empty database
+		}
+		return 1, mostRecent, nil
+	}
+
+	// Otherwise use normal list mode parsing
+	return parseHistoryRange(args, database, lastN, true)
+}
+
+// parseHistoryRangeForList parses range for list mode (defaults to last 16)
+func parseHistoryRangeForList(args []string, database *db.DB, lastN int) (int64, int64, error) {
+	return parseHistoryRange(args, database, lastN, true)
+}
+
+// parseHistoryRangeForEdit parses range for edit mode (defaults to last 1)
+func parseHistoryRangeForEdit(args []string, database *db.DB, lastN int) (int64, int64, error) {
+	return parseHistoryRange(args, database, lastN, false)
+}
+
+// getCommandsWithFilters retrieves commands with optional pattern and session filtering
+func getCommandsWithFilters(database *db.DB, first, last int64, pattern string, internal bool, allowEmpty bool) ([]models.Command, error) {
+	var commands []models.Command
+	var err error
+	hasFilters := pattern != "" || internal
+
+	if internal {
+		// Get current session PID
+		sessionPid, err := getSessionPid()
+		if err != nil {
+			return nil, err
+		}
+
+		if pattern != "" {
+			// Both internal and pattern filtering
+			likePattern := globToLike(pattern)
+			commands, err = database.GetCommandsByRangeWithPatternInternal(first, last, sessionPid, likePattern)
+		} else {
+			// Internal filtering only
+			commands, err = database.GetCommandsByRangeInternal(first, last, sessionPid)
+		}
+	} else if pattern != "" {
+		// Pattern filtering only
+		likePattern := globToLike(pattern)
+		commands, err = database.GetCommandsByRangeWithPattern(first, last, likePattern)
+	} else {
+		// No filtering
+		commands, err = database.GetCommandsByRange(first, last)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands: %w", err)
+	}
+
+	// Only error on empty results if we have filters and allowEmpty is false
+	// Empty database with no filters is not an error
+	if len(commands) == 0 && hasFilters && !allowEmpty {
+		return nil, fmt.Errorf("shy fc: no matching events found")
+	}
+
+	return commands, nil
+}
+
+// reverseCommands reverses a slice of commands in place
+func reverseCommands(commands []models.Command) {
+	for i, j := 0, len(commands)-1; i < j; i, j = i+1, j-1 {
+		commands[i], commands[j] = commands[j], commands[i]
+	}
 }
 
 // substitution represents an old=new string substitution

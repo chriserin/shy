@@ -1980,3 +1980,106 @@ func TestFileOp_WriteWithInternalFilter(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 }
+
+// Test that using multiple file operation flags together returns an error
+func TestFileOp_MutuallyExclusiveFlags(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	testFile := filepath.Join(tempDir, "test.txt")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Test -W and -A together
+	t.Run("WriteAndAppend", func(t *testing.T) {
+		var buf bytes.Buffer
+		rootCmd.SetOut(&buf)
+		rootCmd.SetErr(&buf)
+		rootCmd.SetArgs([]string{"fc", "-W", testFile, "-A", testFile, "--db", dbPath})
+
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+
+		rootCmd.SetArgs(nil)
+	})
+
+	// Test -W and -R together
+	t.Run("WriteAndRead", func(t *testing.T) {
+		var buf bytes.Buffer
+		rootCmd.SetOut(&buf)
+		rootCmd.SetErr(&buf)
+		rootCmd.SetArgs([]string{"fc", "-W", testFile, "-R", testFile, "--db", dbPath})
+
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+
+		rootCmd.SetArgs(nil)
+	})
+
+	// Test -A and -R together
+	t.Run("AppendAndRead", func(t *testing.T) {
+		var buf bytes.Buffer
+		rootCmd.SetOut(&buf)
+		rootCmd.SetErr(&buf)
+		rootCmd.SetArgs([]string{"fc", "-A", testFile, "-R", testFile, "--db", dbPath})
+
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+
+		rootCmd.SetArgs(nil)
+	})
+
+	// Test all three together
+	t.Run("AllThreeTogether", func(t *testing.T) {
+		var buf bytes.Buffer
+		rootCmd.SetOut(&buf)
+		rootCmd.SetErr(&buf)
+		rootCmd.SetArgs([]string{"fc", "-W", testFile, "-A", testFile, "-R", testFile, "--db", dbPath})
+
+		err := rootCmd.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+
+		rootCmd.SetArgs(nil)
+	})
+}
+
+// Test that using -s and -e together returns an error
+func TestFc_QuickExecAndEditorMutuallyExclusive(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert a command
+	c := &models.Command{
+		CommandText: "echo test",
+		WorkingDir:  "/home/test",
+		ExitStatus:  0,
+		Timestamp:   1234567890,
+	}
+	_, err = database.InsertCommand(c)
+	require.NoError(t, err)
+
+	// Try to use -s and -e together
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+	rootCmd.SetArgs([]string{"fc", "-s", "-e", "nano", "1", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot use -s and -e together")
+
+	rootCmd.SetArgs(nil)
+}
