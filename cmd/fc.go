@@ -24,8 +24,6 @@ var fcCmd = &cobra.Command{
 	Long:               "Process the command history list. With -l flag, lists commands. Without -l, edits and re-executes commands.",
 	DisableFlagParsing: true, // We'll parse flags manually to handle negative numbers
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Save original args for checking if -W was specified without file
-		originalArgs := args
 		// Manually parse flags to handle negative numbers correctly
 		parsedArgs, flags, parentFlags, err := parseFcArgsAndFlags(args)
 		if err != nil {
@@ -64,11 +62,12 @@ var fcCmd = &cobra.Command{
 		cmd.Flags().Set("editor", flags.editor)
 		cmd.Flags().Set("quick-exec", fmt.Sprintf("%t", flags.quickExec))
 		cmd.Flags().Set("write", flags.writeFile)
+		cmd.Flags().Set("write-specified", fmt.Sprintf("%t", flags.writeSpecified))
 		cmd.Flags().Set("append", flags.appendFile)
 		cmd.Flags().Set("read", flags.readFile)
 
-		// Run fc with parsed arguments and original args for checking
-		err = runFc(cmd, parsedArgs, originalArgs)
+		// Run fc with parsed arguments
+		err = runFc(cmd, parsedArgs)
 
 		// Reset flags after use
 		resetFcFlags(cmd)
@@ -79,25 +78,26 @@ var fcCmd = &cobra.Command{
 
 // fcFlags holds parsed flag values for the fc command
 type fcFlags struct {
-	list       bool
-	noNum      bool
-	reverse    bool
-	last       int
-	showTime   bool
-	timeISO    bool
-	timeUS     bool
-	timeEU     bool
-	timeCustom string
-	elapsed    bool
-	pattern    string
-	internal   bool
-	local      bool
-	editor     string // -e flag: specify editor to use
-	quickExec  bool   // -s flag: re-execute without editing
-	writeFile  string // -W flag: write history to file
-	appendFile string // -A flag: append history to file
-	readFile   string // -R flag: read history from file
-	help       bool
+	list            bool
+	noNum           bool
+	reverse         bool
+	last            int
+	showTime        bool
+	timeISO         bool
+	timeUS          bool
+	timeEU          bool
+	timeCustom      string
+	elapsed         bool
+	pattern         string
+	internal        bool
+	local           bool
+	editor          string // -e flag: specify editor to use
+	quickExec       bool   // -s flag: re-execute without editing
+	writeFile       string // -W flag: write history to file
+	writeSpecified  bool   // whether -W was specified (even without file)
+	appendFile      string // -A flag: append history to file
+	readFile        string // -R flag: read history from file
+	help            bool
 }
 
 // parseFcArgsAndFlags manually parses arguments to handle negative numbers correctly
@@ -195,6 +195,7 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 			case "-s", "--quick-exec":
 				flags.quickExec = true
 			case "-W", "--write":
+				flags.writeSpecified = true
 				// -W can be specified without an argument (no-op case)
 				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 					i++
@@ -274,8 +275,11 @@ func init() {
 	fcCmd.Flags().StringP("editor", "e", "", "Specify editor to use")
 	fcCmd.Flags().BoolP("quick-exec", "s", false, "Re-execute without editing")
 	fcCmd.Flags().StringP("write", "W", "", "Write history to file")
+	fcCmd.Flags().Bool("write-specified", false, "Internal: tracks if -W was specified")
 	fcCmd.Flags().StringP("append", "A", "", "Append history to file")
 	fcCmd.Flags().StringP("read", "R", "", "Read history from file")
+	// Hide the internal write-specified flag from help
+	fcCmd.Flags().MarkHidden("write-specified")
 }
 
 // resetFcFlags resets all fc flags to their default values (for testing)
@@ -296,6 +300,7 @@ func resetFcFlags(cmd *cobra.Command) {
 	cmd.Flags().Set("editor", "")
 	cmd.Flags().Set("quick-exec", "false")
 	cmd.Flags().Set("write", "")
+	cmd.Flags().Set("write-specified", "false")
 	cmd.Flags().Set("append", "")
 	cmd.Flags().Set("read", "")
 
@@ -384,36 +389,17 @@ func globToLike(pattern string) string {
 	return escaped
 }
 
-// fcMode represents the operating mode of the fc command
-type fcMode int
-
-const (
-	modeRead  fcMode = iota // -R: Import history from file
-	modeWrite               // -W/-A: Export history to file
-	modeList                // -l: List history
-	modeEdit                // Default: Edit and execute
-)
-
-func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
+func runFc(cmd *cobra.Command, args []string) error {
 	// Get all flag values
 	fcList, _ := cmd.Flags().GetBool("list")
 	fcWriteFile, _ := cmd.Flags().GetString("write")
+	fcWriteSpecified, _ := cmd.Flags().GetBool("write-specified")
 	fcAppendFile, _ := cmd.Flags().GetString("append")
 	fcReadFile, _ := cmd.Flags().GetString("read")
 
-	// Handle -W without file path (no-op) - check if -W was in original args
-	// without being followed by a file path
-	if fcWriteFile == "" {
-		for i, arg := range originalArgs {
-			if arg == "-W" || arg == "--write" {
-				// -W was specified, check if it has a file path
-				hasFile := i+1 < len(originalArgs) && !strings.HasPrefix(originalArgs[i+1], "-")
-				if !hasFile {
-					// -W without file is a no-op
-					return nil
-				}
-			}
-		}
+	// Handle -W without file path (no-op)
+	if fcWriteSpecified && fcWriteFile == "" {
+		return nil
 	}
 
 	// Open database
@@ -426,33 +412,23 @@ func runFc(cmd *cobra.Command, args []string, originalArgs []string) error {
 	}
 	defer database.Close()
 
-	// Determine mode and dispatch to appropriate handler
-	var mode fcMode
-	if fcReadFile != "" {
-		mode = modeRead
-	} else if fcWriteFile != "" || fcAppendFile != "" {
-		mode = modeWrite
-	} else if fcList {
-		mode = modeList
-	} else {
-		mode = modeEdit
-	}
-
-	switch mode {
-	case modeRead:
+	// Dispatch to appropriate mode handler based on flags
+	switch {
+	case fcReadFile != "":
+		// -R: Import history from file
 		return runReadMode(fcReadFile, database)
 
-	case modeWrite:
+	case fcWriteFile != "" || fcAppendFile != "":
+		// -W/-A: Export history to file
 		return runWriteMode(cmd, args, database, fcWriteFile, fcAppendFile)
 
-	case modeList:
+	case fcList:
+		// -l: List history
 		return runListMode(cmd, args, database)
 
-	case modeEdit:
-		return runEditMode(cmd, args, database)
-
 	default:
-		return fmt.Errorf("unknown fc mode")
+		// Default: Edit and execute
+		return runEditMode(cmd, args, database)
 	}
 }
 
