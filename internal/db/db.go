@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -71,9 +73,24 @@ func New(dbPath string) (*DB, error) {
 	}
 
 	// Enable WAL mode for better concurrency
-	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	// Retry on database locked errors since concurrent connections may race to enable WAL
+	var walErr error
+	for i := 0; i < 5; i++ {
+		_, walErr = conn.Exec("PRAGMA journal_mode=WAL")
+		if walErr == nil {
+			break
+		}
+		// Check if it's a database locked error
+		if strings.Contains(walErr.Error(), "database is locked") {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		// Other errors are not retryable
+		break
+	}
+	if walErr != nil {
 		conn.Close()
-		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", walErr)
 	}
 
 	// Set busy timeout for handling concurrent writes
