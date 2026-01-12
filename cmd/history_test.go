@@ -1184,3 +1184,117 @@ func TestDurationScenario13_CommandsWithoutDurationShow0000(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 }
+
+// Test that history supports -m flag for pattern matching (like fc -l -m)
+func TestHistory_PatternMatchingFlag(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert various commands
+	commands := []string{
+		"git status",
+		"git commit",
+		"ls -la",
+		"git push",
+		"npm test",
+	}
+
+	for _, cmdText := range commands {
+		cmd := &models.Command{
+			CommandText: cmdText,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400),
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Run: shy history -m 'git*'
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-m", "git*", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Should contain git commands
+	assert.Contains(t, output, "git status")
+	assert.Contains(t, output, "git commit")
+	assert.Contains(t, output, "git push")
+
+	// Should not contain non-git commands
+	assert.NotContains(t, output, "ls -la")
+	assert.NotContains(t, output, "npm test")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test that history supports -I flag for internal/session filtering (like fc -l -I)
+func TestHistory_InternalFlag(t *testing.T) {
+	defer resetFcFlags(fcCmd)
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands with different session PIDs
+	currentPID := int64(12345)
+	otherPID := int64(67890)
+	sourceActive := true
+
+	commands := []struct {
+		text string
+		pid  int64
+	}{
+		{"git status", currentPID},
+		{"npm install", otherPID},
+		{"git commit", currentPID},
+	}
+
+	for _, cmd := range commands {
+		c := &models.Command{
+			CommandText:  cmd.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    int64(1704470400),
+			SourcePid:    &cmd.pid,
+			SourceActive: &sourceActive,
+		}
+		_, err := database.InsertCommand(c)
+		require.NoError(t, err)
+	}
+
+	// Set environment variable for current session
+	t.Setenv("SHY_SESSION_PID", "12345")
+
+	// Run: shy history -I
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-I", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Should contain only current session commands
+	assert.Contains(t, output, "git status")
+	assert.Contains(t, output, "git commit")
+
+	// Should not contain other session commands
+	assert.NotContains(t, output, "npm install")
+
+	rootCmd.SetArgs(nil)
+}

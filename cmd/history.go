@@ -9,14 +9,7 @@ import (
 
 // historyFlags holds parsed flag values for the history command
 type historyFlags struct {
-	noNum      bool
-	reverse    bool
-	showTime   bool
-	timeISO    bool
-	timeUS     bool
-	timeEU     bool
-	timeCustom string
-	elapsed    bool
+	listModeFlags // embed common flags (defined in fc.go)
 }
 
 // parseHistoryArgsAndFlags manually parses arguments to handle negative numbers correctly
@@ -38,28 +31,18 @@ func parseHistoryArgsAndFlags(args []string) ([]string, historyFlags, []string, 
 				continue
 			}
 
-			// It's a flag
+			// Try parsing as a list-mode flag first
+			newIndex, handled, err := parseListModeFlag(arg, args, i, &flags.listModeFlags)
+			if err != nil {
+				return nil, flags, nil, err
+			}
+			if handled {
+				i = newIndex
+				continue
+			}
+
+			// It's a flag specific to history (or common flag not handled above)
 			switch arg {
-			case "-n", "--no-numbers":
-				flags.noNum = true
-			case "-r", "--reverse":
-				flags.reverse = true
-			case "-d", "--time":
-				flags.showTime = true
-			case "-i", "--iso":
-				flags.timeISO = true
-			case "-f", "--american":
-				flags.timeUS = true
-			case "-E", "--european":
-				flags.timeEU = true
-			case "-t", "--time-format":
-				if i+1 >= len(args) {
-					return nil, flags, nil, fmt.Errorf("-t requires a format string")
-				}
-				i++
-				flags.timeCustom = args[i]
-			case "-D", "--elapsed":
-				flags.elapsed = true
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -104,6 +87,8 @@ var historyCmd = &cobra.Command{
 			return err
 		}
 
+		cmd.SilenceUsage = true
+
 		// Process parent/root flags manually (like --db)
 		for i := 0; i < len(parentFlags); i += 2 {
 			if i+1 < len(parentFlags) {
@@ -121,6 +106,9 @@ var historyCmd = &cobra.Command{
 		fcCmd.Flags().Set("european", fmt.Sprintf("%t", flags.timeEU))
 		fcCmd.Flags().Set("time-format", flags.timeCustom)
 		fcCmd.Flags().Set("elapsed", fmt.Sprintf("%t", flags.elapsed))
+		fcCmd.Flags().Set("match", flags.pattern)
+		fcCmd.Flags().Set("internal", fmt.Sprintf("%t", flags.internal))
+		fcCmd.Flags().Set("local", fmt.Sprintf("%t", flags.local))
 
 		// Run fc command with parsed arguments
 		// Pass fcCmd so it reads the flags we just set
@@ -136,5 +124,6 @@ var historyCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(historyCmd)
 	// Note: We use DisableFlagParsing and parse flags manually to support negative numbers like -10
-	// Supported flags: -n/--no-numbers, -r/--reverse, -d, -i, -f, -E, -t, -D
+	// But we still define flags here so they appear in --help output
+	addListModeFlags(historyCmd)
 }

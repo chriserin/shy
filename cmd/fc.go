@@ -75,27 +75,80 @@ var fcCmd = &cobra.Command{
 	},
 }
 
+// listModeFlags holds flags common to both fc -l and history commands
+type listModeFlags struct {
+	noNum      bool
+	reverse    bool
+	showTime   bool
+	timeISO    bool
+	timeUS     bool
+	timeEU     bool
+	timeCustom string
+	elapsed    bool
+	pattern    string
+	internal   bool
+	local      bool
+}
+
 // fcFlags holds parsed flag values for the fc command
 type fcFlags struct {
-	list            bool
-	noNum           bool
-	reverse         bool
-	showTime        bool
-	timeISO         bool
-	timeUS          bool
-	timeEU          bool
-	timeCustom      string
-	elapsed         bool
-	pattern         string
-	internal        bool
-	local           bool
-	editor          string // -e flag: specify editor to use
-	quickExec       bool   // -s flag: re-execute without editing
-	writeFile       string // -W flag: write history to file
-	writeSpecified  bool   // whether -W was specified (even without file)
-	appendFile      string // -A flag: append history to file
-	readFile        string // -R flag: read history from file
-	help            bool
+	listModeFlags  // embed common flags
+	list           bool
+	editor         string // -e flag: specify editor to use
+	quickExec      bool   // -s flag: re-execute without editing
+	writeFile      string // -W flag: write history to file
+	writeSpecified bool   // whether -W was specified (even without file)
+	appendFile     string // -A flag: append history to file
+	readFile       string // -R flag: read history from file
+	help           bool
+}
+
+// parseListModeFlag attempts to parse a list-mode flag (common to fc -l and history)
+// Returns: new index, whether the flag was handled, error
+func parseListModeFlag(arg string, args []string, i int, flags *listModeFlags) (int, bool, error) {
+	switch arg {
+	case "-n", "--no-numbers":
+		flags.noNum = true
+		return i, true, nil
+	case "-r", "--reverse":
+		flags.reverse = true
+		return i, true, nil
+	case "-d", "--time":
+		flags.showTime = true
+		return i, true, nil
+	case "-i", "--iso":
+		flags.timeISO = true
+		return i, true, nil
+	case "-f", "--american":
+		flags.timeUS = true
+		return i, true, nil
+	case "-E", "--european":
+		flags.timeEU = true
+		return i, true, nil
+	case "-t", "--time-format":
+		if i+1 >= len(args) {
+			return i, true, fmt.Errorf("-t requires a format string")
+		}
+		flags.timeCustom = args[i+1]
+		return i + 1, true, nil
+	case "-D", "--elapsed":
+		flags.elapsed = true
+		return i, true, nil
+	case "-m", "--match":
+		if i+1 >= len(args) {
+			return i, true, fmt.Errorf("-m requires a pattern")
+		}
+		flags.pattern = args[i+1]
+		return i + 1, true, nil
+	case "-I", "--internal":
+		flags.internal = true
+		return i, true, nil
+	case "-L", "--local":
+		flags.local = true
+		return i, true, nil
+	default:
+		return i, false, nil
+	}
 }
 
 // parseFcArgsAndFlags manually parses arguments to handle negative numbers correctly
@@ -138,42 +191,22 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				continue
 			}
 
-			// It's a flag
+			// Try parsing as a list-mode flag first
+			newIndex, handled, err := parseListModeFlag(arg, args, i, &flags.listModeFlags)
+			if err != nil {
+				return nil, flags, nil, err
+			}
+			if handled {
+				i = newIndex
+				continue
+			}
+
+			// It's a flag specific to fc
 			switch arg {
 			case "-h", "--help":
 				flags.help = true
 			case "-l", "--list":
 				flags.list = true
-			case "-n", "--no-numbers":
-				flags.noNum = true
-			case "-r", "--reverse":
-				flags.reverse = true
-			case "-d", "--time":
-				flags.showTime = true
-			case "-i", "--iso":
-				flags.timeISO = true
-			case "-f", "--american":
-				flags.timeUS = true
-			case "-E", "--european":
-				flags.timeEU = true
-			case "-t", "--time-format":
-				if i+1 >= len(args) {
-					return nil, flags, nil, fmt.Errorf("-t requires a format string")
-				}
-				i++
-				flags.timeCustom = args[i]
-			case "-D", "--elapsed":
-				flags.elapsed = true
-			case "-m", "--match":
-				if i+1 >= len(args) {
-					return nil, flags, nil, fmt.Errorf("-m requires a pattern")
-				}
-				i++
-				flags.pattern = args[i]
-			case "-I", "--internal":
-				flags.internal = true
-			case "-L", "--local":
-				flags.local = true
 			case "-e", "--editor":
 				if i+1 >= len(args) {
 					return nil, flags, nil, fmt.Errorf("-e requires an editor path")
@@ -245,20 +278,25 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 	return positional, flags, parentFlags, nil
 }
 
+// addListModeFlags adds flags common to both fc -l and history commands
+func addListModeFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolP("no-numbers", "n", false, "Suppress event numbers when listing")
+	cmd.Flags().BoolP("reverse", "r", false, "Reverse order (oldest first)")
+	cmd.Flags().BoolP("time", "d", false, "Display timestamps")
+	cmd.Flags().BoolP("iso", "i", false, "Display timestamps in ISO8601 format (yyyy-mm-dd hh:mm)")
+	cmd.Flags().BoolP("american", "f", false, "Display timestamps in US format (mm/dd/yy hh:mm)")
+	cmd.Flags().BoolP("european", "E", false, "Display timestamps in European format (dd.mm.yyyy hh:mm)")
+	cmd.Flags().StringP("time-format", "t", "", "Custom timestamp format (strftime)")
+	cmd.Flags().BoolP("elapsed", "D", false, "Display elapsed time since command")
+	cmd.Flags().StringP("match", "m", "", "Filter by glob pattern")
+	cmd.Flags().BoolP("internal", "I", false, "Show only commands from current session")
+	cmd.Flags().BoolP("local", "L", false, "Show only local commands (currently same as no filter)")
+}
+
 func init() {
 	rootCmd.AddCommand(fcCmd)
 	fcCmd.Flags().BoolP("list", "l", false, "List commands instead of editing")
-	fcCmd.Flags().BoolP("no-numbers", "n", false, "Suppress event numbers when listing")
-	fcCmd.Flags().BoolP("reverse", "r", false, "Reverse order (oldest first)")
-	fcCmd.Flags().BoolP("time", "d", false, "Display timestamps")
-	fcCmd.Flags().BoolP("iso", "i", false, "Display timestamps in ISO8601 format (yyyy-mm-dd hh:mm)")
-	fcCmd.Flags().BoolP("american", "f", false, "Display timestamps in US format (mm/dd/yy hh:mm)")
-	fcCmd.Flags().BoolP("european", "E", false, "Display timestamps in European format (dd.mm.yyyy hh:mm)")
-	fcCmd.Flags().StringP("time-format", "t", "", "Custom timestamp format (strftime)")
-	fcCmd.Flags().BoolP("elapsed", "D", false, "Display elapsed time since command")
-	fcCmd.Flags().StringP("match", "m", "", "Filter by glob pattern")
-	fcCmd.Flags().BoolP("internal", "I", false, "Show only commands from current session")
-	fcCmd.Flags().BoolP("local", "L", false, "Show only local commands (currently same as no filter)")
+	addListModeFlags(fcCmd)
 	fcCmd.Flags().StringP("editor", "e", "", "Specify editor to use")
 	fcCmd.Flags().BoolP("quick-exec", "s", false, "Re-execute without editing")
 	fcCmd.Flags().StringP("write", "W", "", "Write history to file")
@@ -300,12 +338,12 @@ func resetFcFlags(cmd *cobra.Command) {
 func getSessionPid() (int64, error) {
 	pidStr := os.Getenv("SHY_SESSION_PID")
 	if pidStr == "" {
-		return 0, fmt.Errorf("fc -I: SHY_SESSION_PID environment variable not set")
+		return 0, fmt.Errorf("shy fc -I: SHY_SESSION_PID environment variable not set")
 	}
 
 	pid, err := strconv.ParseInt(pidStr, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("fc -I: invalid SHY_SESSION_PID value: %w", err)
+		return 0, fmt.Errorf("shy fc -I: invalid SHY_SESSION_PID value: %w", err)
 	}
 
 	return pid, nil
