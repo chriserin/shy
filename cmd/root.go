@@ -10,9 +10,10 @@ import (
 var dbPath string
 
 var rootCmd = &cobra.Command{
-	Use:   "shy",
-	Short: "Shell history tracker",
-	Long:  "A command-line tool to track shell command history in SQLite",
+	Use:     "shy",
+	Short:   "Shell history tracker",
+	Long:    "A command-line tool to track shell command history in SQLite",
+	Version: Version,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// If --db flag was explicitly set, use that
 		if cmd.Flags().Changed("db") {
@@ -45,4 +46,6 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Database file path (default: ~/.local/share/shy/history.db)")
+	// Version flag is automatically added by cobra when Version is set
+	rootCmd.SetVersionTemplate("shy version {{.Version}}\n")
 }
