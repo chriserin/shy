@@ -807,3 +807,151 @@ func (db *DB) CloseSession(sessionPid int64) (int64, error) {
 
 	return count, nil
 }
+
+// LikeRecentOptions contains options for LikeRecent query
+type LikeRecentOptions struct {
+	Prefix     string
+	Limit      int
+	IncludeShy bool
+	Exclude    string
+	WorkingDir string
+	SessionPID string
+}
+
+// LikeRecent finds commands matching a prefix with various filters
+func (db *DB) LikeRecent(opts LikeRecentOptions) ([]string, error) {
+	// Build SQL query
+	query := `
+		SELECT command_text
+		FROM commands
+		WHERE command_text LIKE ? || '%'
+	`
+	args := []interface{}{opts.Prefix}
+
+	// Exclude shy commands by default
+	if !opts.IncludeShy {
+		query += ` AND command_text NOT LIKE 'shy %' AND command_text != 'shy'`
+	}
+
+	// Add exclude pattern filter
+	if opts.Exclude != "" {
+		query += ` AND command_text NOT GLOB ?`
+		args = append(args, opts.Exclude)
+	}
+
+	// Add working directory filter
+	if opts.WorkingDir != "" {
+		query += ` AND working_dir = ?`
+		args = append(args, opts.WorkingDir)
+	}
+
+	// Add session PID filter
+	if opts.SessionPID != "" {
+		query += ` AND source_pid = ?`
+		args = append(args, opts.SessionPID)
+	}
+
+	// Order by timestamp descending and limit results
+	query += ` ORDER BY timestamp DESC`
+	if opts.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, opts.Limit)
+	}
+
+	// Execute query
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query commands: %w", err)
+	}
+	defer rows.Close()
+
+	// Collect results
+	var results []string
+	for rows.Next() {
+		var cmdText string
+		if err := rows.Scan(&cmdText); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		results = append(results, cmdText)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return results, nil
+}
+
+// LikeRecentAfterOptions contains options for LikeRecentAfter query
+type LikeRecentAfterOptions struct {
+	Prefix     string
+	PrevCmd    string
+	Limit      int
+	IncludeShy bool
+	Exclude    string
+}
+
+// LikeRecentAfter finds commands matching a prefix that came after a specific previous command
+func (db *DB) LikeRecentAfter(opts LikeRecentAfterOptions) ([]string, error) {
+	// Build SQL query with CTE to find matching commands
+	query := `
+		WITH recent_matches AS (
+			SELECT c.id, c.command_text, c.timestamp
+			FROM commands c
+			WHERE c.command_text LIKE ? || '%'
+	`
+	args := []interface{}{opts.Prefix}
+
+	// Exclude shy commands by default
+	if !opts.IncludeShy {
+		query += ` AND c.command_text NOT LIKE 'shy %' AND c.command_text != 'shy'`
+	}
+
+	// Add exclude pattern filter
+	if opts.Exclude != "" {
+		query += ` AND c.command_text NOT GLOB ?`
+		args = append(args, opts.Exclude)
+	}
+
+	// Order by timestamp descending and limit to 200 recent matches for context search
+	query += `
+			ORDER BY c.timestamp DESC
+			LIMIT 200
+		)
+		SELECT rm.command_text
+		FROM recent_matches rm
+		JOIN commands prev ON prev.id = rm.id - 1
+		WHERE prev.command_text = ?
+		ORDER BY rm.timestamp DESC
+	`
+	args = append(args, opts.PrevCmd)
+
+	// Add limit if specified
+	if opts.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, opts.Limit)
+	}
+
+	// Execute query
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query commands: %w", err)
+	}
+	defer rows.Close()
+
+	// Collect results
+	var results []string
+	for rows.Next() {
+		var cmdText string
+		if err := rows.Scan(&cmdText); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		results = append(results, cmdText)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return results, nil
+}

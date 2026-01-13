@@ -374,6 +374,58 @@ func TestInitCommand_UnsupportedShell(t *testing.T) {
 	rootCmd.SetArgs(nil)
 }
 
+// TestInitWithAutosuggest tests that --autosuggest flag generates autosuggest strategies
+func TestInitWithAutosuggest(t *testing.T) {
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"init", "zsh", "--autosuggest"})
+
+	err := rootCmd.Execute()
+	require.NoError(t, err, "init command should succeed")
+
+	output := buf.String()
+
+	// Should contain autosuggest strategy functions
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_history", "should define shy_history strategy")
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_match_prev_cmd", "should define shy_match_prev_cmd strategy")
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_pwd", "should define shy_pwd strategy")
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_session", "should define shy_session strategy")
+
+	// Should use shy commands
+	assert.Contains(t, output, "like-recent", "should use like-recent command")
+	assert.Contains(t, output, "like-recent-after", "should use like-recent-after command")
+	assert.Contains(t, output, "shy last-command", "should use shy last-command")
+
+	// Reset init flags
+	initRecord = false
+	initUse = false
+	initAutosuggest = false
+	rootCmd.SetArgs(nil)
+}
+
+// TestInitWithMultipleFlags tests combining --record, --use, and --autosuggest
+func TestInitWithMultipleFlags(t *testing.T) {
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"init", "zsh", "--record", "--use", "--autosuggest"})
+
+	err := rootCmd.Execute()
+	require.NoError(t, err, "init command should succeed")
+
+	output := buf.String()
+
+	// Should contain all three scripts
+	assert.Contains(t, output, "__shy_preexec", "should include record script")
+	assert.Contains(t, output, "_shy_shell_history", "should include use script")
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_history", "should include autosuggest script")
+
+	// Reset init flags
+	initRecord = false
+	initUse = false
+	initAutosuggest = false
+	rootCmd.SetArgs(nil)
+}
+
 // Capture stdout for testing
 func captureStdout(f func()) string {
 	old := os.Stdout

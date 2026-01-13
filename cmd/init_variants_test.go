@@ -123,19 +123,24 @@ func TestScenario11_InitWithoutFlagsDefaultsToRecord(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: the output should define __shy_preexec
+	// Then: the output should include all three scripts by default
+	// Recording script
 	assert.Contains(t, output, "__shy_preexec()", "should define __shy_preexec")
-
-	// And: the output should define __shy_precmd
 	assert.Contains(t, output, "__shy_precmd()", "should define __shy_precmd")
 
-	// And: the output should NOT include history lookup functions
-	assert.NotContains(t, output, "shy_ctrl_r", "should not include shy_ctrl_r")
-	assert.NotContains(t, output, "shy_up_arrow", "should not include shy_up_arrow")
-	assert.NotContains(t, output, "shy_right_arrow", "should not include shy_right_arrow")
+	// Usage script
+	assert.Contains(t, output, "_shy_shell_history", "should include history lookup function")
+	assert.Contains(t, output, "_shy_up_line_or_history", "should include up arrow handler")
+	assert.Contains(t, output, "_shy_down_line_or_history", "should include down arrow handler")
+
+	// Autosuggest script
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_history", "should include shy_history strategy")
+	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_match_prev_cmd", "should include shy_match_prev_cmd strategy")
 
 	// Reset command and flags for next test
 	rootCmd.SetArgs(nil)
 	initCmd.Flags().Set("record", "false")
+	initCmd.Flags().Set("use", "false")
+	initCmd.Flags().Set("autosuggest", "false")
 	initCmd.Flags().Set("use", "false")
 }

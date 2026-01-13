@@ -1,0 +1,419 @@
+Feature: Shy-based Autosuggestions
+  As a shy user
+  I want autosuggestions powered by shy's database
+  So that I can get intelligent command suggestions based on my history
+
+  Background:
+    Given a shy database with command history
+    And the database contains the following commands:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 1  | 1704470400 | git status                 | /home/user/proj1 | 12345      |
+      | 2  | 1704470410 | git add .                  | /home/user/proj1 | 12345      |
+      | 3  | 1704470420 | git commit -m "initial"    | /home/user/proj1 | 12345      |
+      | 4  | 1704470430 | git push origin main       | /home/user/proj1 | 12345      |
+      | 5  | 1704470440 | npm install                | /home/user/proj2 | 12345      |
+      | 6  | 1704470450 | npm test                   | /home/user/proj2 | 12345      |
+      | 7  | 1704470460 | make build                 | /home/user/proj3 | 12345      |
+      | 8  | 1704470470 | make test                  | /home/user/proj3 | 12345      |
+      | 9  | 1704470480 | git commit -m "fix bug"    | /home/user/proj1 | 12346      |
+      | 10 | 1704470490 | git push origin feature    | /home/user/proj1 | 12346      |
+      | 11 | 1704470500 | shy list-all               | /home/user       | 12345      |
+      | 12 | 1704470510 | git pull origin main       | /home/user/proj1 | 12345      |
+
+  # Enhanced like-recent Command
+
+  Scenario: Basic prefix matching with like-recent
+    When I run "shy like-recent 'git p'"
+    Then the output should be "git pull origin main"
+
+  Scenario: like-recent excludes shy commands by default
+    When I run "shy like-recent 'shy'"
+    Then the output should be empty
+
+  Scenario: like-recent includes shy commands with flag
+    When I run "shy like-recent 'shy' --include-shy"
+    Then the output should be "shy list-all"
+
+  Scenario: like-recent with limit flag
+    When I run "shy like-recent 'git' --limit 3"
+    Then the output should contain 3 commands
+    And the first command should be "git pull origin main"
+    And the second command should be "git push origin feature"
+    And the third command should be "git commit -m \"fix bug\""
+
+  Scenario: like-recent with pwd filter
+    Given I am in directory "/home/user/proj2"
+    When I run "shy like-recent 'npm' --pwd"
+    Then the output should be "npm test"
+
+  Scenario: like-recent with pwd filter no matches
+    Given I am in directory "/home/user/proj3"
+    When I run "shy like-recent 'npm' --pwd"
+    Then the output should be empty
+
+  Scenario: like-recent with session filter
+    Given SHY_SESSION_PID is set to "12345"
+    When I run "shy like-recent 'git push' --session"
+    Then the output should be "git push origin main"
+    And the output should not contain "git push origin feature"
+
+  Scenario: like-recent with exclude pattern
+    When I run "shy like-recent 'git' --exclude 'git pull*'"
+    Then the output should be "git push origin feature"
+    And the output should not contain "git pull"
+
+  Scenario: like-recent with multiple filters
+    Given I am in directory "/home/user/proj1"
+    And SHY_SESSION_PID is set to "12345"
+    When I run "shy like-recent 'git' --pwd --session --exclude 'git pull*'"
+    Then the output should be "git push origin main"
+
+  Scenario: like-recent with no matches
+    When I run "shy like-recent 'cargo'"
+    Then the output should be empty
+    And the exit code should be 0
+
+  Scenario: like-recent preserves backward compatibility
+    When I run "shy like-recent 'make'"
+    Then the output should be "make test"
+    And the command should work as before the enhancement
+
+  # Context-Aware Suggestions (like-recent-after)
+
+  Scenario: like-recent-after with matching context
+    When I run "shy like-recent-after 'git p' --prev 'git commit -m \"initial\"'"
+    Then the output should be "git push origin main"
+
+  Scenario: like-recent-after with different context
+    When I run "shy like-recent-after 'git p' --prev 'git commit -m \"fix bug\"'"
+    Then the output should be "git push origin feature"
+
+  Scenario: like-recent-after with no context match
+    When I run "shy like-recent-after 'npm' --prev 'git status'"
+    Then the output should be empty
+
+  Scenario: like-recent-after excludes shy commands by default
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | git status                 | /home/user/proj1 | 12345      |
+      | 14 | 1704470530 | shy fc -l                  | /home/user/proj1 | 12345      |
+    When I run "shy like-recent-after 'shy' --prev 'git status'"
+    Then the output should be empty
+
+  Scenario: like-recent-after includes shy commands with flag
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | git status                 | /home/user/proj1 | 12345      |
+      | 14 | 1704470530 | shy fc -l                  | /home/user/proj1 | 12345      |
+    When I run "shy like-recent-after 'shy' --prev 'git status' --include-shy"
+    Then the output should be "shy fc -l"
+
+  Scenario: like-recent-after with exclude pattern
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | make build                 | /home/user/proj3 | 12345      |
+      | 14 | 1704470530 | make clean                 | /home/user/proj3 | 12345      |
+      | 15 | 1704470540 | make build                 | /home/user/proj3 | 12345      |
+      | 16 | 1704470550 | make test                  | /home/user/proj3 | 12345      |
+    When I run "shy like-recent-after 'make' --prev 'make build' --exclude 'make clean'"
+    Then the output should be "make test"
+
+  Scenario: like-recent-after with limit
+    Given the database contains multiple "git push" commands after "git commit"
+    When I run "shy like-recent-after 'git push' --prev 'git commit*' --limit 2"
+    Then the output should contain 2 commands
+
+  # ZSH Strategy Functions
+
+  Scenario: _zsh_autosuggest_strategy_shy_history basic usage
+    Given zsh-autosuggestions is configured with shy_history strategy
+    And I am in a zsh shell
+    When I type "git p"
+    Then the suggestion should be "git pull origin main"
+
+  Scenario: _zsh_autosuggest_strategy_shy_history respects HISTORY_IGNORE
+    Given zsh-autosuggestions is configured with shy_history strategy
+    And ZSH_AUTOSUGGEST_HISTORY_IGNORE is set to "git pull*"
+    And I am in a zsh shell
+    When I type "git p"
+    Then the suggestion should be "git push origin feature"
+
+  Scenario: _zsh_autosuggest_strategy_shy_history with no match
+    Given zsh-autosuggestions is configured with shy_history strategy
+    And I am in a zsh shell
+    When I type "cargo r"
+    Then the suggestion should be empty
+
+  Scenario: _zsh_autosuggest_strategy_shy_match_prev_cmd with context
+    Given zsh-autosuggestions is configured with shy_match_prev_cmd strategy
+    And I am in a zsh shell
+    And I just ran "git commit -m 'initial'"
+    When I type "git p"
+    Then the suggestion should be "git push origin main"
+
+  Scenario: _zsh_autosuggest_strategy_shy_match_prev_cmd different context
+    Given zsh-autosuggestions is configured with shy_match_prev_cmd strategy
+    And I am in a zsh shell
+    And I just ran "git commit -m 'fix bug'"
+    When I type "git p"
+    Then the suggestion should be "git push origin feature"
+
+  Scenario: _zsh_autosuggest_strategy_shy_pwd directory-specific
+    Given zsh-autosuggestions is configured with shy_pwd strategy
+    And I am in directory "/home/user/proj2"
+    And I am in a zsh shell
+    When I type "npm"
+    Then the suggestion should be "npm test"
+
+  Scenario: _zsh_autosuggest_strategy_shy_pwd no match in directory
+    Given zsh-autosuggestions is configured with shy_pwd strategy
+    And I am in directory "/home/user/proj3"
+    And I am in a zsh shell
+    When I type "npm"
+    Then the suggestion should be empty
+
+  Scenario: _zsh_autosuggest_strategy_shy_session session-specific
+    Given zsh-autosuggestions is configured with shy_session strategy
+    And SHY_SESSION_PID is set to "12345"
+    And I am in a zsh shell
+    When I type "git push"
+    Then the suggestion should be "git push origin main"
+    And the suggestion should not be "git push origin feature"
+
+  # Special Character Handling
+
+  Scenario: like-recent with special characters in prefix
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | echo "hello world"         | /home/user       | 12345      |
+      | 14 | 1704470530 | grep "pattern" file.txt    | /home/user       | 12345      |
+    When I run "shy like-recent 'echo \"'"
+    Then the output should be "echo \"hello world\""
+
+  Scenario: like-recent with glob characters in prefix
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | ls *.txt                   | /home/user       | 12345      |
+    When I run "shy like-recent 'ls *'"
+    Then the output should be "ls *.txt"
+
+  Scenario: like-recent with backslash in prefix
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | sed 's/old/new/'           | /home/user       | 12345      |
+    When I run "shy like-recent 'sed'"
+    Then the output should be "sed 's/old/new/'"
+
+  # Error Handling
+
+  Scenario: like-recent with missing database
+    Given no shy database exists
+    When I run "shy like-recent 'git'"
+    Then the output should be empty
+    And the exit code should be 0
+    And no error should be printed
+
+  Scenario: like-recent-after without prev flag
+    When I run "shy like-recent-after 'git'"
+    Then the command should fail
+    And the error should mention "--prev flag is required"
+
+  Scenario: like-recent-after with empty prev
+    When I run "shy like-recent-after 'git' --prev ''"
+    Then the output should be empty
+    And the exit code should be 0
+
+  Scenario: Graceful degradation when shy command fails
+    Given zsh-autosuggestions is configured with shy strategies
+    And the shy binary is not in PATH
+    And I am in a zsh shell
+    When I type "git s"
+    Then the suggestion should be empty
+    And no error should be displayed
+    And the shell should remain functional
+
+  # Integration with zsh-autosuggestions Plugin
+
+  Scenario: User can configure multiple strategies
+    Given zsh-autosuggestions is installed
+    And ~/.zshrc contains:
+      """
+      ZSH_AUTOSUGGEST_STRATEGY=(shy_match_prev_cmd shy_history shy_pwd)
+      """
+    When I start a new zsh shell
+    Then all three strategies should be available
+    And they should be tried in order
+
+  Scenario: Fallback to default strategy if shy strategy fails
+    Given zsh-autosuggestions is configured with strategies:
+      """
+      ZSH_AUTOSUGGEST_STRATEGY=(shy_history history)
+      """
+    And the shy database is corrupted
+    And I am in a zsh shell
+    When I type "git s"
+    Then the suggestion should fall back to zsh's native history
+
+  Scenario: Source shy_autosuggest.zsh automatically
+    Given shy is installed
+    And zsh_use.sh is sourced in ~/.zshrc
+    When I start a new zsh shell
+    Then shy_autosuggest.zsh should be sourced
+    And shy strategies should be available
+
+  # Edge Cases
+
+  Scenario: like-recent with very long prefix
+    Given the database contains commands with length > 1000 characters
+    When I run "shy like-recent" with a 500 character prefix
+    Then the command should complete successfully
+    And the correct command should be returned
+
+  Scenario: like-recent with unicode characters
+    Given the database contains:
+      | id | timestamp  | command                    | working_dir      | source_pid |
+      | 13 | 1704470520 | echo "你好世界"            | /home/user       | 12345      |
+      | 14 | 1704470530 | grep "café" file.txt       | /home/user       | 12345      |
+    When I run "shy like-recent 'echo \"你'"
+    Then the output should be "echo \"你好世界\""
+
+  Scenario: like-recent with empty database
+    Given a shy database exists but has no commands
+    When I run "shy like-recent 'git'"
+    Then the output should be empty
+    And the exit code should be 0
+
+  Scenario: like-recent-after with first command in history
+    Given the database has only one command
+    When I run "shy like-recent-after 'git' --prev 'anything'"
+    Then the output should be empty
+
+  Scenario: Concurrent like-recent calls
+    Given a shy database exists
+    When I run 10 "shy like-recent 'git'" commands concurrently
+    Then all commands should complete successfully
+    And all should return the same result
+    And no database corruption should occur
+
+  # Limit and Pagination
+
+  Scenario: like-recent with limit 0
+    When I run "shy like-recent 'git' --limit 0"
+    Then the output should be empty
+
+  Scenario: like-recent with limit greater than matches
+    Given there are only 3 "git" commands in history
+    When I run "shy like-recent 'git' --limit 10"
+    Then the output should contain 3 commands
+
+  Scenario: like-recent-after respects limit
+    Given there are multiple commands matching context
+    When I run "shy like-recent-after 'git' --prev 'make build' --limit 1"
+    Then the output should contain exactly 1 command
+
+  # Working Directory Handling
+
+  Scenario: like-recent pwd with relative path
+    Given I am in directory "/home/user/proj1"
+    And the database contains commands from "/home/user/proj1"
+    When I run "shy like-recent 'git' --pwd"
+    Then only commands from "/home/user/proj1" should be returned
+
+  Scenario: like-recent pwd with symlink
+    Given I am in directory "/home/user/link" which is a symlink to "/home/user/proj1"
+    And the database contains commands from "/home/user/proj1"
+    When I run "shy like-recent 'git' --pwd"
+    Then the command should handle symlinks correctly
+
+  # Session PID Handling
+
+  Scenario: like-recent session with different PID
+    Given SHY_SESSION_PID is set to "99999"
+    And no commands exist from session 99999
+    When I run "shy like-recent 'git' --session"
+    Then the output should be empty
+
+  Scenario: like-recent session without SHY_SESSION_PID set
+    Given SHY_SESSION_PID is not set
+    When I run "shy like-recent 'git' --session"
+    Then the command should handle missing SHY_SESSION_PID gracefully
+
+  # Exclude Pattern Matching
+
+  Scenario: Exclude pattern with glob wildcards
+    When I run "shy like-recent 'git' --exclude 'git p*'"
+    Then the output should not contain any command starting with "git p"
+    And the output might contain "git add" or "git commit"
+
+  Scenario: Exclude pattern with multiple patterns
+    When I run "shy like-recent 'git' --exclude 'git pull*|git push*'"
+    Then the output should not contain "git pull" commands
+    And the output should not contain "git push" commands
+
+  Scenario: Exclude pattern matches entire command
+    When I run "shy like-recent 'make' --exclude 'make test'"
+    Then the output should be "make build"
+    And the output should not be "make test"
+
+  # Output Format
+
+  Scenario: like-recent outputs only command text
+    When I run "shy like-recent 'git'"
+    Then the output should contain only the command text
+    And the output should not contain timestamps
+    And the output should not contain working directory
+    And the output should not contain event IDs
+
+  Scenario: like-recent with limit outputs one per line
+    When I run "shy like-recent 'git' --limit 3"
+    Then the output should have exactly 3 lines
+    And each line should contain one command
+
+  Scenario: like-recent with no match produces no output
+    When I run "shy like-recent 'nonexistent'"
+    Then the output should be completely empty
+    And stdout should be empty
+    And stderr should be empty
+
+  # Performance Requirements
+
+  Scenario: like-recent responds quickly
+    Given a database with 10000 commands
+    When I run "shy like-recent 'git'"
+    Then the command should complete in less than 50ms
+
+  Scenario: like-recent-after responds quickly
+    Given a database with 10000 commands
+    When I run "shy like-recent-after 'git' --prev 'make build'"
+    Then the command should complete in less than 50ms
+
+  Scenario: Autosuggest does not block shell
+    Given zsh-autosuggestions is configured with shy strategies
+    And I am in a zsh shell
+    When I type rapidly "git status"
+    Then the shell should remain responsive
+    And suggestions should appear without blocking
+
+  # Database Indexes
+
+  Scenario: Verify command_text index exists
+    Given a shy database
+    When I query the database schema
+    Then an index on "command_text" should exist
+
+  Scenario: Verify timestamp index exists
+    Given a shy database
+    When I query the database schema
+    Then an index on "timestamp DESC" should exist
+
+  Scenario: Verify composite index exists
+    Given a shy database
+    When I query the database schema
+    Then a composite index on "command_text, timestamp DESC" should exist
+
+  Scenario: Query uses index for prefix search
+    Given a database with 10000 commands
+    When I run "shy like-recent 'git'" with query analysis
+    Then the query plan should show index usage
+    And the query should not perform a full table scan
+

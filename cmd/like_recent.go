@@ -3,11 +3,18 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/chris/shy/internal/db"
+)
+
+var (
+	likeRecentPwd        bool
+	likeRecentSession    bool
+	likeRecentExclude    string
+	likeRecentLimit      int
+	likeRecentIncludeShy bool
 )
 
 var likeRecentCmd = &cobra.Command{
@@ -20,10 +27,22 @@ var likeRecentCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(likeRecentCmd)
+
+	// Add flags
+	likeRecentCmd.Flags().BoolVar(&likeRecentPwd, "pwd", false, "Only match commands from current directory")
+	likeRecentCmd.Flags().BoolVar(&likeRecentSession, "session", false, "Only match from current session (SHY_SESSION_PID)")
+	likeRecentCmd.Flags().StringVar(&likeRecentExclude, "exclude", "", "Exclude commands matching pattern (glob)")
+	likeRecentCmd.Flags().IntVar(&likeRecentLimit, "limit", 1, "Number of suggestions")
+	likeRecentCmd.Flags().BoolVar(&likeRecentIncludeShy, "include-shy", false, "Include shy commands in results")
 }
 
 func runLikeRecent(cmd *cobra.Command, args []string) error {
 	prefix := args[0]
+
+	// If limit is 0, return empty results immediately
+	if likeRecentLimit == 0 {
+		return nil
+	}
 
 	// Open database
 	database, err := db.New(dbPath)
@@ -36,31 +55,41 @@ func runLikeRecent(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
-	// Get all commands (we need to search through them)
-	// Use a reasonable limit to avoid loading too much data
-	commands, err := database.ListCommands(10000)
+	// Build filter options
+	opts := db.LikeRecentOptions{
+		Prefix:     prefix,
+		Limit:      likeRecentLimit,
+		IncludeShy: likeRecentIncludeShy,
+		Exclude:    likeRecentExclude,
+	}
+
+	// Add pwd filter if requested
+	if likeRecentPwd {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get current directory: %w", err)
+		}
+		opts.WorkingDir = cwd
+	}
+
+	// Add session filter if requested
+	if likeRecentSession {
+		sessionPID := os.Getenv("SHY_SESSION_PID")
+		if sessionPID != "" {
+			opts.SessionPID = sessionPID
+		}
+	}
+
+	// Query database
+	commands, err := database.LikeRecent(opts)
 	if err != nil {
-		return fmt.Errorf("failed to list commands: %w", err)
+		return fmt.Errorf("failed to query commands: %w", err)
 	}
 
-	// Find the most recent command matching the prefix
-	// Commands are ordered oldest to newest, so iterate backwards
-	for i := len(commands) - 1; i >= 0; i-- {
-		cmdText := commands[i].CommandText
-
-		// Filter out shy commands
-		if strings.HasPrefix(cmdText, "shy ") || cmdText == "shy" {
-			continue
-		}
-
-		// Check if it starts with the prefix (case-sensitive)
-		if strings.HasPrefix(cmdText, prefix) {
-			// Output only the command text (no formatting)
-			fmt.Fprintln(cmd.OutOrStdout(), cmdText)
-			return nil
-		}
+	// Output commands (one per line)
+	for _, cmdText := range commands {
+		fmt.Fprintln(cmd.OutOrStdout(), cmdText)
 	}
 
-	// No match found - output nothing
 	return nil
 }
