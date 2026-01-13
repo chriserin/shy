@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 
+	"github.com/chris/shy/internal/session"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,27 @@ var rootCmd = &cobra.Command{
 	Use:   "shy",
 	Short: "Shell history tracker",
 	Long:  "A command-line tool to track shell command history in SQLite",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// If --db flag was explicitly set, use that
+		if cmd.Flags().Changed("db") {
+			return nil
+		}
+
+		// Otherwise, check session file for current database
+		ppid := os.Getppid()
+		sessionDB, err := session.GetCurrentDatabase(ppid)
+		if err != nil {
+			return err
+		}
+
+		// If session has a database, use it
+		if sessionDB != "" {
+			dbPath = sessionDB
+		}
+		// If sessionDB is empty, dbPath remains empty and db.New will use default
+
+		return nil
+	},
 }
 
 // Execute runs the root command

@@ -2002,7 +2002,7 @@ func TestFileOp_MutuallyExclusiveFlags(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+		assert.Contains(t, err.Error(), "cannot use -W, -A, -R, -p, or -P together")
 
 		rootCmd.SetArgs(nil)
 	})
@@ -2016,7 +2016,7 @@ func TestFileOp_MutuallyExclusiveFlags(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+		assert.Contains(t, err.Error(), "cannot use -W, -A, -R, -p, or -P together")
 
 		rootCmd.SetArgs(nil)
 	})
@@ -2030,7 +2030,7 @@ func TestFileOp_MutuallyExclusiveFlags(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+		assert.Contains(t, err.Error(), "cannot use -W, -A, -R, -p, or -P together")
 
 		rootCmd.SetArgs(nil)
 	})
@@ -2044,7 +2044,7 @@ func TestFileOp_MutuallyExclusiveFlags(t *testing.T) {
 
 		err := rootCmd.Execute()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot use -W, -A, or -R together")
+		assert.Contains(t, err.Error(), "cannot use -W, -A, -R, -p, or -P together")
 
 		rootCmd.SetArgs(nil)
 	})

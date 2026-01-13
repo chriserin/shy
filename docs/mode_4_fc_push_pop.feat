@@ -1,0 +1,284 @@
+Feature: History Stack Operations (fc -p/-P)
+  As a shy user
+  I want to push and pop history databases
+  So that I can work with isolated history contexts
+
+  Background:
+    Given a clean shy environment
+    And the default database is "~/.local/share/shy/history.db"
+
+  # Basic Push/Pop Operations
+
+  Scenario: Push to a new database file
+    Given I have executed "echo 'command1'" in the default database
+    When I run "shy fc -p /tmp/project_history.db"
+    Then the current database should be "/tmp/project_history.db"
+    And the session file should contain "/tmp/project_history.db" on line 1
+    And the session file should contain the default database on line 2
+    And I execute "echo 'command2'"
+    Then "/tmp/project_history.db" should contain "echo 'command2'"
+    And "/tmp/project_history.db" should not contain "echo 'command1'"
+
+  Scenario: Pop back to previous database
+    Given I have executed "echo 'command1'" in the default database
+    And I have pushed to "/tmp/temp_history.db"
+    And I have executed "echo 'command2'" in "/tmp/temp_history.db"
+    When I run "shy fc -P"
+    Then the current database should be the default database
+    And the session file should contain only the default database
+    And I execute "echo 'command3'"
+    Then the default database should contain "echo 'command3'"
+    And the default database should contain "echo 'command1'"
+    And the default database should not contain "echo 'command2'"
+
+  Scenario: Auto-append .db extension when missing
+    When I run "shy fc -p /tmp/myproject"
+    Then the current database should be "/tmp/myproject.db"
+    And the session file should contain "/tmp/myproject.db" on line 1
+
+  Scenario: Preserve .db extension when present
+    When I run "shy fc -p /tmp/myproject.db"
+    Then the current database should be "/tmp/myproject.db"
+    And the session file should contain "/tmp/myproject.db" on line 1
+
+  # Nested Push/Pop Operations
+
+  Scenario: Multiple nested push operations
+    Given I have executed "echo 'global'" in the default database
+    When I run "shy fc -p /tmp/projectA.db"
+    And I execute "echo 'projectA command'"
+    And I run "shy fc -p /tmp/projectB.db"
+    And I execute "echo 'projectB command'"
+    Then the current database should be "/tmp/projectB.db"
+    And the session file should contain "/tmp/projectB.db" on line 1
+    And the session file should contain "/tmp/projectA.db" on line 2
+    And the session file should contain the default database on line 3
+
+  Scenario: Pop through nested stack
+    Given I have pushed to "/tmp/projectA.db"
+    And I have pushed to "/tmp/projectB.db"
+    And I have pushed to "/tmp/projectC.db"
+    When I run "shy fc -P"
+    Then the current database should be "/tmp/projectB.db"
+    When I run "shy fc -P"
+    Then the current database should be "/tmp/projectA.db"
+    When I run "shy fc -P"
+    Then the current database should be the default database
+
+  # Project-Specific History Scenario
+
+  Scenario: Project-specific history workflow
+    Given I am in directory "~/projectA"
+    And I have executed "echo 'setup task'" in the default database
+    When I run "shy fc -p ~/projectA/.shy_history.db"
+    And I execute "git status"
+    And I execute "make build"
+    Then "~/projectA/.shy_history.db" should contain "git status"
+    And "~/projectA/.shy_history.db" should contain "make build"
+    And "~/projectA/.shy_history.db" should not contain "echo 'setup task'"
+    When I run "shy fc -P"
+    Then the current database should be the default database
+    And I can search for "echo 'setup task'"
+
+  # Temporary Clean History Scenario
+
+  Scenario: Recording demo commands with temporary history
+    Given I have a history with multiple commands
+    When I run "shy fc -p /tmp/demo_history.db"
+    And I execute "echo 'Step 1: Install'"
+    And I execute "echo 'Step 2: Configure'"
+    And I execute "echo 'Step 3: Run'"
+    Then "/tmp/demo_history.db" should only contain the 3 demo commands
+    When I run "shy fc -W /tmp/demo_commands.txt"
+    Then "/tmp/demo_commands.txt" should contain the demo commands
+    When I run "shy fc -P"
+    Then the current database should be the default database
+    And the default database should not contain the demo commands
+
+  # Edge Cases
+
+  Scenario: Pop when no previous database exists (error case)
+    Given no push operations have been performed
+    When I run "shy fc -P"
+    Then the command should fail with exit code 1
+    And the error should mention "no previous database to pop"
+    And the current database should still be the default database
+
+  Scenario: Pop at the bottom of stack (no-op)
+    Given I am using the default database
+    When I run "shy fc -P"
+    Then the command should fail with exit code 1
+    And the current database should still be the default database
+
+  Scenario: Push to same database path twice
+    When I run "shy fc -p /tmp/test.db"
+    And I execute "echo 'first context'"
+    And I run "shy fc -P"
+    And I run "shy fc -p /tmp/test.db"
+    Then the current database should be "/tmp/test.db"
+    And "/tmp/test.db" should still contain "echo 'first context'"
+
+  Scenario: Push to relative path
+    Given I am in directory "/home/user/project"
+    When I run "shy fc -p ./local_history"
+    Then the current database should be "/home/user/project/local_history.db"
+
+  Scenario: Push creates new database if it doesn't exist
+    Given "/tmp/new_db.db" does not exist
+    When I run "shy fc -p /tmp/new_db.db"
+    Then "/tmp/new_db.db" should be created
+    And the current database should be "/tmp/new_db.db"
+
+  # Session File Management
+
+  Scenario: Verify session file stack structure
+    Given I am using the default database
+    When I run "shy fc -p /tmp/db1.db"
+    Then the session file should have 2 lines
+    And the session file should contain "/tmp/db1.db" on line 1
+    And the session file should contain the default database on line 2
+    When I run "shy fc -p /tmp/db2.db"
+    Then the session file should have 3 lines
+    And the session file should contain "/tmp/db2.db" on line 1
+    And the session file should contain "/tmp/db1.db" on line 2
+    And the session file should contain the default database on line 3
+
+  Scenario: Pop removes line from session file
+    Given I have pushed to "/tmp/test.db"
+    And the session file has 2 lines
+    When I run "shy fc -P"
+    Then the session file should have 1 line
+    And the session file should contain only the default database
+
+  Scenario: Multiple pops progressively shrink session file
+    Given I have pushed to "/tmp/db1.db"
+    And I have pushed to "/tmp/db2.db"
+    And the session file has 3 lines
+    When I run "shy fc -P"
+    Then the session file should have 2 lines
+    When I run "shy fc -P"
+    Then the session file should have 1 line
+
+  # Error Handling
+
+  Scenario: Push to invalid path (permission denied)
+    When I run "shy fc -p /root/restricted.db"
+    Then the command should fail
+    And the error should mention "permission denied" or "cannot create"
+    And the current database should still be the default database
+
+  Scenario: Push with empty filename
+    When I run "shy fc -p ''"
+    Then the command should fail
+    And the current database should still be the default database
+
+  Scenario: Corrupted session file
+    Given the session file has corrupted content
+    When I run "shy fc -P"
+    Then the command should fail gracefully
+    And the error should mention "session" or "invalid"
+
+  # Database Resolution
+
+  Scenario: Shy commands use session file for current database
+    Given I have pushed to "/tmp/project.db"
+    When I run any shy command
+    Then it should automatically use "/tmp/project.db" based on my shell's PPID
+
+  Scenario: Shy commands use default database when no session file exists
+    Given no session file exists for my PPID
+    When I run any shy command
+    Then it should use the default database
+
+  # Integration with Other fc Commands
+
+  Scenario: Write history from pushed database
+    Given I have pushed to "/tmp/demo.db"
+    And I have executed several commands
+    When I run "shy fc -W /tmp/output.txt"
+    Then "/tmp/output.txt" should contain commands from "/tmp/demo.db"
+    And "/tmp/output.txt" should not contain commands from the default database
+
+  Scenario: Read history into pushed database
+    Given I have a file "/tmp/commands.txt" with test commands
+    When I run "shy fc -p /tmp/new.db"
+    And I run "shy fc -R /tmp/commands.txt"
+    Then "/tmp/new.db" should contain the commands from "/tmp/commands.txt"
+    And the default database should not contain those commands
+
+  # Session Isolation
+
+  Scenario: Stack is isolated per shell session
+    Given I am in shell session A with PPID 1000
+    And I run "shy fc -p /tmp/sessionA.db"
+    When I start a new shell session B with PPID 2000
+    Then session B should use the default database
+    And session B should not see session A's stack
+
+  Scenario: Different sessions maintain independent stacks
+    Given shell session A has pushed to "/tmp/sessionA.db"
+    And shell session B has pushed to "/tmp/sessionB.db"
+    Then session A's file should contain "/tmp/sessionA.db"
+    And session B's file should contain "/tmp/sessionB.db"
+    And the session files should be different files
+
+  # Argument Validation
+
+  Scenario: Push ignores histsize and savehistsize arguments
+    When I run "shy fc -p /tmp/test.db 1000 500"
+    Then the command should succeed
+    And the histsize and savehistsize arguments should be ignored
+    And the current database should be "/tmp/test.db"
+
+  Scenario: Push with -a flag (auto-pop) is not supported
+    When I run "shy fc -p -a /tmp/test.db"
+    Then the command should fail or ignore the -a flag
+    And the error should mention "-a flag not supported" or similar
+
+  # Session Cleanup
+
+  Scenario: Cleanup session file on shell exit
+    Given I have pushed to "/tmp/test.db"
+    And the session file exists for my PPID
+    When I run "shy cleanup-session $$"
+    Then the session file should be deleted
+    And no error should occur
+
+  Scenario: Cleanup non-existent session file (no-op)
+    Given no session file exists for my PPID
+    When I run "shy cleanup-session $$"
+    Then the command should succeed
+    And no error should occur
+
+  Scenario: zshexit hook cleans up session
+    Given I have pushed to "/tmp/test.db"
+    When the shell exits and zshexit hook runs
+    Then the session file should be automatically deleted
+
+  # Shell Integration
+
+  Scenario: Push succeeds without shell wrapper
+    When I run "shy fc -p /tmp/new.db"
+    Then the command should succeed
+    And the session file should be updated
+    And no export statements should be output
+
+  Scenario: Pop succeeds without shell wrapper
+    Given I have pushed to "/tmp/temp.db"
+    When I run "shy fc -P"
+    Then the command should succeed
+    And the session file should be updated
+    And no export statements should be output
+
+  # PPID-based Session Tracking
+
+  Scenario: Session files use PPID as filename
+    Given my shell has PPID 12345
+    When I run "shy fc -p /tmp/test.db"
+    Then a session file should be created at "$XDG_CACHE_HOME/shy/sessions/12345.txt"
+
+  Scenario: Each shell process gets its own session file
+    Given shell A has PPID 10001
+    And shell B has PPID 10002
+    When both shells push databases
+    Then two separate session files should exist: "10001.txt" and "10002.txt"

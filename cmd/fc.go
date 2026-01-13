@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/chris/shy/internal/db"
+	"github.com/chris/shy/internal/session"
 	"github.com/chris/shy/pkg/models"
 )
 
@@ -64,6 +65,8 @@ var fcCmd = &cobra.Command{
 		cmd.Flags().Set("write-specified", fmt.Sprintf("%t", flags.writeSpecified))
 		cmd.Flags().Set("append", flags.appendFile)
 		cmd.Flags().Set("read", flags.readFile)
+		cmd.Flags().Set("push", flags.pushDB)
+		cmd.Flags().Set("pop", fmt.Sprintf("%t", flags.popDB))
 
 		// Run fc with parsed arguments
 		err = runFc(cmd, parsedArgs)
@@ -100,6 +103,8 @@ type fcFlags struct {
 	writeSpecified bool   // whether -W was specified (even without file)
 	appendFile     string // -A flag: append history to file
 	readFile       string // -R flag: read history from file
+	pushDB         string // -p flag: push current database, start using new one
+	popDB          bool   // -P flag: pop back to previous database
 	help           bool
 }
 
@@ -236,6 +241,14 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 				}
 				i++
 				flags.readFile = args[i]
+			case "-p", "--push":
+				if i+1 >= len(args) || strings.HasPrefix(args[i+1], "-") {
+					return nil, flags, nil, fmt.Errorf("-p requires a database path")
+				}
+				i++
+				flags.pushDB = args[i]
+			case "-P", "--pop":
+				flags.popDB = true
 			case "--db":
 				// Parent flag - save it to process later
 				if i+1 < len(args) {
@@ -266,13 +279,24 @@ func parseFcArgsAndFlags(args []string) ([]string, fcFlags, []string, error) {
 	if flags.readFile != "" {
 		fileOpCount++
 	}
+	if flags.pushDB != "" {
+		fileOpCount++
+	}
+	if flags.popDB {
+		fileOpCount++
+	}
 	if fileOpCount > 1 {
-		return nil, flags, nil, fmt.Errorf("cannot use -W, -A, or -R together")
+		return nil, flags, nil, fmt.Errorf("cannot use -W, -A, -R, -p, or -P together")
 	}
 
 	// Validate -s and -e are not used together
 	if flags.quickExec && flags.editor != "" {
 		return nil, flags, nil, fmt.Errorf("cannot use -s and -e together")
+	}
+
+	// Push/pop cannot be used with -l (list mode)
+	if (flags.pushDB != "" || flags.popDB) && flags.list {
+		return nil, flags, nil, fmt.Errorf("cannot use -p/-P with -l")
 	}
 
 	return positional, flags, parentFlags, nil
@@ -296,6 +320,8 @@ func addListModeFlags(cmd *cobra.Command) {
 func init() {
 	rootCmd.AddCommand(fcCmd)
 	fcCmd.Flags().BoolP("list", "l", false, "List commands instead of editing")
+	fcCmd.Flags().StringP("push", "p", "", "Push current database, start using new one")
+	fcCmd.Flags().BoolP("pop", "P", false, "Pop back to previous database")
 	addListModeFlags(fcCmd)
 	fcCmd.Flags().StringP("editor", "e", "", "Specify editor to use")
 	fcCmd.Flags().BoolP("quick-exec", "s", false, "Re-execute without editing")
@@ -327,6 +353,8 @@ func resetFcFlags(cmd *cobra.Command) {
 	cmd.Flags().Set("write-specified", "false")
 	cmd.Flags().Set("append", "")
 	cmd.Flags().Set("read", "")
+	cmd.Flags().Set("push", "")
+	cmd.Flags().Set("pop", "false")
 
 	// Clear the "changed" status for all flags so they don't appear as modified
 	cmd.Flags().Visit(func(f *pflag.Flag) {
@@ -420,10 +448,20 @@ func runFc(cmd *cobra.Command, args []string) error {
 	fcWriteSpecified, _ := cmd.Flags().GetBool("write-specified")
 	fcAppendFile, _ := cmd.Flags().GetString("append")
 	fcReadFile, _ := cmd.Flags().GetString("read")
+	fcPushDB, _ := cmd.Flags().GetString("push")
+	fcPopDB, _ := cmd.Flags().GetBool("pop")
 
 	// Handle -W without file path (no-op)
 	if fcWriteSpecified && fcWriteFile == "" {
 		return nil
+	}
+
+	// Handle push/pop operations (don't need database open)
+	if fcPushDB != "" {
+		return runPushMode(fcPushDB)
+	}
+	if fcPopDB {
+		return runPopMode()
 	}
 
 	// Open database
@@ -1088,5 +1126,24 @@ func readHistoryFromFile(filePath string, database *db.DB) error {
 		return fmt.Errorf("error reading file: %w", err)
 	}
 
+	return nil
+}
+
+// runPushMode handles -p flag: push current database to stack and switch to new one
+func runPushMode(newPath string) error {
+	ppid := os.Getppid()
+	if err := session.PushDatabase(ppid, newPath); err != nil {
+		return fmt.Errorf("failed to push database: %w", err)
+	}
+	return nil
+}
+
+// runPopMode handles -P flag: pop back to previous database
+func runPopMode() error {
+	ppid := os.Getppid()
+	_, err := session.PopDatabase(ppid)
+	if err != nil {
+		return fmt.Errorf("failed to pop database: %w", err)
+	}
 	return nil
 }

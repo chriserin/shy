@@ -81,12 +81,17 @@ __shy_precmd() {
 		timestamp=$(((__shy_cmd_start + 500) / 1000))  # Round to nearest second
 	fi
 
+	sessionfile="$XDG_CACHE_HOME/shy/sessions/$SHY_SESSION_PID.txt"
+
+	db=$(head -n 1 $sessionfile 2>/dev/null)
+
 	# Build shy insert command
 	local shy_args=(
 		"insert"
 		"--command" "$__shy_cmd"
 		"--dir" "$__shy_cmd_dir"
 		"--status" "$exit_status"
+		"--db" "$db"
 	)
 
 	# Add timestamp if available
@@ -152,6 +157,9 @@ __shy_session_close() {
 	# Execute shy close-session in background
 	# Use &! to disown the process so it continues even if shell exits
 	(shy "${shy_args[@]}" 2>/dev/null) &!
+
+	# Cleanup session file (for fc -p/-P stack management)
+	(shy cleanup-session $$ 2>/dev/null) &!
 }
 
 # Register hooks using zsh's standard hook system
