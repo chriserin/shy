@@ -102,6 +102,12 @@ shy/
   - `shy_match_prev_cmd`: Context-aware suggestions (matches after previous command)
   - `shy_pwd`: Directory-specific suggestions
   - `shy_session`: Session-specific suggestions
+- **fzf.zsh** (`shy init zsh --fzf`): fzf history widget integration
+  - Uses `shy fzf` command as data source
+  - Replaces fzf's default history widget
+  - Supports multi-select and automatic deduplication
+  - All filtering done interactively in fzf
+  - Bind with: `bindkey '^R' shy-fzf-history-widget`
 
 Configuration via environment variables:
 - `SHY_DISABLE=1` - Temporarily disable tracking
@@ -215,3 +221,12 @@ Default format: `{event_num} {timestamp} {elapsed} {command}`
   - `fc -l 5 10` or `history 5 10` - Prints 6 commands (IDs 5, 6, 7, 8, 9, 10) in chronological order (5 first, 10 last)
   - `fc -l -10` - Last 10 commands
 - Filtering: `--internal` (session only), `--local` (current dir), `--match` (pattern)
+
+### fzf Integration
+`cmd/fzf.go` provides `shy fzf` command for fzf history widget integration:
+- **Output format**: `event_number<TAB>command<NULL>` (tab-separated, null-terminated)
+- **Deduplication**: SQL-based (uses window functions, keeps most recent occurrence)
+- **Order**: Reverse chronological (most recent first)
+- **No options**: All filtering is done interactively within fzf itself
+- **Database method**: `GetCommandsForFzf()` in `internal/db/db.go` uses `ROW_NUMBER() OVER (PARTITION BY command_text)` for efficient deduplication
+- **Usage**: Data source for `shy-fzf-history-widget` in `cmd/integration_scripts/fzf.zsh`

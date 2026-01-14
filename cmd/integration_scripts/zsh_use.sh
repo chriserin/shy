@@ -13,32 +13,32 @@
 #   - Right Arrow: Complete with most recent matching command
 
 # Ctrl-R: Interactive history search
-_shy_shell_history() {
-  local selected
-
-  # Check if fzf is available
-  if command -v fzf &>/dev/null; then
-    # Use fzf for interactive selection
-    selected=$(shy list-all --fmt=timestamp,status,pwd,cmd | fzf --tac --no-sort \
-      --preview 'echo {}' \
-      --preview-window=up:3:wrap \
-      --height=40% \
-      --bind 'ctrl-y:execute-silent(echo -n {4..} | pbcopy)' |
-      awk -F'\t' '{print $4}')
-  else
-    # Fallback to basic completion
-    selected=$(shy list-all | fzf --tac --no-sort --height=40%)
-  fi
-
-  if [[ -n "$selected" ]]; then
-    BUFFER="$selected"
-    CURSOR=$#BUFFER
-  fi
-
-  zle reset-prompt
-}
-zle -N _shy_shell_history
-bindkey '^R' _shy_shell_history
+# _shy_shell_history() {
+#   local selected
+#
+#   # Check if fzf is available
+#   if command -v fzf &>/dev/null; then
+#     # Use fzf for interactive selection
+#     selected=$(shy list-all --fmt=timestamp,status,pwd,cmd | fzf --tac --no-sort \
+#       --preview 'echo {}' \
+#       --preview-window=up:3:wrap \
+#       --height=40% \
+#       --bind 'ctrl-y:execute-silent(echo -n {4..} | pbcopy)' |
+#       awk -F'\t' '{print $4}')
+#   else
+#     # Fallback to basic completion
+#     selected=$(shy list-all | fzf --tac --no-sort --height=40%)
+#   fi
+#
+#   if [[ -n "$selected" ]]; then
+#     BUFFER="$selected"
+#     CURSOR=$#BUFFER
+#   fi
+#
+#   zle reset-prompt
+# }
+# zle -N _shy_shell_history
+# bindkey '^R' _shy_shell_history
 
 # Up Arrow: Cycle through command history
 __shy_history_index=1
@@ -103,3 +103,7 @@ _shy_down_line_or_history() {
 zle -N _shy_down_line_or_history
 bindkey '^[[B' _shy_down_line_or_history # Standard down arrow
 bindkey '^[OB' _shy_down_line_or_history # Application mode down arrow
+
+alias history="shy history"
+alias fc="shy fc"
+alias r="shy fc -s"
