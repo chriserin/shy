@@ -564,6 +564,45 @@ func runListMode(cmd *cobra.Command, args []string, database *db.DB) error {
 		return err
 	}
 
+	// Detect if range arguments are in reverse order (e.g., "10 5" or "-5 -10")
+	autoReverse := false
+	if len(remainingArgs) == 2 {
+		// Try to parse both as numbers to check order
+		if num1, err1 := strconv.ParseInt(remainingArgs[0], 10, 64); err1 == nil {
+			if num2, err2 := strconv.ParseInt(remainingArgs[1], 10, 64); err2 == nil {
+				// Both are numbers
+				// For negative numbers, -5 is more recent than -10
+				// So -5 -10 is a reversed range (we want to go backwards in time)
+				// For positive numbers, 10 > 5 is reversed
+
+				// Get most recent to convert negative to absolute
+				mostRecent, err := database.GetMostRecentEventID()
+				if err == nil && mostRecent > 0 {
+					// Convert negative numbers to absolute event IDs
+					absNum1 := num1
+					if num1 < 0 {
+						absNum1 = mostRecent + num1 + 1
+						if absNum1 < 1 {
+							absNum1 = 1
+						}
+					}
+					absNum2 := num2
+					if num2 < 0 {
+						absNum2 = mostRecent + num2 + 1
+						if absNum2 < 1 {
+							absNum2 = 1
+						}
+					}
+					// Check if first > second in absolute terms
+					autoReverse = absNum1 > absNum2
+				} else {
+					// Fallback: just check if first > second
+					autoReverse = num1 > num2
+				}
+			}
+		}
+	}
+
 	// Parse range - list mode defaults to last 16 commands
 	first, last, err := parseHistoryRangeForList(remainingArgs, database)
 	if err != nil {
@@ -576,8 +615,8 @@ func runListMode(cmd *cobra.Command, args []string, database *db.DB) error {
 		return err
 	}
 
-	// Apply reverse if requested
-	if fcReverse {
+	// Apply reverse if requested via flag OR if range was specified in reverse order
+	if fcReverse || autoReverse {
 		reverseCommands(commands)
 	}
 
@@ -639,6 +678,42 @@ func runEditMode(cmd *cobra.Command, args []string, database *db.DB) error {
 	substitutions, remainingArgs, err := parseSubstitutions(args)
 	if err != nil {
 		return err
+	}
+
+	// Detect if range arguments are in reverse order - edit mode doesn't allow this
+	if len(remainingArgs) == 2 {
+		// Try to parse both as numbers to check order
+		if num1, err1 := strconv.ParseInt(remainingArgs[0], 10, 64); err1 == nil {
+			if num2, err2 := strconv.ParseInt(remainingArgs[1], 10, 64); err2 == nil {
+				// Both are numbers
+				// Get most recent to convert negative to absolute
+				mostRecent, err := database.GetMostRecentEventID()
+				if err == nil && mostRecent > 0 {
+					// Convert negative numbers to absolute event IDs
+					absNum1 := num1
+					if num1 < 0 {
+						absNum1 = mostRecent + num1 + 1
+						if absNum1 < 1 {
+							absNum1 = 1
+						}
+					}
+					absNum2 := num2
+					if num2 < 0 {
+						absNum2 = mostRecent + num2 + 1
+						if absNum2 < 1 {
+							absNum2 = 1
+						}
+					}
+					// Check if first > second in absolute terms (reversed range)
+					if absNum1 > absNum2 {
+						return fmt.Errorf("Error: fc: history events can't be executed backwards, aborted")
+					}
+				} else if num1 > num2 {
+					// Fallback: just check if first > second
+					return fmt.Errorf("Error: fc: history events can't be executed backwards, aborted")
+				}
+			}
+		}
 	}
 
 	// Parse range - edit mode defaults to last 1 command
@@ -918,6 +993,12 @@ func parseHistoryRange(args []string, database *db.DB, listMode bool) (int64, in
 				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg2)
 			}
 			last = matchID
+		}
+
+		// Normalize range: if first > last, swap them
+		// The database query expects first <= last
+		if first > last {
+			first, last = last, first
 		}
 
 	default:

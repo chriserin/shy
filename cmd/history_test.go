@@ -1298,3 +1298,165 @@ func TestHistory_InternalFlag(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 }
+
+// Test reversed range: history 10 5 should print IDs 10, 9, 8, 7, 6, 5 in that order
+func TestHistoryReversedRange(t *testing.T) {
+	// Given: I have 20 commands in my history with event IDs 1 through 20
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert 20 commands
+	for i := 1; i <= 20; i++ {
+		cmd := &models.Command{
+			CommandText: fmt.Sprintf("command_%d", i),
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400 + i),
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy history 10 5"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "10", "5", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: I should get 6 commands (IDs 10, 9, 8, 7, 6, 5)
+	assert.Len(t, lines, 6, "Should print 6 commands")
+
+	// And: They should be in reverse chronological order (10 first, 5 last)
+	assert.Contains(t, lines[0], "10")
+	assert.Contains(t, lines[0], "command_10")
+	assert.Contains(t, lines[1], "9")
+	assert.Contains(t, lines[1], "command_9")
+	assert.Contains(t, lines[2], "8")
+	assert.Contains(t, lines[2], "command_8")
+	assert.Contains(t, lines[3], "7")
+	assert.Contains(t, lines[3], "command_7")
+	assert.Contains(t, lines[4], "6")
+	assert.Contains(t, lines[4], "command_6")
+	assert.Contains(t, lines[5], "5")
+	assert.Contains(t, lines[5], "command_5")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test forward range: history 5 10 should print IDs 5, 6, 7, 8, 9, 10 in that order
+func TestHistoryForwardRange(t *testing.T) {
+	// Given: I have 20 commands in my history with event IDs 1 through 20
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert 20 commands
+	for i := 1; i <= 20; i++ {
+		cmd := &models.Command{
+			CommandText: fmt.Sprintf("command_%d", i),
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400 + i),
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy history 5 10"
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "5", "10", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: I should get 6 commands (IDs 5, 6, 7, 8, 9, 10)
+	assert.Len(t, lines, 6, "Should print 6 commands")
+
+	// And: They should be in chronological order (5 first, 10 last)
+	assert.Contains(t, lines[0], "5")
+	assert.Contains(t, lines[0], "command_5")
+	assert.Contains(t, lines[1], "6")
+	assert.Contains(t, lines[1], "command_6")
+	assert.Contains(t, lines[2], "7")
+	assert.Contains(t, lines[2], "command_7")
+	assert.Contains(t, lines[3], "8")
+	assert.Contains(t, lines[3], "command_8")
+	assert.Contains(t, lines[4], "9")
+	assert.Contains(t, lines[4], "command_9")
+	assert.Contains(t, lines[5], "10")
+	assert.Contains(t, lines[5], "command_10")
+
+	rootCmd.SetArgs(nil)
+}
+
+// Test reversed range with negative numbers: history -5 -10 should print last 5 to last 10 in reverse
+func TestHistoryReversedRangeNegative(t *testing.T) {
+	// Given: I have 20 commands in my history with event IDs 1 through 20
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert 20 commands
+	for i := 1; i <= 20; i++ {
+		cmd := &models.Command{
+			CommandText: fmt.Sprintf("command_%d", i),
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   int64(1704470400 + i),
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy history -5 -10"
+	// -5 means event 16 (20 - 5 + 1)
+	// -10 means event 11 (20 - 10 + 1)
+	// So this should print IDs 16, 15, 14, 13, 12, 11 in that order
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"history", "-5", "-10", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	// Then: I should get 6 commands (IDs 16, 15, 14, 13, 12, 11)
+	assert.Len(t, lines, 6, "Should print 6 commands")
+
+	// And: They should be in reverse chronological order (16 first, 11 last)
+	assert.Contains(t, lines[0], "16")
+	assert.Contains(t, lines[0], "command_16")
+	assert.Contains(t, lines[1], "15")
+	assert.Contains(t, lines[1], "command_15")
+	assert.Contains(t, lines[2], "14")
+	assert.Contains(t, lines[2], "command_14")
+	assert.Contains(t, lines[3], "13")
+	assert.Contains(t, lines[3], "command_13")
+	assert.Contains(t, lines[4], "12")
+	assert.Contains(t, lines[4], "command_12")
+	assert.Contains(t, lines[5], "11")
+	assert.Contains(t, lines[5], "command_11")
+
+	rootCmd.SetArgs(nil)
+}
