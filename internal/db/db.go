@@ -997,3 +997,142 @@ func (db *DB) GetCommandsForFzf(fn func(id int64, cmdText string) error) error {
 
 	return nil
 }
+
+// GetCommandWithContext returns a command along with surrounding commands from the same session
+// Returns (beforeCommands, targetCommand, afterCommands, error)
+// beforeCommands are in chronological order (oldest first)
+// afterCommands are in chronological order (oldest first)
+func (db *DB) GetCommandWithContext(id int64, contextSize int) ([]models.Command, *models.Command, []models.Command, error) {
+	// First, get the target command
+	targetCmd, err := db.GetCommand(id)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get target command: %w", err)
+	}
+
+	// If there's no source_pid, we can't filter by session
+	var beforeCommands []models.Command
+	var afterCommands []models.Command
+
+	if targetCmd.SourcePid == nil {
+		// No session info, just get commands by ID
+		beforeCommands, err = db.getCommandsByIDRange(id-int64(contextSize), id-1)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get before commands: %w", err)
+		}
+
+		afterCommands, err = db.getCommandsByIDRange(id+1, id+int64(contextSize))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get after commands: %w", err)
+		}
+	} else {
+		// Get commands from the same session
+		sessionPid := *targetCmd.SourcePid
+
+		// Get commands before (same session, ID < target, ordered by ID DESC, limit contextSize)
+		beforeQuery := `
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+			FROM commands
+			WHERE id < ? AND source_pid = ?
+			ORDER BY id DESC
+			LIMIT ?`
+
+		rows, err := db.conn.Query(beforeQuery, id, sessionPid, contextSize)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to query before commands: %w", err)
+		}
+
+		beforeCommands, err = db.scanCommands(rows)
+		rows.Close()
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to scan before commands: %w", err)
+		}
+
+		// Reverse beforeCommands to get chronological order (oldest first)
+		for i, j := 0, len(beforeCommands)-1; i < j; i, j = i+1, j-1 {
+			beforeCommands[i], beforeCommands[j] = beforeCommands[j], beforeCommands[i]
+		}
+
+		// Get commands after (same session, ID > target, ordered by ID ASC, limit contextSize)
+		afterQuery := `
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+			FROM commands
+			WHERE id > ? AND source_pid = ?
+			ORDER BY id ASC
+			LIMIT ?`
+
+		rows, err = db.conn.Query(afterQuery, id, sessionPid, contextSize)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to query after commands: %w", err)
+		}
+
+		afterCommands, err = db.scanCommands(rows)
+		rows.Close()
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to scan after commands: %w", err)
+		}
+	}
+
+	return beforeCommands, targetCmd, afterCommands, nil
+}
+
+// getCommandsByIDRange gets commands within an ID range (inclusive)
+func (db *DB) getCommandsByIDRange(startID, endID int64) ([]models.Command, error) {
+	if startID > endID {
+		return []models.Command{}, nil
+	}
+
+	query := `
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+		FROM commands
+		WHERE id >= ? AND id <= ?
+		ORDER BY id ASC`
+
+	rows, err := db.conn.Query(query, startID, endID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query commands by ID range: %w", err)
+	}
+	defer rows.Close()
+
+	return db.scanCommands(rows)
+}
+
+// scanCommands is a helper to scan multiple command rows
+func (db *DB) scanCommands(rows *sql.Rows) ([]models.Command, error) {
+	var commands []models.Command
+
+	for rows.Next() {
+		var cmd models.Command
+		var sourceActive *int64
+
+		err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
+		}
+
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}

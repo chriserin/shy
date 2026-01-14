@@ -70,6 +70,18 @@ ZSH_AUTOSUGGEST_STRATEGY=(shy_pwd)                 # Directory-specific suggesti
 ZSH_AUTOSUGGEST_STRATEGY=(shy_session)             # Current session only
 ```
 
+### television Integration (Optional)
+
+Browse your command history with [television](https://github.com/alexpasmantier/television), a fuzzy finder TUI:
+
+```bash
+# Generate the television channel configuration
+shy tv config > ~/.config/television/cable/shy-history.toml
+
+# Launch television with the shy channel
+tv shy
+```
+
 ### Configuration
 
 Control tracking behavior with environment variables:
