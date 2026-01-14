@@ -93,6 +93,13 @@ type listModeFlags struct {
 	local      bool
 }
 
+// HistoryRange represents a parsed history range with metadata
+type HistoryRange struct {
+	First       int64 // Normalized first ID (always <= Last for DB queries)
+	Last        int64 // Normalized last ID (always >= First for DB queries)
+	WasReversed bool  // True if user specified reverse order (e.g., "10 5" or "-5 -10")
+}
+
 // fcFlags holds parsed flag values for the fc command
 type fcFlags struct {
 	listModeFlags  // embed common flags
@@ -514,19 +521,19 @@ func runWriteMode(cmd *cobra.Command, args []string, database *db.DB, writeFile,
 	_ = substitutions // Not used in file operations
 
 	// Parse range - file operations default to ALL commands if no range specified
-	first, last, err := parseHistoryRangeForFileOp(remainingArgs, database)
+	histRange, err := parseHistoryRangeForFileOp(remainingArgs, database)
 	if err != nil {
 		return err
 	}
 
 	// Get commands from database with filters
-	commands, err := getCommandsWithFilters(database, first, last, fcPattern, fcInternal, true)
+	commands, err := getCommandsWithFilters(database, histRange.First, histRange.Last, fcPattern, fcInternal, true)
 	if err != nil {
 		return err
 	}
 
-	// Apply reverse if requested
-	if fcReverse {
+	// Apply reverse if requested via flag OR if range was specified in reverse order
+	if fcReverse || histRange.WasReversed {
 		reverseCommands(commands)
 	}
 
@@ -564,59 +571,20 @@ func runListMode(cmd *cobra.Command, args []string, database *db.DB) error {
 		return err
 	}
 
-	// Detect if range arguments are in reverse order (e.g., "10 5" or "-5 -10")
-	autoReverse := false
-	if len(remainingArgs) == 2 {
-		// Try to parse both as numbers to check order
-		if num1, err1 := strconv.ParseInt(remainingArgs[0], 10, 64); err1 == nil {
-			if num2, err2 := strconv.ParseInt(remainingArgs[1], 10, 64); err2 == nil {
-				// Both are numbers
-				// For negative numbers, -5 is more recent than -10
-				// So -5 -10 is a reversed range (we want to go backwards in time)
-				// For positive numbers, 10 > 5 is reversed
-
-				// Get most recent to convert negative to absolute
-				mostRecent, err := database.GetMostRecentEventID()
-				if err == nil && mostRecent > 0 {
-					// Convert negative numbers to absolute event IDs
-					absNum1 := num1
-					if num1 < 0 {
-						absNum1 = mostRecent + num1 + 1
-						if absNum1 < 1 {
-							absNum1 = 1
-						}
-					}
-					absNum2 := num2
-					if num2 < 0 {
-						absNum2 = mostRecent + num2 + 1
-						if absNum2 < 1 {
-							absNum2 = 1
-						}
-					}
-					// Check if first > second in absolute terms
-					autoReverse = absNum1 > absNum2
-				} else {
-					// Fallback: just check if first > second
-					autoReverse = num1 > num2
-				}
-			}
-		}
-	}
-
 	// Parse range - list mode defaults to last 16 commands
-	first, last, err := parseHistoryRangeForList(remainingArgs, database)
+	histRange, err := parseHistoryRangeForList(remainingArgs, database)
 	if err != nil {
 		return err
 	}
 
 	// Get commands from database with filters
-	commands, err := getCommandsWithFilters(database, first, last, fcPattern, fcInternal, false)
+	commands, err := getCommandsWithFilters(database, histRange.First, histRange.Last, fcPattern, fcInternal, false)
 	if err != nil {
 		return err
 	}
 
 	// Apply reverse if requested via flag OR if range was specified in reverse order
-	if fcReverse || autoReverse {
+	if fcReverse || histRange.WasReversed {
 		reverseCommands(commands)
 	}
 
@@ -680,64 +648,33 @@ func runEditMode(cmd *cobra.Command, args []string, database *db.DB) error {
 		return err
 	}
 
-	// Detect if range arguments are in reverse order - edit mode doesn't allow this
-	if len(remainingArgs) == 2 {
-		// Try to parse both as numbers to check order
-		if num1, err1 := strconv.ParseInt(remainingArgs[0], 10, 64); err1 == nil {
-			if num2, err2 := strconv.ParseInt(remainingArgs[1], 10, 64); err2 == nil {
-				// Both are numbers
-				// Get most recent to convert negative to absolute
-				mostRecent, err := database.GetMostRecentEventID()
-				if err == nil && mostRecent > 0 {
-					// Convert negative numbers to absolute event IDs
-					absNum1 := num1
-					if num1 < 0 {
-						absNum1 = mostRecent + num1 + 1
-						if absNum1 < 1 {
-							absNum1 = 1
-						}
-					}
-					absNum2 := num2
-					if num2 < 0 {
-						absNum2 = mostRecent + num2 + 1
-						if absNum2 < 1 {
-							absNum2 = 1
-						}
-					}
-					// Check if first > second in absolute terms (reversed range)
-					if absNum1 > absNum2 {
-						return fmt.Errorf("Error: fc: history events can't be executed backwards, aborted")
-					}
-				} else if num1 > num2 {
-					// Fallback: just check if first > second
-					return fmt.Errorf("Error: fc: history events can't be executed backwards, aborted")
-				}
-			}
-		}
-	}
-
 	// Parse range - edit mode defaults to last 1 command
-	first, last, err := parseHistoryRangeForEdit(remainingArgs, database)
+	histRange, err := parseHistoryRangeForEdit(remainingArgs, database)
 	if err != nil {
 		return err
 	}
 
+	// Edit mode doesn't allow reversed ranges
+	if histRange.WasReversed {
+		return fmt.Errorf("shy fc: history events can't be executed backwards, aborted")
+	}
+
 	// Delegate to existing edit-and-execute handler
-	return editAndExecuteMode(cmd, database, first, last, substitutions, fcPattern, fcInternal, fcEditor, fcQuickExec)
+	return editAndExecuteMode(cmd, database, histRange.First, histRange.Last, substitutions, fcPattern, fcInternal, fcEditor, fcQuickExec)
 }
 
 // parseHistoryRangeForFileOp parses range for file operations (defaults to ALL commands)
-func parseHistoryRangeForFileOp(args []string, database *db.DB) (int64, int64, error) {
+func parseHistoryRangeForFileOp(args []string, database *db.DB) (HistoryRange, error) {
 	// If no range specified, export ALL commands
 	if len(args) == 0 {
 		mostRecent, err := database.GetMostRecentEventID()
 		if err != nil {
-			return 0, 0, fmt.Errorf("failed to get most recent event: %w", err)
+			return HistoryRange{}, fmt.Errorf("failed to get most recent event: %w", err)
 		}
 		if mostRecent == 0 {
-			return 0, -1, nil // Empty database
+			return HistoryRange{First: 0, Last: -1, WasReversed: false}, nil
 		}
-		return 1, mostRecent, nil
+		return HistoryRange{First: 1, Last: mostRecent, WasReversed: false}, nil
 	}
 
 	// Otherwise use normal list mode parsing
@@ -745,12 +682,12 @@ func parseHistoryRangeForFileOp(args []string, database *db.DB) (int64, int64, e
 }
 
 // parseHistoryRangeForList parses range for list mode (defaults to last 16)
-func parseHistoryRangeForList(args []string, database *db.DB) (int64, int64, error) {
+func parseHistoryRangeForList(args []string, database *db.DB) (HistoryRange, error) {
 	return parseHistoryRange(args, database, true)
 }
 
 // parseHistoryRangeForEdit parses range for edit mode (defaults to last 1)
-func parseHistoryRangeForEdit(args []string, database *db.DB) (int64, int64, error) {
+func parseHistoryRangeForEdit(args []string, database *db.DB) (HistoryRange, error) {
 	return parseHistoryRange(args, database, false)
 }
 
@@ -860,22 +797,49 @@ func applySubstitutions(text string, subs []substitution) string {
 	return result
 }
 
+// parseEventID converts an argument (number, negative, or string) to an absolute event ID
+func parseEventID(arg string, mostRecent int64, database *db.DB) (int64, error) {
+	if num, err := strconv.ParseInt(arg, 10, 64); err == nil {
+		// It's a number
+		if num < 0 {
+			// Convert negative to absolute
+			eventID := mostRecent + num + 1
+			if eventID < 1 {
+				eventID = 1
+			}
+			return eventID, nil
+		}
+		return num, nil
+	}
+
+	// It's a string: find most recent match
+	matchID, err := database.FindMostRecentMatching(arg)
+	if err != nil {
+		return 0, err
+	}
+	if matchID == 0 {
+		return 0, fmt.Errorf("shy fc: event not found: %s", arg)
+	}
+	return matchID, nil
+}
+
 // parseHistoryRange parses the first and last arguments for history/fc commands
-// Returns (first_id, last_id, error)
+// Returns HistoryRange with normalized range and reversal metadata
 // listMode: true for list mode (fc -l), false for edit mode (fc without -l)
-func parseHistoryRange(args []string, database *db.DB, listMode bool) (int64, int64, error) {
+func parseHistoryRange(args []string, database *db.DB, listMode bool) (HistoryRange, error) {
 	// Get the most recent event ID
 	mostRecent, err := database.GetMostRecentEventID()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get most recent event: %w", err)
+		return HistoryRange{}, fmt.Errorf("failed to get most recent event: %w", err)
 	}
 
 	// If no commands in database, return empty range
 	if mostRecent == 0 {
-		return 0, -1, nil // Invalid range that will return no results
+		return HistoryRange{First: 0, Last: -1, WasReversed: false}, nil
 	}
 
 	var first, last int64
+	var wasReversed bool
 
 	switch len(args) {
 	case 0:
@@ -892,120 +856,58 @@ func parseHistoryRange(args []string, database *db.DB, listMode bool) (int64, in
 			first = mostRecent
 		}
 		last = mostRecent
+		wasReversed = false
 
 	case 1:
 		// One argument
-		arg := args[0]
-		if num, err := strconv.ParseInt(arg, 10, 64); err == nil {
-			// It's a number
-			if num < 0 {
-				// Negative number: convert to event ID
-				eventID := mostRecent + num + 1
-				if eventID < 1 {
-					eventID = 1
-				}
-				first = eventID
-				// Behavior depends on mode
-				if listMode {
-					// List mode: from event to most recent
-					last = mostRecent
-				} else {
-					// Edit mode: just edit that event
-					last = eventID
-				}
-			} else {
-				// Positive number: behavior depends on mode
-				if listMode {
-					// List mode: from event num to most recent
-					first = num
-					last = mostRecent
-				} else {
-					// Edit mode: just edit event num
-					first = num
-					last = num
-				}
-			}
-		} else {
-			// It's a string: find most recent match
-			matchID, err := database.FindMostRecentMatching(arg)
-			if err != nil {
-				return 0, 0, err
-			}
-			if matchID == 0 {
-				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg)
-			}
-			first = matchID
-			if listMode {
-				// List mode: from matched event to most recent
-				last = mostRecent
-			} else {
-				// Edit mode: just edit the matched event
-				last = matchID
-			}
+		eventID, err := parseEventID(args[0], mostRecent, database)
+		if err != nil {
+			return HistoryRange{}, err
 		}
+
+		first = eventID
+		if listMode {
+			// List mode: from event to most recent
+			last = mostRecent
+		} else {
+			// Edit mode: just edit that event
+			last = eventID
+		}
+		wasReversed = false
 
 	case 2:
-		// Two arguments
-		arg1 := args[0]
-		arg2 := args[1]
-
-		// Parse first argument
-		if num, err := strconv.ParseInt(arg1, 10, 64); err == nil {
-			// First is a number
-			if num < 0 {
-				first = mostRecent + num + 1
-				if first < 1 {
-					first = 1
-				}
-			} else {
-				first = num
-			}
-		} else {
-			// First is a string: find most recent match
-			matchID, err := database.FindMostRecentMatching(arg1)
-			if err != nil {
-				return 0, 0, err
-			}
-			if matchID == 0 {
-				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg1)
-			}
-			first = matchID
+		// Two arguments - parse both
+		firstRaw, err := parseEventID(args[0], mostRecent, database)
+		if err != nil {
+			return HistoryRange{}, err
 		}
 
-		// Parse second argument
-		if num, err := strconv.ParseInt(arg2, 10, 64); err == nil {
-			// Second is a number
-			if num < 0 {
-				last = mostRecent + num + 1
-				if last < 1 {
-					last = 1
-				}
-			} else {
-				last = num
-			}
-		} else {
-			// Second is a string: find most recent match before first
-			matchID, err := database.FindMostRecentMatchingBefore(arg2, mostRecent)
-			if err != nil {
-				return 0, 0, err
-			}
-			if matchID == 0 {
-				return 0, 0, fmt.Errorf("shy fc: event not found: %s", arg2)
-			}
-			last = matchID
+		lastRaw, err := parseEventID(args[1], mostRecent, database)
+		if err != nil {
+			return HistoryRange{}, err
 		}
 
-		// Normalize range: if first > last, swap them
-		// The database query expects first <= last
-		if first > last {
-			first, last = last, first
+		// Detect if range was specified in reverse order
+		wasReversed = firstRaw > lastRaw
+
+		// Normalize range: database queries expect first <= last
+		if wasReversed {
+			first = lastRaw
+			last = firstRaw
+		} else {
+			first = firstRaw
+			last = lastRaw
 		}
 
 	default:
-		return 0, 0, fmt.Errorf("shy fc: too many arguments")
+		return HistoryRange{}, fmt.Errorf("shy fc: too many arguments")
 	}
 
-	return first, last, nil
+	return HistoryRange{
+		First:       first,
+		Last:        last,
+		WasReversed: wasReversed,
+	}, nil
 }
 
 // extendedHistoryRegex matches zsh extended history format: ": timestamp:duration;command"
@@ -1060,7 +962,7 @@ func writeHistoryToFile(filePath string, commands []models.Command) error {
 	// Open file for writing (overwrites if exists)
 	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
-		return fmt.Errorf("fc: cannot write %s: %w", filePath, err)
+		return fmt.Errorf("shy fc: cannot write %s: %w", filePath, err)
 	}
 	defer file.Close()
 
@@ -1124,12 +1026,12 @@ func readHistoryFromFile(filePath string, database *db.DB) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("fc: cannot read %s: no such file or directory", filePath)
+			return fmt.Errorf("shy fc: cannot read %s: no such file or directory", filePath)
 		}
 		if os.IsPermission(err) {
-			return fmt.Errorf("fc: cannot read %s: permission denied", filePath)
+			return fmt.Errorf("shy fc: cannot read %s: permission denied", filePath)
 		}
-		return fmt.Errorf("fc: cannot read %s: %w", filePath, err)
+		return fmt.Errorf("shy fc: cannot read %s: %w", filePath, err)
 	}
 	defer file.Close()
 

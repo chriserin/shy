@@ -27,7 +27,7 @@ func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 
 	// 1. Validate range (backwards check)
 	if first > last {
-		return fmt.Errorf("Error: fc: history events can't be executed backwards, aborted")
+		return fmt.Errorf("shy fc: history events can't be executed backwards, aborted")
 	}
 
 	// 2. Get commands from database (respect pattern/internal filters)
@@ -58,7 +58,7 @@ func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 
 	// 3. Check if no commands found - use feat file error message
 	if len(commands) == 0 {
-		return fmt.Errorf("Error: fc: current history line would recurse endlessly, aborted")
+		return fmt.Errorf("shy fc: current history line would recurse endlessly, aborted")
 	}
 
 	// 4. Check for recursive fc (trying to execute fc itself)
@@ -67,7 +67,7 @@ func editAndExecuteMode(cmd *cobra.Command, database *db.DB, first, last int64,
 		// Check for various invocations: "fc", "shy fc", "./shy fc", "/path/to/shy fc", etc.
 		if trimmed == "fc" || strings.HasPrefix(trimmed, "fc ") ||
 			strings.HasPrefix(trimmed, "shy fc") || strings.Contains(trimmed, "/shy fc") {
-			return fmt.Errorf("Error: fc: current history line would recurse endlessly, aborted")
+			return fmt.Errorf("shy fc: current history line would recurse endlessly, aborted")
 		}
 	}
 
@@ -293,7 +293,7 @@ func executeCommands(database *db.DB, commands []string) error {
 
 	if err != nil {
 		// Non-fatal: print warning but don't fail
-		fmt.Fprintf(os.Stderr, "fc: warning: failed to add to history: %v\n", err)
+		fmt.Fprintf(os.Stderr, "shy fc: warning: failed to add to history: %v\n", err)
 	}
 
 	return nil
