@@ -30,18 +30,14 @@ All filtering is done interactively within fzf.`,
 		}
 		defer database.Close()
 
-		// Get all commands with SQL-based deduplication
-		entries, err := database.GetCommandsForFzf()
-		if err != nil {
-			return err
-		}
-
+		// Stream commands with SQL-based deduplication
 		// Output: event_number<TAB>command<NULL>
-		for _, entry := range entries {
-			fmt.Fprintf(cmd.OutOrStdout(), "%d\t%s\000", entry.ID, entry.CommandText)
-		}
+		err = database.GetCommandsForFzf(func(id int64, cmdText string) error {
+			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%d\t%s\000", id, cmdText)
+			return err
+		})
 
-		return nil
+		return err
 	},
 }
 

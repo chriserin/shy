@@ -956,16 +956,10 @@ func (db *DB) LikeRecentAfter(opts LikeRecentAfterOptions) ([]string, error) {
 	return results, nil
 }
 
-// FzfEntry represents a simplified command entry for fzf integration
-type FzfEntry struct {
-	ID          int64
-	CommandText string
-}
-
 // GetCommandsForFzf retrieves commands optimized for fzf integration
-// Returns deduplicated entries in reverse chronological order (most recent first)
+// Calls fn for each deduplicated entry in reverse chronological order (most recent first)
 // Uses SQL window functions to deduplicate by command_text, keeping only the most recent occurrence
-func (db *DB) GetCommandsForFzf() ([]FzfEntry, error) {
+func (db *DB) GetCommandsForFzf(fn func(id int64, cmdText string) error) error {
 	// Use window function to get only the most recent occurrence of each command
 	// ROW_NUMBER() OVER (PARTITION BY command_text ORDER BY id DESC) assigns 1 to the most recent
 	query := `
@@ -980,22 +974,26 @@ func (db *DB) GetCommandsForFzf() ([]FzfEntry, error) {
 
 	rows, err := db.conn.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query commands for fzf: %w", err)
+		return fmt.Errorf("failed to query commands for fzf: %w", err)
 	}
 	defer rows.Close()
 
-	var entries []FzfEntry
 	for rows.Next() {
-		var entry FzfEntry
-		if err := rows.Scan(&entry.ID, &entry.CommandText); err != nil {
-			return nil, fmt.Errorf("failed to scan fzf entry: %w", err)
+		var id int64
+		var cmdText string
+		if err := rows.Scan(&id, &cmdText); err != nil {
+			return fmt.Errorf("failed to scan fzf entry: %w", err)
 		}
-		entries = append(entries, entry)
+
+		// Call the provided function for each entry
+		if err := fn(id, cmdText); err != nil {
+			return err
+		}
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating fzf entries: %w", err)
+		return fmt.Errorf("error iterating fzf entries: %w", err)
 	}
 
-	return entries, nil
+	return nil
 }
