@@ -283,3 +283,113 @@ func TestScenario7_InsertVeryLongCommand(t *testing.T) {
 	assert.Len(t, retrievedCmd.CommandText, 1000, "command text should be 1000 characters")
 	assert.Equal(t, longCmd, retrievedCmd.CommandText, "command text should match exactly")
 }
+
+// TestGetCommandsByDateRange tests retrieving commands within a timestamp range
+func TestGetCommandsByDateRange(t *testing.T) {
+	// Given: the shy database exists with commands at different timestamps
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	database, err := New(dbPath)
+	require.NoError(t, err, "failed to create database")
+	defer database.Close()
+
+	// Insert commands with timestamps representing 2026-01-14
+	// Morning: 8:00 AM (timestamp: 1736841600)
+	cmd1 := models.NewCommand("git status", "/home/user/projects/shy", 0)
+	cmd1.Timestamp = 1736841600
+	_, err = database.InsertCommand(cmd1)
+	require.NoError(t, err, "failed to insert command 1")
+
+	// Morning: 9:00 AM (timestamp: 1736845200)
+	cmd2 := models.NewCommand("go build", "/home/user/projects/shy", 0)
+	cmd2.Timestamp = 1736845200
+	_, err = database.InsertCommand(cmd2)
+	require.NoError(t, err, "failed to insert command 2")
+
+	// Afternoon: 2:00 PM (timestamp: 1736863200)
+	cmd3 := models.NewCommand("go test", "/home/user/projects/shy", 0)
+	cmd3.Timestamp = 1736863200
+	_, err = database.InsertCommand(cmd3)
+	require.NoError(t, err, "failed to insert command 3")
+
+	// Next day: 2026-01-15 8:00 AM (timestamp: 1736928000)
+	cmd4 := models.NewCommand("git pull", "/home/user/projects/shy", 0)
+	cmd4.Timestamp = 1736928000
+	_, err = database.InsertCommand(cmd4)
+	require.NoError(t, err, "failed to insert command 4")
+
+	// When: I query commands for 2026-01-14 (start: 1736812800, end: 1736899200)
+	startOfDay := int64(1736812800) // 2026-01-14 00:00:00 UTC
+	endOfDay := int64(1736899200)   // 2026-01-15 00:00:00 UTC
+	commands, err := database.GetCommandsByDateRange(startOfDay, endOfDay)
+	require.NoError(t, err, "failed to get commands by date range")
+
+	// Then: should return only the 3 commands from 2026-01-14
+	assert.Len(t, commands, 3, "should have 3 commands from 2026-01-14")
+
+	// And: commands should be ordered by timestamp ascending
+	assert.Equal(t, "git status", commands[0].CommandText)
+	assert.Equal(t, int64(1736841600), commands[0].Timestamp)
+
+	assert.Equal(t, "go build", commands[1].CommandText)
+	assert.Equal(t, int64(1736845200), commands[1].Timestamp)
+
+	assert.Equal(t, "go test", commands[2].CommandText)
+	assert.Equal(t, int64(1736863200), commands[2].Timestamp)
+}
+
+// TestGetCommandsByDateRange_EmptyResult tests querying when no commands exist in range
+func TestGetCommandsByDateRange_EmptyResult(t *testing.T) {
+	// Given: the shy database exists with no commands
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	database, err := New(dbPath)
+	require.NoError(t, err, "failed to create database")
+	defer database.Close()
+
+	// When: I query commands for any date range
+	startOfDay := int64(1736812800)
+	endOfDay := int64(1736899200)
+	commands, err := database.GetCommandsByDateRange(startOfDay, endOfDay)
+	require.NoError(t, err, "failed to get commands by date range")
+
+	// Then: should return empty slice
+	assert.Empty(t, commands, "should return empty slice when no commands in range")
+}
+
+// TestGetCommandsByDateRange_BoundaryConditions tests exact boundary matching
+func TestGetCommandsByDateRange_BoundaryConditions(t *testing.T) {
+	// Given: the shy database exists with commands at boundary times
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+	database, err := New(dbPath)
+	require.NoError(t, err, "failed to create database")
+	defer database.Close()
+
+	// Insert command exactly at start time
+	cmdStart := models.NewCommand("at start", "/home/user", 0)
+	cmdStart.Timestamp = 1736812800 // Exactly 00:00:00
+	_, err = database.InsertCommand(cmdStart)
+	require.NoError(t, err, "failed to insert command at start")
+
+	// Insert command exactly at end time
+	cmdEnd := models.NewCommand("at end", "/home/user", 0)
+	cmdEnd.Timestamp = 1736899200 // Exactly 00:00:00 next day
+	_, err = database.InsertCommand(cmdEnd)
+	require.NoError(t, err, "failed to insert command at end")
+
+	// Insert command one second before end
+	cmdBeforeEnd := models.NewCommand("before end", "/home/user", 0)
+	cmdBeforeEnd.Timestamp = 1736899199 // 23:59:59
+	_, err = database.InsertCommand(cmdBeforeEnd)
+	require.NoError(t, err, "failed to insert command before end")
+
+	// When: I query with range [start, end)
+	commands, err := database.GetCommandsByDateRange(1736812800, 1736899200)
+	require.NoError(t, err, "failed to get commands by date range")
+
+	// Then: should include start time (inclusive) but exclude end time (exclusive)
+	assert.Len(t, commands, 2, "should include start and before-end, but not end")
+	assert.Equal(t, "at start", commands[0].CommandText)
+	assert.Equal(t, "before end", commands[1].CommandText)
+}
