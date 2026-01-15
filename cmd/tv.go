@@ -19,16 +19,16 @@ func init() {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 }
 
-// Styles for TV preview
+// Styles for TV preview (matching television theme palette)
 var (
-	labelStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))  // Cyan
-	valueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("255")) // White
-	eventStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("214")) // Orange
-	successStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))  // Green
-	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))   // Red
-	gitStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("141")) // Purple
-	contextStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("242")) // Gray
-	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Dark gray
+	labelStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // bright-blue (text_fg, result_name_fg)
+	valueStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("15")) // white (result_value_fg)
+	eventStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // bright-yellow (result_line_number_fg)
+	successStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // bright-green (selection_fg)
+	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // bright-red (match_fg)
+	gitStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("13")) // bright-magenta (preview_title_fg)
+	contextStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("15")) // white (dimmed_text_fg)
+	separatorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))  // bright-black (border_fg)
 )
 
 var tvCmd = &cobra.Command{
@@ -136,7 +136,7 @@ requirements = ["shy"]
 [source]
 command = "shy tv list"
 display = "{split:\t:1}"
-output = "{split:\t:0}"
+output = "{split:\t:1}"
 
 [preview]
 command = "shy tv preview '{split:\t:0}'"
@@ -161,10 +161,10 @@ func displayCommandWithContext(w interface{ Write([]byte) (int, error) }, before
 		}
 	}
 
-	// Display this command in simple format (highlighted)
+	// Display this command in simple format (highlighted with selection color)
 	fmt.Fprintf(w, "  %s %s\n",
-		eventStyle.Render(fmt.Sprintf("%d", targetCmd.ID)),
-		valueStyle.Render(targetCmd.CommandText))
+		successStyle.Render(fmt.Sprintf("%d", targetCmd.ID)),
+		successStyle.Render(targetCmd.CommandText))
 
 	// Display commands after (if any)
 	if len(afterCmds) > 0 {

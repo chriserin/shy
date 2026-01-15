@@ -33,7 +33,7 @@ func TestTVConfig(t *testing.T) {
 	require.Contains(t, output, "[source]")
 	require.Contains(t, output, `command = "shy tv list"`)
 	require.Contains(t, output, `display = "{split:\t:1}"`)
-	require.Contains(t, output, `output = "{split:\t:0}"`)
+	require.Contains(t, output, `output = "{split:\t:1}"`)
 
 	require.Contains(t, output, "[preview]")
 	require.Contains(t, output, `command = "shy tv preview '{split:\t:0}'"`)
@@ -264,8 +264,9 @@ func TestDisplaySimpleCommand(t *testing.T) {
 	// Output now includes ANSI color codes
 	require.Contains(t, output, "42")
 	require.Contains(t, output, "test command")
-	// Verify it has the gray color code (242)
-	require.Contains(t, output, "38;5;242")
+	// Verify it has color codes (white can be rendered as 38;5;15 or 97)
+	hasColor := strings.Contains(output, "38;5;15") || strings.Contains(output, "\x1b[97m")
+	require.True(t, hasColor, "Output should contain white color codes")
 }
 
 func TestFormatDurationHuman(t *testing.T) {
