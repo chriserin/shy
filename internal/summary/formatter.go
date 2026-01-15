@@ -110,7 +110,7 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 				// If --all-commands, show each command with timestamp
 				if opts.AllCommands {
 					for _, cmd := range bucket.Commands {
-						timestamp := time.Unix(cmd.Timestamp, 0).Format("15:04:05")
+						timestamp := time.Unix(cmd.Timestamp, 0).Format("3:04pm")
 						output.WriteString(fmt.Sprintf("      %s  %s\n", timestamp, cmd.CommandText))
 					}
 				}

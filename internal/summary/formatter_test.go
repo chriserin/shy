@@ -53,8 +53,8 @@ func TestFormatSummary_SingleContext(t *testing.T) {
 	assert.Contains(t, output, "Morning")
 
 	// And: should contain commands with timestamps
-	assert.Contains(t, output, "09:00:00  git status")
-	assert.Contains(t, output, "10:00:00  go build")
+	assert.Contains(t, output, "9:00am  git status")
+	assert.Contains(t, output, "10:00am  go build")
 
 	// And: should contain statistics
 	assert.Contains(t, output, "Total commands: 2")
@@ -98,8 +98,8 @@ func TestFormatSummary_WithoutAllCommands(t *testing.T) {
 	assert.Contains(t, output, "2 commands")
 
 	// But: should NOT show individual commands
-	assert.NotContains(t, output, "09:00:00  git status")
-	assert.NotContains(t, output, "10:00:00  go build")
+	assert.NotContains(t, output, "9:00am  git status")
+	assert.NotContains(t, output, "10:00am  go build")
 }
 
 // TestFormatSummary_MultipleContexts tests formatting with multiple contexts
@@ -367,9 +367,9 @@ func TestFormatSummary_TimeRangeFormatting(t *testing.T) {
 	// Then: should show time range in 12-hour format
 	assert.Contains(t, output, "Morning (8:23am - 11:47am)")
 
-	// And: should show timestamps in HH:MM:SS format
-	assert.Contains(t, output, "08:23:15  first")
-	assert.Contains(t, output, "11:47:30  last")
+	// And: should show timestamps in 12-hour format without seconds
+	assert.Contains(t, output, "8:23am  first")
+	assert.Contains(t, output, "11:47am  last")
 }
 
 // TestFormatSummary_SingleCommandTimeRange tests single command time display
