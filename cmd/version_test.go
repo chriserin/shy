@@ -19,7 +19,7 @@ func TestVersionCommand(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "shy version", "should contain 'shy version'")
-	assert.Contains(t, output, Version, "should contain version number")
+	assert.Contains(t, output, ShyVersion, "should contain version number")
 
 	rootCmd.SetArgs(nil)
 }
@@ -35,7 +35,7 @@ func TestVersionFlag(t *testing.T) {
 
 	output := buf.String()
 	assert.Contains(t, output, "shy version", "should contain 'shy version'")
-	assert.Contains(t, output, Version, "should contain version number")
+	assert.Contains(t, output, ShyVersion, "should contain version number")
 
 	rootCmd.SetArgs(nil)
 }

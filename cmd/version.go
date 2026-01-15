@@ -7,14 +7,14 @@ import (
 )
 
 // Version is the current version of shy
-const Version = "0.1.0"
+const ShyVersion = "0.1.1"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number of shy",
 	Long:  "Print the version number of shy",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(cmd.OutOrStdout(), "shy version %s\n", Version)
+		fmt.Fprintf(cmd.OutOrStdout(), "shy version %s\n", ShyVersion)
 	},
 }
 

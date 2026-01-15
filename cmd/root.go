@@ -13,7 +13,7 @@ var rootCmd = &cobra.Command{
 	Use:     "shy",
 	Short:   "Shell history tracker",
 	Long:    "A command-line tool to track shell command history in SQLite",
-	Version: Version,
+	Version: ShyVersion,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// If --db flag was explicitly set, use that
 		if cmd.Flags().Changed("db") {

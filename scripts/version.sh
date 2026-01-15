@@ -14,10 +14,10 @@ VERSION_STRING=${VERSION#v}
 echo "Updating version to ${VERSION}..."
 
 # Update ShyVersion in main.go
-sed -i "s/var ShyVersion = \".*\"/var ShyVersion = \"${VERSION_STRING}\"/" main.go
+sed -i "s/var ShyVersion = \".*\"/var ShyVersion = \"${VERSION_STRING}\"/" cmd/version.go
 
 # Check if there are changes
-if git diff --quiet main.go; then
+if git diff --quiet cmd/version.go; then
     echo "No version changes needed (already at ${VERSION})"
 else
     echo "Committing version change..."
