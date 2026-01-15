@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/chris/shy/internal/db"
 	"github.com/chris/shy/internal/summary"
@@ -59,10 +61,14 @@ func runSummary(cmd *cobra.Command, args []string) error {
 	// Group commands by context (repo/dir and branch)
 	grouped := summary.GroupByContext(commands)
 
+	// Check if output is a TTY to determine if we should use colors
+	noColor := !isTerminal(cmd.OutOrStdout())
+
 	// Format and print summary
 	opts := summary.FormatOptions{
 		AllCommands: summaryAllCommands,
 		Date:        dateStr,
+		NoColor:     noColor,
 	}
 	output := summary.FormatSummary(grouped, opts)
 	fmt.Fprint(cmd.OutOrStdout(), output)
@@ -105,4 +111,12 @@ func parseDateRange(dateStr string) (int64, int64, string, error) {
 	formattedDate := startOfDay.Format("2006-01-02")
 
 	return startTime, endTime, formattedDate, nil
+}
+
+// isTerminal returns true if the writer is a terminal
+func isTerminal(w io.Writer) bool {
+	if f, ok := w.(*os.File); ok {
+		return term.IsTerminal(int(f.Fd()))
+	}
+	return false
 }

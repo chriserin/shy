@@ -33,6 +33,7 @@ func TestFormatSummary_SingleContext(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -86,6 +87,7 @@ func TestFormatSummary_WithoutAllCommands(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: false,
 		Date:        "2026-01-14",
 	}
@@ -127,6 +129,7 @@ func TestFormatSummary_MultipleContexts(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -172,6 +175,7 @@ func TestFormatSummary_MultipleBranches(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -207,6 +211,7 @@ func TestFormatSummary_NonGitDirectory(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -249,6 +254,7 @@ func TestFormatSummary_MixedGitAndNonGit(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -266,6 +272,7 @@ func TestFormatSummary_EmptyCommands(t *testing.T) {
 	commands := []models.Command{}
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -315,6 +322,7 @@ func TestFormatSummary_AllTimePeriods(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -357,6 +365,7 @@ func TestFormatSummary_TimeRangeFormatting(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -389,6 +398,7 @@ func TestFormatSummary_SingleCommandTimeRange(t *testing.T) {
 
 	grouped := GroupByContext(commands)
 	opts := FormatOptions{
+		NoColor:     true,
 		AllCommands: true,
 		Date:        "2026-01-14",
 	}
@@ -425,10 +435,10 @@ func TestSortContexts(t *testing.T) {
 func TestSortBranches(t *testing.T) {
 	// Given: branches including "No branch"
 	branches := map[BranchKey][]models.Command{
-		"zeta":    {},
-		"alpha":   {},
-		"beta":    {},
-		NoBranch:  {},
+		"zeta":   {},
+		"alpha":  {},
+		"beta":   {},
+		NoBranch: {},
 	}
 
 	// When: sorting branches
