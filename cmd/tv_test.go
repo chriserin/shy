@@ -112,6 +112,7 @@ func TestTVPreview(t *testing.T) {
 	// Insert test commands in the same session
 	timestamp := time.Now().Unix()
 	sessionPid := int64(12345)
+	sourceApp := "zsh"
 	duration := int64(100)
 	gitRepo := "git@github.com:user/repo.git"
 	gitBranch := "main"
@@ -134,6 +135,7 @@ func TestTVPreview(t *testing.T) {
 			Duration:    &duration,
 			GitRepo:     &gitRepo,
 			GitBranch:   &gitBranch,
+			SourceApp:   &sourceApp,
 			SourcePid:   &sessionPid,
 		}
 		id, err := database.InsertCommand(command)
@@ -167,7 +169,10 @@ func TestTVPreview(t *testing.T) {
 	metadataIdx := strings.Index(output, "Event:")
 	require.Greater(t, metadataIdx, -1)
 
-	// Verify source information is NOT present
+	// Verify Session field is present (format: source:pid or source:pid:X)
+	require.Contains(t, output, "Session:")
+
+	// Verify old source fields are NOT present (replaced by Session)
 	require.NotContains(t, output, "Source App:")
 	require.NotContains(t, output, "Source PID:")
 	require.NotContains(t, output, "Active:")
@@ -184,19 +189,21 @@ func TestTVPreview(t *testing.T) {
 	require.Contains(t, output, "command 5")
 
 	// Verify simple format for before/after commands (event_number command_text)
+	// Note: Output now includes ANSI color codes, so we check for the pattern with colors
 	lines := strings.Split(output, "\n")
 	var foundSimpleFormat bool
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// Look for lines that match the simple format: digits followed by command text
-		if len(trimmed) > 0 && trimmed[0] >= '0' && trimmed[0] <= '9' {
-			// Should contain event number and command, but not extra formatting
-			if strings.Contains(trimmed, "command") &&
-				!strings.Contains(trimmed, "Exit Status") &&
-				!strings.Contains(trimmed, "Timestamp") {
-				foundSimpleFormat = true
-				break
-			}
+		// Look for lines that contain context commands (command 1-5)
+		// These will be in simple format with color codes
+		if (strings.Contains(trimmed, "command 1") ||
+			strings.Contains(trimmed, "command 2") ||
+			strings.Contains(trimmed, "command 4") ||
+			strings.Contains(trimmed, "command 5")) &&
+			!strings.Contains(trimmed, "Exit Status") &&
+			!strings.Contains(trimmed, "Timestamp") {
+			foundSimpleFormat = true
+			break
 		}
 	}
 	require.True(t, foundSimpleFormat, "Should find simple format lines for context commands")
@@ -254,7 +261,11 @@ func TestDisplaySimpleCommand(t *testing.T) {
 	displaySimpleCommand(&buf, cmd)
 
 	output := buf.String()
-	require.Equal(t, "  42 test command\n", output)
+	// Output now includes ANSI color codes
+	require.Contains(t, output, "42")
+	require.Contains(t, output, "test command")
+	// Verify it has the gray color code (242)
+	require.Contains(t, output, "38;5;242")
 }
 
 func TestFormatDurationHuman(t *testing.T) {
@@ -296,6 +307,50 @@ func TestFormatDurationHuman(t *testing.T) {
 			require.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestTVPreviewInactiveSession(t *testing.T) {
+	// Create temporary database
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert command with inactive session
+	timestamp := time.Now().Unix()
+	sessionPid := int64(99999)
+	sourceApp := "bash"
+	inactive := false
+	duration := int64(500)
+
+	command := &models.Command{
+		Timestamp:    timestamp,
+		ExitStatus:   1,
+		CommandText:  "test command",
+		WorkingDir:   "/tmp",
+		Duration:     &duration,
+		SourceApp:    &sourceApp,
+		SourcePid:    &sessionPid,
+		SourceActive: &inactive,
+	}
+	id, err := database.InsertCommand(command)
+	require.NoError(t, err)
+
+	// Get command with context
+	beforeCmds, targetCmd, afterCmds, err := database.GetCommandWithContext(id, 5)
+	require.NoError(t, err)
+
+	// Create a buffer to capture output
+	var buf bytes.Buffer
+	displayCommandWithContext(&buf, beforeCmds, targetCmd, afterCmds)
+
+	output := buf.String()
+
+	// Verify Session field includes :X for inactive sessions
+	require.Contains(t, output, "Session:")
+	require.Contains(t, output, "bash:99999:X")
 }
 
 func ptr(i int64) *int64 {

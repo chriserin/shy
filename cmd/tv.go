@@ -233,6 +233,18 @@ func displayDetailedCommand(w interface{ Write([]byte) (int, error) }, cmd *mode
 			labelStyle.Render("Git Branch:"),
 			gitStyle.Render(*cmd.GitBranch))
 	}
+
+	// Session info (if present)
+	if cmd.SourceApp != nil && cmd.SourcePid != nil {
+		sessionStr := fmt.Sprintf("%s:%d", *cmd.SourceApp, *cmd.SourcePid)
+		// Add :X if session is not active
+		if cmd.SourceActive != nil && !*cmd.SourceActive {
+			sessionStr += ":X"
+		}
+		fmt.Fprintf(w, "  %s %s\n",
+			labelStyle.Render("Session:"),
+			valueStyle.Render(sessionStr))
+	}
 }
 
 func displaySimpleCommand(w interface{ Write([]byte) (int, error) }, cmd *models.Command) {
