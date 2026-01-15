@@ -94,9 +94,9 @@ func TestSummary_Yesterday(t *testing.T) {
 	assert.Contains(t, output, "Afternoon")
 
 	// And: output should contain commands
-	assert.Contains(t, output, "08:30:00  git status")
-	assert.Contains(t, output, "09:15:00  go build -o shy .")
-	assert.Contains(t, output, "14:20:00  go test ./...")
+	assert.Contains(t, output, "8:30am  git status")
+	assert.Contains(t, output, "9:15am  go build -o shy .")
+	assert.Contains(t, output, "2:20pm  go test ./...")
 
 	// Reset
 	rootCmd.SetArgs(nil)
@@ -160,8 +160,8 @@ func TestSummary_SpecificDate(t *testing.T) {
 	assert.Contains(t, output, "Branch: feature")
 
 	// And: output should contain commands
-	assert.Contains(t, output, "10:00:00  npm install")
-	assert.Contains(t, output, "10:30:00  npm test")
+	assert.Contains(t, output, "10:00am  npm install")
+	assert.Contains(t, output, "10:30am  npm test")
 
 	// Reset
 	rootCmd.SetArgs(nil)
