@@ -381,6 +381,55 @@ func (db *DB) CountCommands() (int, error) {
 	return count, nil
 }
 
+// GetCommandsByDateRange retrieves commands within a Unix timestamp range (inclusive start, exclusive end)
+// Returns commands ordered by timestamp ascending
+func (db *DB) GetCommandsByDateRange(startTime, endTime int64) ([]models.Command, error) {
+	query := `
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+		FROM commands
+		WHERE timestamp >= ? AND timestamp < ?
+		ORDER BY timestamp ASC`
+
+	rows, err := db.conn.Query(query, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands by date range: %w", err)
+	}
+	defer rows.Close()
+
+	var commands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		var sourceActive *int64
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
+		}
+		commands = append(commands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	return commands, nil
+}
+
 // TableExists checks if the commands table exists
 func (db *DB) TableExists() (bool, error) {
 	var name string
