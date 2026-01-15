@@ -41,12 +41,12 @@ func TestSummary_Yesterday(t *testing.T) {
 	branch := "main"
 
 	commands := []struct {
-		text      string
-		hour      int
-		minute    int
-		working   string
-		repo      *string
-		branch    *string
+		text    string
+		hour    int
+		minute  int
+		working string
+		repo    *string
+		branch  *string
 	}{
 		{"git status", 8, 30, "/home/user/projects/shy", &repo, &branch},
 		{"go build -o shy .", 9, 15, "/home/user/projects/shy", &repo, &branch},
@@ -279,11 +279,11 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 	branch := "main"
 
 	commands := []struct {
-		text    string
-		hour    int
-		dir     string
-		repo    *string
-		branch  *string
+		text   string
+		hour   int
+		dir    string
+		repo   *string
+		branch *string
 	}{
 		{"go build", 9, "/home/user/projects/shy", &repo, &branch},
 		{"wget file.zip", 10, "/home/user/downloads", nil, nil},
