@@ -1,0 +1,279 @@
+Feature: Tabular Summary (tabsum)
+  Display a tabular summary of time spent in different contexts (working directories and git branches)
+  based on command activity for a specific date.
+
+  Background:
+    Given the shy database exists
+
+  Scenario: Display yesterday's summary with multiple contexts
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch         | timestamp           | command          |
+      | /home/user/shy     | yesterdays-summary | 2026-01-14 08:23:15 | git checkout -b  |
+      | /home/user/shy     | yesterdays-summary | 2026-01-14 16:35:42 | git commit       |
+      | /home/user/shy     | main               | 2026-01-14 19:15:12 | git checkout main|
+      | /home/user/shy     | main               | 2026-01-14 21:32:45 | git push         |
+      | /home/user/webapp  | feature/auth       | 2026-01-14 10:15:20 | npm install      |
+      | /home/user/webapp  | feature/auth       | 2026-01-14 15:42:33 | npm test         |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain:
+      """
+      Yesterday's Work Summary - 2026-01-14
+      =====================================
+
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/shy                              yesterdays-summary         2  08:23 - 16:35   8h 12m
+      ~/webapp                           feature/auth               2  10:15 - 15:42   5h 27m
+      ~/shy                              main                       2  19:15 - 21:32   2h 17m
+
+      Total: 6 commands across 3 contexts
+      """
+
+  Scenario: Display summary for a specific date
+    Given the following commands were executed on 2026-01-10:
+      | working_dir        | git_branch | timestamp           | command     |
+      | /home/user/shy     | main       | 2026-01-10 09:00:00 | go build    |
+      | /home/user/shy     | main       | 2026-01-10 17:30:00 | go test     |
+    When I run "shy tabsum --date 2026-01-10"
+    Then the output should contain:
+      """
+      Work Summary - 2026-01-10
+      =====================================
+
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/shy                              main                       2  09:00 - 17:30   8h 30m
+
+      Total: 2 commands across 1 context
+      """
+
+  Scenario: Display today's summary
+    Given the following commands were executed today:
+      | working_dir        | git_branch | timestamp | command     |
+      | /home/user/shy     | main       | 10:00:00  | go build    |
+      | /home/user/shy     | main       | 11:15:00  | go test     |
+    When I run "shy tabsum --date today"
+    Then the output should contain "Work Summary - 2026-01-15"
+    And the output should contain "~/shy"
+    And the output should contain "main"
+    And the output should contain "1h 15m"
+
+  Scenario: No commands found for date
+    Given no commands were executed on 2026-01-13
+    When I run "shy tabsum --date 2026-01-13"
+    Then the output should contain:
+      """
+      Work Summary - 2026-01-13
+      =====================================
+
+      No commands found for this date.
+      """
+
+  Scenario: Single context with multiple commands
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command          |
+      | /home/user/shy     | main       | 2026-01-14 09:15:00 | go build         |
+      | /home/user/shy     | main       | 2026-01-14 10:20:00 | go test          |
+      | /home/user/shy     | main       | 2026-01-14 17:32:00 | git push         |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain:
+      """
+      Yesterday's Work Summary - 2026-01-14
+      =====================================
+
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/shy                              main                       3  09:15 - 17:32   8h 17m
+
+      Total: 3 commands across 1 context
+      """
+
+  Scenario: Non-git directory shows dash for branch
+    Given the following commands were executed on 2026-01-14:
+      | working_dir            | git_branch | timestamp           | command     |
+      | /home/user/dotfiles    | NULL       | 2026-01-14 14:10:15 | vim .bashrc |
+      | /home/user/dotfiles    | NULL       | 2026-01-14 14:35:22 | source      |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain:
+      """
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/dotfiles                         -                          2  14:10 - 14:35      25m
+      """
+
+  Scenario: Mixed git and non-git directories
+    Given the following commands were executed on 2026-01-14:
+      | working_dir            | git_branch | timestamp           | command     |
+      | /home/user/shy         | main       | 2026-01-14 08:00:00 | go build    |
+      | /home/user/shy         | main       | 2026-01-14 12:00:00 | go test     |
+      | /home/user/dotfiles    | NULL       | 2026-01-14 14:10:15 | vim .bashrc |
+      | /home/user/dotfiles    | NULL       | 2026-01-14 14:35:22 | source      |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain "~/shy"
+    And the output should contain "main"
+    And the output should contain "~/dotfiles"
+    And the output should contain "-"
+
+  Scenario: Contexts sorted by duration (longest first)
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command     |
+      | /home/user/shy     | main       | 2026-01-14 08:00:00 | go build    |
+      | /home/user/shy     | main       | 2026-01-14 17:00:00 | go test     |
+      | /home/user/webapp  | dev        | 2026-01-14 10:00:00 | npm start   |
+      | /home/user/webapp  | dev        | 2026-01-14 11:30:00 | npm test    |
+      | /home/user/script  | NULL       | 2026-01-14 14:00:00 | python run  |
+      | /home/user/script  | NULL       | 2026-01-14 14:05:00 | python test |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the contexts should be ordered:
+      | directory     | branch | duration |
+      | ~/shy         | main   | 9h       |
+      | ~/webapp      | dev    | 1h 30m   |
+      | ~/script      | -      | 5m       |
+
+  Scenario: Duration formatting for various time ranges
+    Given the following command pairs were executed on 2026-01-14:
+      | working_dir        | git_branch | first_time          | last_time           |
+      | /home/user/long    | main       | 2026-01-14 08:00:00 | 2026-01-14 18:30:00 |
+      | /home/user/medium  | dev        | 2026-01-14 10:00:00 | 2026-01-14 10:45:00 |
+      | /home/user/short   | test       | 2026-01-14 14:00:00 | 2026-01-14 14:00:45 |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain "10h 30m" for context "~/long:main"
+    And the output should contain "45m" for context "~/medium:dev"
+    And the output should contain "45s" for context "~/short:test"
+
+  Scenario: Single command shows zero duration
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command     |
+      | /home/user/shy     | main       | 2026-01-14 10:00:00 | go build    |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain:
+      """
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/shy                              main                       1  10:00 - 10:00       0s
+      """
+
+  Scenario: Multiple branches in same directory are separate contexts
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command          |
+      | /home/user/shy     | feature-a  | 2026-01-14 08:00:00 | go build         |
+      | /home/user/shy     | feature-a  | 2026-01-14 12:00:00 | go test          |
+      | /home/user/shy     | feature-b  | 2026-01-14 13:00:00 | go build         |
+      | /home/user/shy     | feature-b  | 2026-01-14 14:00:00 | go test          |
+      | /home/user/shy     | main       | 2026-01-14 16:00:00 | git merge        |
+      | /home/user/shy     | main       | 2026-01-14 17:00:00 | git push         |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should show 3 separate contexts
+    And the output should contain "~/shy" and "feature-a"
+    And the output should contain "~/shy" and "feature-b"
+    And the output should contain "~/shy" and "main"
+
+  Scenario: Commands spanning early morning hours
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command     |
+      | /home/user/shy     | main       | 2026-01-14 23:45:00 | go build    |
+      | /home/user/shy     | main       | 2026-01-14 23:59:59 | go test     |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain:
+      """
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/shy                              main                       2  23:45 - 23:59      14m
+      """
+
+  Scenario: Home directory path replacement
+    Given the following commands were executed on 2026-01-14:
+      | working_dir                              | git_branch | timestamp           | command     |
+      | /home/user/projects/work/myapp           | main       | 2026-01-14 10:00:00 | go build    |
+      | /home/user/projects/work/myapp           | main       | 2026-01-14 11:00:00 | go test     |
+    And the user's home directory is "/home/user"
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain "~/projects/work/myapp"
+    And the output should not contain "/home/user/projects"
+
+  Scenario: Many commands in single context
+    Given 127 commands were executed on 2026-01-14 in "/home/user/shy" on branch "main"
+    And the first command was at 2026-01-14 08:00:00
+    And the last command was at 2026-01-14 18:00:00
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the output should contain:
+      """
+      Directory                          Branch              Commands  Time Span       Duration
+      ~/shy                              main                     127  08:00 - 18:00  10h
+      """
+
+  Scenario: Command count accuracy across contexts
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           |
+      | /home/user/shy     | main       | 2026-01-14 08:00:00 |
+      | /home/user/shy     | main       | 2026-01-14 09:00:00 |
+      | /home/user/shy     | main       | 2026-01-14 10:00:00 |
+      | /home/user/shy     | dev        | 2026-01-14 11:00:00 |
+      | /home/user/shy     | dev        | 2026-01-14 12:00:00 |
+      | /home/user/webapp  | NULL       | 2026-01-14 13:00:00 |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the total should show "6 commands across 3 contexts"
+    And context "~/shy:main" should show "3" commands
+    And context "~/shy:dev" should show "2" commands
+    And context "~/webapp:-" should show "1" commands
+
+  Scenario: Table alignment with varying path lengths
+    Given the following commands were executed on 2026-01-14:
+      | working_dir                    | git_branch | timestamp           |
+      | /home/user/a                   | main       | 2026-01-14 08:00:00 |
+      | /home/user/a                   | main       | 2026-01-14 09:00:00 |
+      | /home/user/very/long/path/name | dev        | 2026-01-14 10:00:00 |
+      | /home/user/very/long/path/name | dev        | 2026-01-14 11:00:00 |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then the table columns should be properly aligned
+    And all "Branch" values should start at the same column
+    And all "Commands" values should start at the same column
+    And all "Time Span" values should start at the same column
+    And all "Duration" values should start at the same column
+
+  Scenario: Date parsing with yesterday keyword
+    Given today is 2026-01-15
+    And commands exist on 2026-01-14
+    When I run "shy tabsum --date yesterday"
+    Then the output should contain "Work Summary - 2026-01-14"
+
+  Scenario: Date parsing with YYYY-MM-DD format
+    Given commands exist on 2026-01-10
+    When I run "shy tabsum --date 2026-01-10"
+    Then the output should contain "Work Summary - 2026-01-10"
+
+  Scenario: Invalid date format
+    When I run "shy tabsum --date invalid-date"
+    Then the command should fail
+    And the error should mention "invalid date format"
+
+  Scenario: Secondary sort by command count when durations are equal
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command     |
+      | /home/user/projA   | main       | 2026-01-14 08:00:00 | echo a      |
+      | /home/user/projA   | main       | 2026-01-14 09:00:00 | echo b      |
+      | /home/user/projB   | main       | 2026-01-14 10:00:00 | echo c      |
+      | /home/user/projB   | main       | 2026-01-14 11:00:00 | echo d      |
+      | /home/user/projB   | main       | 2026-01-14 11:00:00 | echo e      |
+      | /home/user/projB   | main       | 2026-01-14 11:00:00 | echo f      |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then "~/projB:main" with "4 commands" should appear before "~/projA:main" with "2 commands"
+
+  Scenario: Tertiary sort by directory name when duration and count are equal
+    Given the following commands were executed on 2026-01-14:
+      | working_dir        | git_branch | timestamp           | command     |
+      | /home/user/zebra   | main       | 2026-01-14 08:00:00 | echo z      |
+      | /home/user/zebra   | main       | 2026-01-14 09:00:00 | echo z      |
+      | /home/user/apple   | main       | 2026-01-14 10:00:00 | echo a      |
+      | /home/user/apple   | main       | 2026-01-14 11:00:00 | echo a      |
+    And today is 2026-01-15
+    When I run "shy tabsum"
+    Then "~/apple:main" should appear before "~/zebra:main"
