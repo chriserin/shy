@@ -79,24 +79,20 @@ func TestSummary_Yesterday(t *testing.T) {
 	expectedDate := yesterday.Format("2006-01-02")
 
 	// Then: output should contain date header
-	assert.Contains(t, output, fmt.Sprintf("Yesterday's Work Summary - %s", expectedDate))
+	assert.Contains(t, output, fmt.Sprintf("Work Summary - %s", expectedDate))
 
-	// And: output should contain context
-	assert.Contains(t, output, "/home/user/projects/shy (github.com/chris/shy)")
+	// And: output should contain context with directory:branch format
+	assert.Contains(t, output, "/home/user/projects/shy:main")
 
-	// And: output should contain branch
-	assert.Contains(t, output, "Branch: main")
+	// And: output should contain hourly buckets with dashes
+	assert.Contains(t, output, "8am ------------------------------")
+	assert.Contains(t, output, "9am ------------------------------")
+	assert.Contains(t, output, "2pm ------------------------------")
 
-	// And: output should contain morning period
-	assert.Contains(t, output, "Morning")
-
-	// And: output should contain afternoon period
-	assert.Contains(t, output, "Afternoon")
-
-	// And: output should contain commands
-	assert.Contains(t, output, "8:30am  git status")
-	assert.Contains(t, output, "9:15am  go build -o shy .")
-	assert.Contains(t, output, "2:20pm  go test ./...")
+	// And: output should contain commands with minute-only timestamps
+	assert.Contains(t, output, ":30  git status")
+	assert.Contains(t, output, ":15  go build -o shy .")
+	assert.Contains(t, output, ":20  go test ./...")
 
 	// Reset
 	rootCmd.SetArgs(nil)
@@ -153,15 +149,12 @@ func TestSummary_SpecificDate(t *testing.T) {
 	// Then: output should contain correct date
 	assert.Contains(t, output, "Work Summary - 2026-01-10")
 
-	// And: output should contain context
-	assert.Contains(t, output, "/home/user/projects/app (github.com/user/app)")
+	// And: output should contain context with directory:branch format
+	assert.Contains(t, output, "/home/user/projects/app:feature")
 
-	// And: output should contain branch
-	assert.Contains(t, output, "Branch: feature")
-
-	// And: output should contain commands
-	assert.Contains(t, output, "10:00am  npm install")
-	assert.Contains(t, output, "10:30am  npm test")
+	// And: output should contain commands with minute-only timestamps
+	assert.Contains(t, output, ":00  npm install")
+	assert.Contains(t, output, ":30  npm test")
 
 	// Reset
 	rootCmd.SetArgs(nil)
@@ -247,13 +240,13 @@ func TestSummary_MultipleBranches(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: output should contain both branches
-	assert.Contains(t, output, "Branch: feature-a")
-	assert.Contains(t, output, "Branch: main")
+	// Then: output should contain both branches in directory:branch format
+	assert.Contains(t, output, "/home/user/projects/shy:feature-a")
+	assert.Contains(t, output, "/home/user/projects/shy:main")
 
 	// And: branches should be sorted alphabetically (feature-a before main)
-	featureIndex := strings.Index(output, "Branch: feature-a")
-	mainIndex := strings.Index(output, "Branch: main")
+	featureIndex := strings.Index(output, ":feature-a")
+	mainIndex := strings.Index(output, ":main")
 	assert.Less(t, featureIndex, mainIndex, "feature-a should appear before main")
 
 	// And: statistics should show 2 branches
@@ -314,12 +307,11 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: output should contain git context
-	assert.Contains(t, output, "/home/user/projects/shy (github.com/chris/shy)")
+	// Then: output should contain git context with directory:branch format
+	assert.Contains(t, output, "/home/user/projects/shy:main")
 
-	// And: output should contain non-git context
+	// And: output should contain non-git context with (non-git) label
 	assert.Contains(t, output, "/home/user/downloads")
-	assert.Contains(t, output, "No git repository")
 
 	// And: statistics should show mixed contexts
 	assert.Contains(t, output, "Unique contexts: 2 (1 repos, 1 non-repo dir)")
@@ -377,21 +369,22 @@ func TestSummary_AllTimePeriods(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: output should contain all time periods
-	assert.Contains(t, output, "Night")
-	assert.Contains(t, output, "Morning")
-	assert.Contains(t, output, "Afternoon")
-	assert.Contains(t, output, "Evening")
+	// Then: output should contain hourly buckets
+	// Commands at hours: 2 (2am), 8 (8am), 13 (1pm), 19 (7pm)
+	assert.Contains(t, output, "2am")
+	assert.Contains(t, output, "8am")
+	assert.Contains(t, output, "1pm")
+	assert.Contains(t, output, "7pm")
 
-	// And: periods should be in chronological order
-	nightIndex := strings.Index(output, "Night")
-	morningIndex := strings.Index(output, "Morning")
-	afternoonIndex := strings.Index(output, "Afternoon")
-	eveningIndex := strings.Index(output, "Evening")
+	// And: hours should be in chronological order
+	hour2Index := strings.Index(output, "2am")
+	hour8Index := strings.Index(output, "8am")
+	hour13Index := strings.Index(output, "1pm")
+	hour19Index := strings.Index(output, "7pm")
 
-	assert.Less(t, nightIndex, morningIndex)
-	assert.Less(t, morningIndex, afternoonIndex)
-	assert.Less(t, afternoonIndex, eveningIndex)
+	assert.Less(t, hour2Index, hour8Index, "2am should appear before 8am")
+	assert.Less(t, hour8Index, hour13Index, "8am should appear before 1pm")
+	assert.Less(t, hour13Index, hour19Index, "1pm should appear before 7pm")
 
 	// Reset
 	rootCmd.SetArgs(nil)
