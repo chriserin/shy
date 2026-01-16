@@ -44,18 +44,16 @@ func TestFormatSummary_SingleContext(t *testing.T) {
 	// Then: should contain date header
 	assert.Contains(t, output, "Work Summary - 2026-01-14")
 
-	// And: should contain context header
-	assert.Contains(t, output, "/home/user/projects/shy (github.com/chris/shy)")
+	// And: should contain context header with directory:branch on one line
+	assert.Contains(t, output, "/home/user/projects/shy:main")
 
-	// And: should contain branch
-	assert.Contains(t, output, "Branch: main")
+	// And: should contain hourly buckets with dashes
+	assert.Contains(t, output, "9am ------------------------------")
+	assert.Contains(t, output, "10am ------------------------------")
 
-	// And: should contain time period
-	assert.Contains(t, output, "Morning")
-
-	// And: should contain commands with timestamps
-	assert.Contains(t, output, "9:00am  git status")
-	assert.Contains(t, output, "10:00am  go build")
+	// And: should contain commands with minute-only timestamps
+	assert.Contains(t, output, ":00  git status")
+	assert.Contains(t, output, ":00  go build")
 
 	// And: should contain statistics
 	assert.Contains(t, output, "Total commands: 2")
@@ -95,13 +93,13 @@ func TestFormatSummary_WithoutAllCommands(t *testing.T) {
 	// When: formatting summary
 	output := FormatSummary(grouped, opts)
 
-	// Then: should show time period with count
-	assert.Contains(t, output, "Morning")
-	assert.Contains(t, output, "2 commands")
+	// Then: should show hourly buckets with dashes
+	assert.Contains(t, output, "9am ------------------------------")
+	assert.Contains(t, output, "10am ------------------------------")
 
-	// But: should NOT show individual commands
-	assert.NotContains(t, output, "9:00am  git status")
-	assert.NotContains(t, output, "10:00am  go build")
+	// But: should NOT show individual commands (allCommands is false)
+	assert.NotContains(t, output, ":00  git status")
+	assert.NotContains(t, output, ":00  go build")
 }
 
 // TestFormatSummary_MultipleContexts tests formatting with multiple contexts
@@ -183,13 +181,13 @@ func TestFormatSummary_MultipleBranches(t *testing.T) {
 	// When: formatting summary
 	output := FormatSummary(grouped, opts)
 
-	// Then: should contain both branches
-	assert.Contains(t, output, "Branch: feature")
-	assert.Contains(t, output, "Branch: main")
+	// Then: should contain both branches in directory:branch format
+	assert.Contains(t, output, "/home/user/projects/shy:feature")
+	assert.Contains(t, output, "/home/user/projects/shy:main")
 
 	// And: branches should be sorted alphabetically
-	featureIndex := strings.Index(output, "Branch: feature")
-	mainIndex := strings.Index(output, "Branch: main")
+	featureIndex := strings.Index(output, ":feature")
+	mainIndex := strings.Index(output, ":main")
 	assert.Less(t, featureIndex, mainIndex, "feature should appear before main")
 
 	// And: statistics should show 2 branches
@@ -223,8 +221,8 @@ func TestFormatSummary_NonGitDirectory(t *testing.T) {
 	assert.Contains(t, output, "/home/user/downloads")
 	assert.NotContains(t, output, "github.com")
 
-	// And: should show "No git repository"
-	assert.Contains(t, output, "No git repository")
+	// And: should show "(non-git)" on the same line as directory
+	assert.Contains(t, output, "/home/user/downloads")
 
 	// And: statistics should show non-repo dir
 	assert.Contains(t, output, "Unique contexts: 1 (1 non-repo dir)")
@@ -330,15 +328,17 @@ func TestFormatSummary_AllTimePeriods(t *testing.T) {
 	// When: formatting summary
 	output := FormatSummary(grouped, opts)
 
-	// Then: should show all time periods in chronological order
-	nightIndex := strings.Index(output, "Night")
-	morningIndex := strings.Index(output, "Morning")
-	afternoonIndex := strings.Index(output, "Afternoon")
-	eveningIndex := strings.Index(output, "Evening")
+	// Then: should show hourly buckets in chronological order
+	// Commands are at 9am, 2pm (14), 8pm (20)
+	hour9Index := strings.Index(output, "9am")
+	hour14Index := strings.Index(output, "2pm")
+	hour20Index := strings.Index(output, "8pm")
 
-	assert.Less(t, nightIndex, morningIndex)
-	assert.Less(t, morningIndex, afternoonIndex)
-	assert.Less(t, afternoonIndex, eveningIndex)
+	assert.Greater(t, hour9Index, -1, "9am should be present")
+	assert.Greater(t, hour14Index, -1, "2pm should be present")
+	assert.Greater(t, hour20Index, -1, "8pm should be present")
+	assert.Less(t, hour9Index, hour14Index, "9am should appear before 2pm")
+	assert.Less(t, hour14Index, hour20Index, "2pm should appear before 8pm")
 }
 
 // TestFormatSummary_TimeRangeFormatting tests time range formatting
@@ -373,12 +373,14 @@ func TestFormatSummary_TimeRangeFormatting(t *testing.T) {
 	// When: formatting summary
 	output := FormatSummary(grouped, opts)
 
-	// Then: should show time range in 12-hour format
-	assert.Contains(t, output, "Morning (8:23am - 11:47am)")
+	// Then: should show hourly buckets with dashes
+	// Commands at 8:23am and 11:47am are in different hours
+	assert.Contains(t, output, "8am ------------------------------")
+	assert.Contains(t, output, "11am ------------------------------")
 
-	// And: should show timestamps in 12-hour format without seconds
-	assert.Contains(t, output, "8:23am  first")
-	assert.Contains(t, output, "11:47am  last")
+	// And: should show timestamps as minutes only
+	assert.Contains(t, output, ":23  first")
+	assert.Contains(t, output, ":47  last")
 }
 
 // TestFormatSummary_SingleCommandTimeRange tests single command time display
@@ -406,9 +408,10 @@ func TestFormatSummary_SingleCommandTimeRange(t *testing.T) {
 	// When: formatting summary
 	output := FormatSummary(grouped, opts)
 
-	// Then: should show single time (not range) for single command
-	assert.Contains(t, output, "Morning (9:00am) - 1 commands")
-	assert.NotContains(t, output, "9:00am - 9:00am")
+	// Then: should show hour separator with dashes
+	assert.Contains(t, output, "9am ------------------------------")
+	// And: should show command with minute timestamp
+	assert.Contains(t, output, ":00  git status")
 }
 
 // TestSortContexts tests context sorting

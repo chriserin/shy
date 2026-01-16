@@ -15,12 +15,10 @@ import (
 // Styles for summary output (matching television theme palette from cmd/tv.go)
 var (
 	headerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true) // bright-magenta
-	contextStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))            // white
-	gitStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))             // bright-magenta
+	contextStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))            // white
 	branchStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))            // bright-blue
 	periodStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true) // bright-yellow (for period name)
-	timeRangeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))            // bright-black/gray (for time range in heading)
-	timestampStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))            // bright-yellow (for command timestamps)
+	timestampStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))             // bright-yellow (for command timestamps)
 	commandStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))            // white
 	statLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))            // bright-blue
 	statValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))            // bright-green
@@ -47,17 +45,7 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 	var output strings.Builder
 
 	// Header
-	var title string
-	if strings.HasPrefix(opts.Date, time.Now().Format("2006-01-02")) {
-		title = fmt.Sprintf("Today's Work Summary - %s", opts.Date)
-	} else {
-		yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-		if strings.HasPrefix(opts.Date, yesterday) {
-			title = fmt.Sprintf("Yesterday's Work Summary - %s", opts.Date)
-		} else {
-			title = fmt.Sprintf("Work Summary - %s", opts.Date)
-		}
-	}
+	title := fmt.Sprintf("Work Summary - %s", opts.Date)
 	output.WriteString(renderStyle(headerStyle, title, opts.NoColor) + "\n")
 	output.WriteString(renderStyle(separatorStyle, "========================================", opts.NoColor) + "\n\n")
 
@@ -82,17 +70,6 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 		branches := grouped.Contexts[contextKey]
 
 		workingDir := TildePath(contextKey.WorkingDir)
-		// Context header
-		if contextKey.GitRepo != "" {
-			repo := strings.Replace(contextKey.GitRepo, "git@github.com", "GH", 1)
-			output.WriteString(fmt.Sprintf("%s (%s)\n",
-				renderStyle(contextStyle, workingDir, opts.NoColor),
-				renderStyle(gitStyle, repo, opts.NoColor)))
-			repoCount++
-		} else {
-			output.WriteString(renderStyle(contextStyle, workingDir, opts.NoColor) + "\n")
-			nonRepoCount++
-		}
 
 		// Sort branches alphabetically
 		sortedBranches := sortBranches(branches)
@@ -107,52 +84,51 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 			}
 			totalCommands += len(commands)
 
-			// Branch header
-			if branchKey == NoBranch {
-				if contextKey.GitRepo != "" {
-					output.WriteString("  " + renderStyle(branchStyle, "No branch", opts.NoColor) + "\n")
+			// Context header with directory:branch on one line
+			var contextLine string
+			if contextKey.GitRepo != "" {
+				repoCount++
+
+				if branchKey == NoBranch {
+					contextLine = fmt.Sprintf("%s:%s",
+						renderStyle(contextStyle, workingDir, opts.NoColor),
+						renderStyle(branchStyle, "No branch", opts.NoColor),
+					)
 				} else {
-					output.WriteString("  " + renderStyle(branchStyle, "No git repository", opts.NoColor) + "\n")
+					contextLine = fmt.Sprintf("%s:%s",
+						renderStyle(contextStyle, workingDir, opts.NoColor),
+						renderStyle(branchStyle, string(branchKey), opts.NoColor),
+					)
 				}
 			} else {
-				output.WriteString(fmt.Sprintf("  %s: %s\n",
-					renderStyle(statLabelStyle, "Branch", opts.NoColor),
-					renderStyle(branchStyle, string(branchKey), opts.NoColor)))
+				nonRepoCount++
+				contextLine = fmt.Sprintf("%s",
+					renderStyle(contextStyle, workingDir, opts.NoColor))
 			}
 
-			// Bucket commands by time period
-			buckets := BucketByTimePeriod(commands)
+			output.WriteString(contextLine + "\n")
 
-			// Format each time period in chronological order
-			periods := GetOrderedPeriods()
-			for _, period := range periods {
-				bucket := buckets[period]
-				if bucket == nil {
-					continue
-				}
+			// Bucket commands by hour
+			buckets := BucketByHour(commands)
 
-				// Format time range
-				firstTime := time.Unix(bucket.FirstTime, 0).Format("3:04pm")
-				lastTime := time.Unix(bucket.LastTime, 0).Format("3:04pm")
-				commandCount := len(bucket.Commands)
+			// Format each hour in chronological order
+			hours := GetOrderedHours(buckets)
+			for _, hour := range hours {
+				bucket := buckets[hour]
+				hourLabel := FormatHour(hour)
 
-				if commandCount == 1 {
-					output.WriteString(fmt.Sprintf("    %s (%s) - %s\n",
-						renderStyle(periodStyle, string(period), opts.NoColor),
-						renderStyle(timeRangeStyle, firstTime, opts.NoColor),
-						renderStyle(statValueStyle, fmt.Sprintf("%d commands", commandCount), opts.NoColor)))
-				} else {
-					output.WriteString(fmt.Sprintf("    %s (%s) - %s\n",
-						renderStyle(periodStyle, string(period), opts.NoColor),
-						renderStyle(timeRangeStyle, firstTime+" - "+lastTime, opts.NoColor),
-						renderStyle(statValueStyle, fmt.Sprintf("%d commands", commandCount), opts.NoColor)))
-				}
+				// Hour separator line with dashes
+				output.WriteString(fmt.Sprintf("  %s %s\n",
+					renderStyle(periodStyle, hourLabel, opts.NoColor),
+					renderStyle(separatorStyle, strings.Repeat("-", 30), opts.NoColor)))
 
 				// If --all-commands, show each command with timestamp
 				if opts.AllCommands {
 					for _, cmd := range bucket.Commands {
-						timestamp := time.Unix(cmd.Timestamp, 0).Format("3:04pm")
-						output.WriteString(fmt.Sprintf("      %s  %s\n",
+						t := time.Unix(cmd.Timestamp, 0)
+						// Format timestamp as just minutes ":08"
+						timestamp := fmt.Sprintf(":%02d", t.Minute())
+						output.WriteString(fmt.Sprintf("    %s  %s\n",
 							renderStyle(timestampStyle, timestamp, opts.NoColor),
 							renderStyle(commandStyle, cmd.CommandText, opts.NoColor)))
 					}
