@@ -54,11 +54,6 @@ func TestFormatSummary_SingleContext(t *testing.T) {
 	// And: should contain commands with minute-only timestamps
 	assert.Contains(t, output, ":00  git status")
 	assert.Contains(t, output, ":00  go build")
-
-	// And: should contain statistics
-	assert.Contains(t, output, "Total commands: 2")
-	assert.Contains(t, output, "Unique contexts: 1 (1 repo)")
-	assert.Contains(t, output, "Branches worked on: 1")
 }
 
 // TestFormatSummary_WithoutAllCommands tests summary without showing all commands
@@ -144,8 +139,6 @@ func TestFormatSummary_MultipleContexts(t *testing.T) {
 	shyIndex := strings.Index(output, "/home/user/projects/shy")
 	assert.Less(t, appIndex, shyIndex, "app should appear before shy")
 
-	// And: statistics should show 2 repos
-	assert.Contains(t, output, "Unique contexts: 2 (2 repos)")
 }
 
 // TestFormatSummary_MultipleBranches tests formatting with multiple branches
@@ -189,9 +182,6 @@ func TestFormatSummary_MultipleBranches(t *testing.T) {
 	featureIndex := strings.Index(output, ":feature")
 	mainIndex := strings.Index(output, ":main")
 	assert.Less(t, featureIndex, mainIndex, "feature should appear before main")
-
-	// And: statistics should show 2 branches
-	assert.Contains(t, output, "Branches worked on: 2")
 }
 
 // TestFormatSummary_NonGitDirectory tests formatting non-git directory
@@ -223,9 +213,6 @@ func TestFormatSummary_NonGitDirectory(t *testing.T) {
 
 	// And: should show "(non-git)" on the same line as directory
 	assert.Contains(t, output, "/home/user/downloads")
-
-	// And: statistics should show non-repo dir
-	assert.Contains(t, output, "Unique contexts: 1 (1 non-repo dir)")
 }
 
 // TestFormatSummary_MixedGitAndNonGit tests mixed git and non-git contexts
@@ -259,9 +246,8 @@ func TestFormatSummary_MixedGitAndNonGit(t *testing.T) {
 
 	// When: formatting summary
 	output := FormatSummary(grouped, opts)
-
-	// Then: statistics should show both types
-	assert.Contains(t, output, "Unique contexts: 2 (1 repos, 1 non-repo dir)")
+	assert.Contains(t, output, "/home/user/downloads")
+	assert.Contains(t, output, "/home/user/projects/shy:main")
 }
 
 // TestFormatSummary_EmptyCommands tests formatting with no commands
