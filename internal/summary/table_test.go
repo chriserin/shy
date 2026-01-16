@@ -42,7 +42,7 @@ func TestFormatTable(t *testing.T) {
 			date:        "2026-01-14",
 			isYesterday: true,
 			wantStrings: []string{
-				"Yesterday's Work Summary - 2026-01-14",
+				"Work Summary - 2026-01-14",
 				"Directory",
 				"Branch",
 				"Commands",
@@ -103,7 +103,7 @@ func TestFormatTable(t *testing.T) {
 			date:        "2026-01-14",
 			isYesterday: true,
 			wantStrings: []string{
-				"Yesterday's Work Summary - 2026-01-14",
+				"Work Summary - 2026-01-14",
 				"~/shy",
 				"main",
 				"3",
