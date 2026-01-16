@@ -8,13 +8,41 @@ import (
 	"github.com/chris/shy/pkg/models"
 )
 
-// HourBucket represents commands in an hour with time range
-type HourBucket struct {
-	Hour       int // 0-23
-	Commands   []models.Command
-	FirstTime  int64 // Unix timestamp of first command
-	LastTime   int64 // Unix timestamp of last command
+// Bucket represents commands in an hour with time range
+type Bucket struct {
+	BucketSize    BucketSize
+	BucketID      int // 0-23
+	Commands      []models.Command
+	FirstTime     int64            // Unix timestamp of first command
+	LastTime      int64            // Unix timestamp of last command
+	CommandCounts map[string]int64 // Map of command text to its number of executions
 }
+
+func (b Bucket) FormatLabel() string {
+	switch b.BucketSize {
+	case Hourly:
+		return FormatHour(b.BucketID)
+	case Periodically:
+		periods := GetOrderedPeriods()
+		return string(periods[b.BucketID])
+	case Daily:
+		t := time.Unix(int64(b.BucketID), 0)
+		return t.Local().Format("2006-01-02")
+	case Weekly:
+		return fmt.Sprintf("Week %d", b.BucketID)
+	default:
+		return fmt.Sprintf("%d", b.BucketID)
+	}
+}
+
+type BucketSize int
+
+const (
+	Hourly BucketSize = iota
+	Periodically
+	Daily
+	Weekly
+)
 
 // GetHour extracts the hour (0-23) from a Unix timestamp
 // Uses local timezone for hour calculation
@@ -25,45 +53,72 @@ func GetHour(timestamp int64) int {
 
 // BucketByHour groups commands by hour of the day (0-23)
 // Returns a map of hour to HourBucket with commands and time range
-func BucketByHour(commands []models.Command) map[int]*HourBucket {
-	buckets := make(map[int]*HourBucket)
+func BucketBy(commands []models.Command, bucketSize BucketSize) map[int]*Bucket {
+	buckets := make(map[int]*Bucket)
 
+	bucketID := 0
 	for _, cmd := range commands {
-		hour := GetHour(cmd.Timestamp)
+
+		switch bucketSize {
+		case Hourly:
+			// no change needed
+			bucketID = GetHour(cmd.Timestamp)
+		case Periodically:
+			bucketID = GetTimePeriod(cmd.Timestamp)
+		case Daily:
+			t := time.Unix(cmd.Timestamp, 0)
+			year, month, day := t.Date()
+			midnight := time.Date(year, month, day, 0, 0, 0, 0, t.Location())
+			bucketID = int(midnight.Unix())
+		case Weekly:
+			t := time.Unix(cmd.Timestamp, 0)
+			_, week := t.ISOWeek()
+			// Use year and week number to create a unique bucket ID
+			bucketID = week
+		}
 
 		// Initialize bucket if it doesn't exist
-		if buckets[hour] == nil {
-			buckets[hour] = &HourBucket{
-				Hour:      hour,
-				Commands:  []models.Command{},
-				FirstTime: cmd.Timestamp,
-				LastTime:  cmd.Timestamp,
+		if buckets[bucketID] == nil {
+			buckets[bucketID] = &Bucket{
+				BucketSize: bucketSize,
+				BucketID:   bucketID,
+				Commands:   []models.Command{},
+				FirstTime:  cmd.Timestamp,
+				LastTime:   cmd.Timestamp,
 			}
 		}
 
 		// Append command
-		buckets[hour].Commands = append(buckets[hour].Commands, cmd)
+		buckets[bucketID].Commands = append(buckets[bucketID].Commands, cmd)
 
 		// Update time range
-		if cmd.Timestamp < buckets[hour].FirstTime {
-			buckets[hour].FirstTime = cmd.Timestamp
+		if cmd.Timestamp < buckets[bucketID].FirstTime {
+			buckets[bucketID].FirstTime = cmd.Timestamp
 		}
-		if cmd.Timestamp > buckets[hour].LastTime {
-			buckets[hour].LastTime = cmd.Timestamp
+		if cmd.Timestamp > buckets[bucketID].LastTime {
+			buckets[bucketID].LastTime = cmd.Timestamp
+		}
+	}
+
+	// count each commands exec time in the hour bucket
+	for _, bucket := range buckets {
+		bucket.CommandCounts = make(map[string]int64)
+		for _, cmd := range bucket.Commands {
+			bucket.CommandCounts[cmd.CommandText]++
 		}
 	}
 
 	return buckets
 }
 
-// GetOrderedHours returns hours that have commands, sorted chronologically
-func GetOrderedHours(buckets map[int]*HourBucket) []int {
-	hours := make([]int, 0, len(buckets))
-	for hour := range buckets {
-		hours = append(hours, hour)
+// GetOrderedBuckets returns hours that have commands, sorted chronologically
+func GetOrderedBuckets(buckets map[int]*Bucket) []int {
+	ids := make([]int, 0, len(buckets))
+	for _, bucket := range buckets {
+		ids = append(ids, bucket.BucketID)
 	}
-	sort.Ints(hours)
-	return hours
+	sort.Ints(ids)
+	return ids
 }
 
 // FormatHour formats an hour as "8am", "2pm", "12pm", "12am"
@@ -101,52 +156,23 @@ type TimeBucket struct {
 }
 
 // GetTimePeriod determines which time period a timestamp falls into
-func GetTimePeriod(timestamp int64) TimePeriod {
+func GetTimePeriod(timestamp int64) int {
 	t := time.Unix(timestamp, 0)
 	hour := t.Hour()
 
 	switch {
 	case hour >= 6 && hour < 12:
-		return Morning
+		return 0
 	case hour >= 12 && hour < 18:
-		return Afternoon
+		return 1
 	case hour >= 18 && hour < 24:
-		return Evening
+		return 2
 	default: // 0-5
-		return Night
+		return 3
 	}
-}
-
-// BucketByTimePeriod groups commands by time period (deprecated, use BucketByHour)
-func BucketByTimePeriod(commands []models.Command) map[TimePeriod]*TimeBucket {
-	buckets := make(map[TimePeriod]*TimeBucket)
-
-	for _, cmd := range commands {
-		period := GetTimePeriod(cmd.Timestamp)
-
-		if buckets[period] == nil {
-			buckets[period] = &TimeBucket{
-				Period:    period,
-				Commands:  []models.Command{},
-				FirstTime: cmd.Timestamp,
-				LastTime:  cmd.Timestamp,
-			}
-		}
-
-		buckets[period].Commands = append(buckets[period].Commands, cmd)
-
-		if cmd.Timestamp < buckets[period].FirstTime {
-			buckets[period].FirstTime = cmd.Timestamp
-		}
-		if cmd.Timestamp > buckets[period].LastTime {
-			buckets[period].LastTime = cmd.Timestamp
-		}
-	}
-
-	return buckets
 }
 
 // GetOrderedPeriods returns time periods in chronological order
 func GetOrderedPeriods() []TimePeriod {
-	return []TimePeriod{Night, Morning, Afternoon, Evening}
+	return []TimePeriod{Morning, Afternoon, Evening, Night}
 }

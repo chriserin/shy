@@ -17,6 +17,9 @@ import (
 var (
 	summaryDate        string
 	summaryAllCommands bool
+	uniqCommands       bool
+	multiCommands      bool
+	bucketSize         string
 )
 
 var summaryCmd = &cobra.Command{
@@ -32,6 +35,9 @@ func init() {
 	// Add flags
 	summaryCmd.Flags().StringVar(&summaryDate, "date", "yesterday", "Date to summarize (yesterday, today, or YYYY-MM-DD)")
 	summaryCmd.Flags().BoolVar(&summaryAllCommands, "all-commands", false, "Display all commands in each time bucket")
+	summaryCmd.Flags().BoolVar(&uniqCommands, "uniq-commands", false, "Display unique commands")
+	summaryCmd.Flags().BoolVar(&multiCommands, "multi-commands", false, "Display commands executed multiple times")
+	summaryCmd.Flags().StringVar(&bucketSize, "bucket", "hour", "Bucket size for commands (hour, period, day, week)")
 }
 
 func runSummary(cmd *cobra.Command, args []string) error {
@@ -66,14 +72,32 @@ func runSummary(cmd *cobra.Command, args []string) error {
 
 	// Format and print summary
 	opts := summary.FormatOptions{
-		AllCommands: summaryAllCommands,
-		Date:        dateStr,
-		NoColor:     noColor,
+		AllCommands:   summaryAllCommands,
+		UniqCommands:  uniqCommands,
+		MultiCommands: multiCommands,
+		Date:          dateStr,
+		NoColor:       noColor,
+		BucketSize:    TransformBucketSize(bucketSize),
 	}
 	output := summary.FormatSummary(grouped, opts)
 	fmt.Fprint(cmd.OutOrStdout(), output)
 
 	return nil
+}
+
+func TransformBucketSize(size string) summary.BucketSize {
+	switch strings.ToLower(size) {
+	case "hour":
+		return summary.Hourly
+	case "period":
+		return summary.Periodically
+	case "day":
+		return summary.Daily
+	case "week":
+		return summary.Weekly
+	default:
+		return summary.Hourly // Default to hour if unrecognized
+	}
 }
 
 // parseDateRange parses a date string and returns Unix timestamp range (start, end)

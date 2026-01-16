@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/chris/shy/pkg/models"
 )
 
@@ -27,9 +28,12 @@ var (
 
 // FormatOptions contains options for formatting the summary
 type FormatOptions struct {
-	AllCommands bool   // Show all commands or just summary
-	Date        string // Date being summarized (YYYY-MM-DD format)
-	NoColor     bool   // Disable color output
+	AllCommands   bool // Show all commands or just summary
+	UniqCommands  bool
+	MultiCommands bool
+	Date          string // Date being summarized (YYYY-MM-DD format)
+	NoColor       bool   // Disable color output
+	BucketSize    BucketSize
 }
 
 // Helper function to render with or without colors
@@ -46,8 +50,8 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 
 	// Header
 	title := fmt.Sprintf("Work Summary - %s", opts.Date)
-	output.WriteString(renderStyle(headerStyle, title, opts.NoColor) + "\n")
-	output.WriteString(renderStyle(separatorStyle, "========================================", opts.NoColor) + "\n\n")
+	separator := renderStyle(separatorStyle, strings.Repeat("=", max(40-(ansi.StringWidth(title)/2), 0)), opts.NoColor)
+	output.WriteString(fmt.Sprintf("\n%s %s %s\n\n", separator, renderStyle(headerStyle, title, opts.NoColor), separator))
 
 	// Check if no commands
 	if len(grouped.Contexts) == 0 {
@@ -57,13 +61,6 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 
 	// Sort contexts by working directory
 	contexts := sortContexts(grouped.Contexts)
-
-	// Statistics trackers
-	totalCommands := 0
-	totalBranches := 0
-	branchSet := make(map[string]bool)
-	repoCount := 0
-	nonRepoCount := 0
 
 	// Format each context
 	for _, contextKey := range contexts {
@@ -78,16 +75,9 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 		for _, branchKey := range sortedBranches {
 			commands := branches[branchKey]
 
-			// Track branch statistics
-			if branchKey != NoBranch {
-				branchSet[string(branchKey)] = true
-			}
-			totalCommands += len(commands)
-
 			// Context header with directory:branch on one line
 			var contextLine string
 			if contextKey.GitRepo != "" {
-				repoCount++
 
 				if branchKey == NoBranch {
 					contextLine = fmt.Sprintf("%s:%s",
@@ -101,7 +91,6 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 					)
 				}
 			} else {
-				nonRepoCount++
 				contextLine = fmt.Sprintf("%s",
 					renderStyle(contextStyle, workingDir, opts.NoColor))
 			}
@@ -109,80 +98,87 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 			output.WriteString(contextLine + "\n")
 
 			// Bucket commands by hour
-			buckets := BucketByHour(commands)
+			buckets := BucketBy(commands, opts.BucketSize)
 
 			// Format each hour in chronological order
-			hours := GetOrderedHours(buckets)
-			for _, hour := range hours {
-				bucket := buckets[hour]
-				hourLabel := FormatHour(hour)
+			bucketIDs := GetOrderedBuckets(buckets)
+			for _, bucketID := range bucketIDs {
+				bucket := buckets[bucketID]
+				bucketLabel := bucket.FormatLabel()
 
 				// Hour separator line with dashes
-				output.WriteString(fmt.Sprintf("  %s %s\n",
-					renderStyle(periodStyle, hourLabel, opts.NoColor),
-					renderStyle(separatorStyle, strings.Repeat("-", 30), opts.NoColor)))
+				fmt.Fprintf(&output, "  %s %s\n",
+					renderStyle(periodStyle, bucketLabel, opts.NoColor),
+					renderStyle(separatorStyle, strings.Repeat("-", 80-2-len(bucketLabel)), opts.NoColor))
 
 				// If --all-commands, show each command with timestamp
 				if opts.AllCommands {
 					for _, cmd := range bucket.Commands {
-						t := time.Unix(cmd.Timestamp, 0)
-						// Format timestamp as just minutes ":08"
-						timestamp := fmt.Sprintf(":%02d", t.Minute())
-						output.WriteString(fmt.Sprintf("    %s  %s\n",
+						timestamp := formatTimestamp(cmd, opts.BucketSize)
+
+						fmt.Fprintf(&output, "    %s  %s\n",
 							renderStyle(timestampStyle, timestamp, opts.NoColor),
-							renderStyle(commandStyle, cmd.CommandText, opts.NoColor)))
+							renderStyle(commandStyle, cmd.CommandText, opts.NoColor))
 					}
+				}
+
+				if opts.MultiCommands {
+					// sort map keys by value
+					commandsSorted := make([]string, 0, len(bucket.CommandCounts))
+					for cmd := range bucket.CommandCounts {
+						commandsSorted = append(commandsSorted, cmd)
+					}
+					sort.Slice(commandsSorted, func(i, j int) bool {
+						return bucket.CommandCounts[commandsSorted[i]] > bucket.CommandCounts[commandsSorted[j]]
+					})
+					for _, cmd := range commandsSorted {
+						count := bucket.CommandCounts[cmd]
+						if count > 1 {
+							fmt.Fprintf(&output, "    %s %s\n",
+								renderStyle(statValueStyle.Width(4).Align(lipgloss.Left), fmt.Sprintf("⟳ %d", count), opts.NoColor),
+								renderStyle(commandStyle, cmd, opts.NoColor))
+						}
+					}
+				}
+
+				if opts.UniqCommands {
+					for _, cmd := range bucket.Commands {
+						if bucket.CommandCounts[cmd.CommandText] == 1 {
+							timestamp := formatTimestamp(cmd, opts.BucketSize)
+
+							fmt.Fprintf(&output, "    %s  %s\n",
+								renderStyle(timestampStyle, timestamp, opts.NoColor),
+								renderStyle(commandStyle, cmd.CommandText, opts.NoColor))
+						}
+					}
+				}
+
+				if !opts.AllCommands && !opts.UniqCommands && !opts.MultiCommands {
+					// If no detailed options, just show total commands in the hour
+					fmt.Fprintf(&output, "    %s commands\n",
+						renderStyle(commandStyle, fmt.Sprintf("%d", len(bucket.Commands)), opts.NoColor))
 				}
 				output.WriteString("\n")
 			}
 		}
 	}
 
-	// Summary statistics
-	totalBranches = len(branchSet)
-	output.WriteString(renderStyle(headerStyle, "Summary Statistics:", opts.NoColor) + "\n")
-	output.WriteString(fmt.Sprintf("  %s: %s\n",
-		renderStyle(statLabelStyle, "Total commands", opts.NoColor),
-		renderStyle(statValueStyle, fmt.Sprintf("%d", totalCommands), opts.NoColor)))
-
-	// Format unique contexts string
-	totalContexts := repoCount + nonRepoCount
-	if repoCount > 0 && nonRepoCount > 0 {
-		output.WriteString(fmt.Sprintf("  %s: %s (%d repos, %d non-repo dir)\n",
-			renderStyle(statLabelStyle, "Unique contexts", opts.NoColor),
-			renderStyle(statValueStyle, fmt.Sprintf("%d", totalContexts), opts.NoColor),
-			repoCount, nonRepoCount))
-	} else if repoCount > 0 {
-		if repoCount == 1 {
-			output.WriteString(fmt.Sprintf("  %s: %s (1 repo)\n",
-				renderStyle(statLabelStyle, "Unique contexts", opts.NoColor),
-				renderStyle(statValueStyle, fmt.Sprintf("%d", totalContexts), opts.NoColor)))
-		} else {
-			output.WriteString(fmt.Sprintf("  %s: %s (%d repos)\n",
-				renderStyle(statLabelStyle, "Unique contexts", opts.NoColor),
-				renderStyle(statValueStyle, fmt.Sprintf("%d", totalContexts), opts.NoColor),
-				repoCount))
-		}
-	} else {
-		if nonRepoCount == 1 {
-			output.WriteString(fmt.Sprintf("  %s: %s (1 non-repo dir)\n",
-				renderStyle(statLabelStyle, "Unique contexts", opts.NoColor),
-				renderStyle(statValueStyle, fmt.Sprintf("%d", totalContexts), opts.NoColor)))
-		} else {
-			output.WriteString(fmt.Sprintf("  %s: %s (%d non-repo dirs)\n",
-				renderStyle(statLabelStyle, "Unique contexts", opts.NoColor),
-				renderStyle(statValueStyle, fmt.Sprintf("%d", totalContexts), opts.NoColor),
-				nonRepoCount))
-		}
-	}
-
-	if totalBranches > 0 {
-		output.WriteString(fmt.Sprintf("  %s: %s\n",
-			renderStyle(statLabelStyle, "Branches worked on", opts.NoColor),
-			renderStyle(statValueStyle, fmt.Sprintf("%d", totalBranches), opts.NoColor)))
-	}
-
 	return output.String()
+}
+
+func formatTimestamp(cmd models.Command, bucketSize BucketSize) string {
+	t := time.Unix(cmd.Timestamp, 0)
+	switch bucketSize {
+	case Hourly:
+		return t.Format(":04")
+	case Periodically:
+		return t.Format("03:04 PM")
+	case Daily:
+		return t.Format("03:04 PM")
+	case Weekly:
+		return t.Format("Jan 2 03:04 PM")
+	}
+	return t.Format("2006-01-02 15:04:05")
 }
 
 // sortContexts returns context keys sorted alphabetically by working directory

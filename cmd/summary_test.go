@@ -249,9 +249,6 @@ func TestSummary_MultipleBranches(t *testing.T) {
 	mainIndex := strings.Index(output, ":main")
 	assert.Less(t, featureIndex, mainIndex, "feature-a should appear before main")
 
-	// And: statistics should show 2 branches
-	assert.Contains(t, output, "Branches worked on: 2")
-
 	// Reset
 	rootCmd.SetArgs(nil)
 }
@@ -312,9 +309,6 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 
 	// And: output should contain non-git context with (non-git) label
 	assert.Contains(t, output, "/home/user/downloads")
-
-	// And: statistics should show mixed contexts
-	assert.Contains(t, output, "Unique contexts: 2 (1 repos, 1 non-repo dir)")
 
 	// Reset
 	rootCmd.SetArgs(nil)

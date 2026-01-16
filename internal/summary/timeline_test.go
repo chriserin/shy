@@ -13,99 +13,99 @@ import (
 func TestGetTimePeriod_Morning(t *testing.T) {
 	// 6:00 AM
 	ts := time.Date(2026, 1, 14, 6, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Morning, GetTimePeriod(ts))
+	assert.Equal(t, 0, GetTimePeriod(ts)) // Morning = 0
 
 	// 11:59 AM
 	ts = time.Date(2026, 1, 14, 11, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Morning, GetTimePeriod(ts))
+	assert.Equal(t, 0, GetTimePeriod(ts))
 
 	// 9:30 AM
 	ts = time.Date(2026, 1, 14, 9, 30, 0, 0, time.Local).Unix()
-	assert.Equal(t, Morning, GetTimePeriod(ts))
+	assert.Equal(t, 0, GetTimePeriod(ts))
 }
 
 // TestGetTimePeriod_Afternoon tests afternoon time period (12pm-6pm)
 func TestGetTimePeriod_Afternoon(t *testing.T) {
 	// 12:00 PM
 	ts := time.Date(2026, 1, 14, 12, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Afternoon, GetTimePeriod(ts))
+	assert.Equal(t, 1, GetTimePeriod(ts)) // Afternoon = 1
 
 	// 5:59 PM
 	ts = time.Date(2026, 1, 14, 17, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Afternoon, GetTimePeriod(ts))
+	assert.Equal(t, 1, GetTimePeriod(ts))
 
 	// 2:30 PM
 	ts = time.Date(2026, 1, 14, 14, 30, 0, 0, time.Local).Unix()
-	assert.Equal(t, Afternoon, GetTimePeriod(ts))
+	assert.Equal(t, 1, GetTimePeriod(ts))
 }
 
 // TestGetTimePeriod_Evening tests evening time period (6pm-12am)
 func TestGetTimePeriod_Evening(t *testing.T) {
 	// 6:00 PM
 	ts := time.Date(2026, 1, 14, 18, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Evening, GetTimePeriod(ts))
+	assert.Equal(t, 2, GetTimePeriod(ts)) // Evening = 2
 
 	// 11:59 PM
 	ts = time.Date(2026, 1, 14, 23, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Evening, GetTimePeriod(ts))
+	assert.Equal(t, 2, GetTimePeriod(ts))
 
 	// 9:30 PM
 	ts = time.Date(2026, 1, 14, 21, 30, 0, 0, time.Local).Unix()
-	assert.Equal(t, Evening, GetTimePeriod(ts))
+	assert.Equal(t, 2, GetTimePeriod(ts))
 }
 
 // TestGetTimePeriod_Night tests night time period (12am-6am)
 func TestGetTimePeriod_Night(t *testing.T) {
 	// 12:00 AM
 	ts := time.Date(2026, 1, 14, 0, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Night, GetTimePeriod(ts))
+	assert.Equal(t, 3, GetTimePeriod(ts)) // Night = 3
 
 	// 5:59 AM
 	ts = time.Date(2026, 1, 14, 5, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Night, GetTimePeriod(ts))
+	assert.Equal(t, 3, GetTimePeriod(ts))
 
 	// 3:30 AM
 	ts = time.Date(2026, 1, 14, 3, 30, 0, 0, time.Local).Unix()
-	assert.Equal(t, Night, GetTimePeriod(ts))
+	assert.Equal(t, 3, GetTimePeriod(ts))
 }
 
 // TestGetTimePeriod_Boundaries tests exact boundary times
 func TestGetTimePeriod_Boundaries(t *testing.T) {
 	// 5:59:59 AM - should be Night
 	ts := time.Date(2026, 1, 14, 5, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Night, GetTimePeriod(ts))
+	assert.Equal(t, 3, GetTimePeriod(ts))
 
 	// 6:00:00 AM - should be Morning
 	ts = time.Date(2026, 1, 14, 6, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Morning, GetTimePeriod(ts))
+	assert.Equal(t, 0, GetTimePeriod(ts))
 
 	// 11:59:59 AM - should be Morning
 	ts = time.Date(2026, 1, 14, 11, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Morning, GetTimePeriod(ts))
+	assert.Equal(t, 0, GetTimePeriod(ts))
 
 	// 12:00:00 PM - should be Afternoon
 	ts = time.Date(2026, 1, 14, 12, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Afternoon, GetTimePeriod(ts))
+	assert.Equal(t, 1, GetTimePeriod(ts))
 
 	// 17:59:59 PM - should be Afternoon
 	ts = time.Date(2026, 1, 14, 17, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Afternoon, GetTimePeriod(ts))
+	assert.Equal(t, 1, GetTimePeriod(ts))
 
 	// 18:00:00 PM - should be Evening
 	ts = time.Date(2026, 1, 14, 18, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Evening, GetTimePeriod(ts))
+	assert.Equal(t, 2, GetTimePeriod(ts))
 
 	// 23:59:59 PM - should be Evening
 	ts = time.Date(2026, 1, 14, 23, 59, 59, 0, time.Local).Unix()
-	assert.Equal(t, Evening, GetTimePeriod(ts))
+	assert.Equal(t, 2, GetTimePeriod(ts))
 
 	// 00:00:00 AM (next day) - should be Night
 	ts = time.Date(2026, 1, 15, 0, 0, 0, 0, time.Local).Unix()
-	assert.Equal(t, Night, GetTimePeriod(ts))
+	assert.Equal(t, 3, GetTimePeriod(ts))
 }
 
-// TestBucketByTimePeriod_AllPeriods tests bucketing across all time periods
-func TestBucketByTimePeriod_AllPeriods(t *testing.T) {
+// TestBucketBy_Periodically_AllPeriods tests bucketing across all time periods
+func TestBucketBy_Periodically_AllPeriods(t *testing.T) {
 	// Given: commands distributed across all time periods
 	commands := []models.Command{
 		{
@@ -127,34 +127,34 @@ func TestBucketByTimePeriod_AllPeriods(t *testing.T) {
 	}
 
 	// When: bucketing by time period
-	buckets := BucketByTimePeriod(commands)
+	buckets := BucketBy(commands, Periodically)
 
-	// Then: should have 4 buckets
+	// Then: should have 4 buckets (0=Morning, 1=Afternoon, 2=Evening, 3=Night)
 	require.Len(t, buckets, 4)
 
-	// And: Night bucket should have 1 command
-	require.NotNil(t, buckets[Night])
-	assert.Len(t, buckets[Night].Commands, 1)
-	assert.Equal(t, "git commit", buckets[Night].Commands[0].CommandText)
+	// And: Night bucket (3) should have 1 command
+	require.NotNil(t, buckets[3])
+	assert.Len(t, buckets[3].Commands, 1)
+	assert.Equal(t, "git commit", buckets[3].Commands[0].CommandText)
 
-	// And: Morning bucket should have 1 command
-	require.NotNil(t, buckets[Morning])
-	assert.Len(t, buckets[Morning].Commands, 1)
-	assert.Equal(t, "git status", buckets[Morning].Commands[0].CommandText)
+	// And: Morning bucket (0) should have 1 command
+	require.NotNil(t, buckets[0])
+	assert.Len(t, buckets[0].Commands, 1)
+	assert.Equal(t, "git status", buckets[0].Commands[0].CommandText)
 
-	// And: Afternoon bucket should have 1 command
-	require.NotNil(t, buckets[Afternoon])
-	assert.Len(t, buckets[Afternoon].Commands, 1)
-	assert.Equal(t, "go test", buckets[Afternoon].Commands[0].CommandText)
+	// And: Afternoon bucket (1) should have 1 command
+	require.NotNil(t, buckets[1])
+	assert.Len(t, buckets[1].Commands, 1)
+	assert.Equal(t, "go test", buckets[1].Commands[0].CommandText)
 
-	// And: Evening bucket should have 1 command
-	require.NotNil(t, buckets[Evening])
-	assert.Len(t, buckets[Evening].Commands, 1)
-	assert.Equal(t, "git push", buckets[Evening].Commands[0].CommandText)
+	// And: Evening bucket (2) should have 1 command
+	require.NotNil(t, buckets[2])
+	assert.Len(t, buckets[2].Commands, 1)
+	assert.Equal(t, "git push", buckets[2].Commands[0].CommandText)
 }
 
-// TestBucketByTimePeriod_SinglePeriod tests bucketing in one time period
-func TestBucketByTimePeriod_SinglePeriod(t *testing.T) {
+// TestBucketBy_Periodically_SinglePeriod tests bucketing in one time period
+func TestBucketBy_Periodically_SinglePeriod(t *testing.T) {
 	// Given: commands all in morning
 	commands := []models.Command{
 		{
@@ -172,21 +172,21 @@ func TestBucketByTimePeriod_SinglePeriod(t *testing.T) {
 	}
 
 	// When: bucketing by time period
-	buckets := BucketByTimePeriod(commands)
+	buckets := BucketBy(commands, Periodically)
 
 	// Then: should have only 1 bucket
 	require.Len(t, buckets, 1)
 
-	// And: Morning bucket should have all 3 commands
-	require.NotNil(t, buckets[Morning])
-	assert.Len(t, buckets[Morning].Commands, 3)
-	assert.Equal(t, "git status", buckets[Morning].Commands[0].CommandText)
-	assert.Equal(t, "go build", buckets[Morning].Commands[1].CommandText)
-	assert.Equal(t, "go test", buckets[Morning].Commands[2].CommandText)
+	// And: Morning bucket (0) should have all 3 commands
+	require.NotNil(t, buckets[0])
+	assert.Len(t, buckets[0].Commands, 3)
+	assert.Equal(t, "git status", buckets[0].Commands[0].CommandText)
+	assert.Equal(t, "go build", buckets[0].Commands[1].CommandText)
+	assert.Equal(t, "go test", buckets[0].Commands[2].CommandText)
 }
 
-// TestBucketByTimePeriod_TimeRange tests first/last time tracking
-func TestBucketByTimePeriod_TimeRange(t *testing.T) {
+// TestBucketBy_Periodically_TimeRange tests first/last time tracking
+func TestBucketBy_Periodically_TimeRange(t *testing.T) {
 	// Given: commands with varying timestamps in morning
 	firstTime := time.Date(2026, 1, 14, 8, 23, 15, 0, time.Local).Unix()
 	middleTime := time.Date(2026, 1, 14, 9, 30, 0, 0, time.Local).Unix()
@@ -208,16 +208,16 @@ func TestBucketByTimePeriod_TimeRange(t *testing.T) {
 	}
 
 	// When: bucketing by time period
-	buckets := BucketByTimePeriod(commands)
+	buckets := BucketBy(commands, Periodically)
 
-	// Then: Morning bucket should track correct time range
-	require.NotNil(t, buckets[Morning])
-	assert.Equal(t, firstTime, buckets[Morning].FirstTime)
-	assert.Equal(t, lastTime, buckets[Morning].LastTime)
+	// Then: Morning bucket (0) should track correct time range
+	require.NotNil(t, buckets[0])
+	assert.Equal(t, firstTime, buckets[0].FirstTime)
+	assert.Equal(t, lastTime, buckets[0].LastTime)
 }
 
-// TestBucketByTimePeriod_TimeRangeOutOfOrder tests time range with out-of-order commands
-func TestBucketByTimePeriod_TimeRangeOutOfOrder(t *testing.T) {
+// TestBucketBy_Periodically_TimeRangeOutOfOrder tests time range with out-of-order commands
+func TestBucketBy_Periodically_TimeRangeOutOfOrder(t *testing.T) {
 	// Given: commands inserted out of chronological order
 	firstTime := time.Date(2026, 1, 14, 8, 0, 0, 0, time.Local).Unix()
 	middleTime := time.Date(2026, 1, 14, 9, 0, 0, 0, time.Local).Unix()
@@ -239,28 +239,28 @@ func TestBucketByTimePeriod_TimeRangeOutOfOrder(t *testing.T) {
 	}
 
 	// When: bucketing by time period
-	buckets := BucketByTimePeriod(commands)
+	buckets := BucketBy(commands, Periodically)
 
-	// Then: Morning bucket should still track correct first/last
-	require.NotNil(t, buckets[Morning])
-	assert.Equal(t, firstTime, buckets[Morning].FirstTime)
-	assert.Equal(t, lastTime, buckets[Morning].LastTime)
+	// Then: Morning bucket (0) should still track correct first/last
+	require.NotNil(t, buckets[0])
+	assert.Equal(t, firstTime, buckets[0].FirstTime)
+	assert.Equal(t, lastTime, buckets[0].LastTime)
 }
 
-// TestBucketByTimePeriod_EmptyCommands tests empty command list
-func TestBucketByTimePeriod_EmptyCommands(t *testing.T) {
+// TestBucketBy_EmptyCommands tests empty command list
+func TestBucketBy_EmptyCommands(t *testing.T) {
 	// Given: empty command list
 	commands := []models.Command{}
 
 	// When: bucketing by time period
-	buckets := BucketByTimePeriod(commands)
+	buckets := BucketBy(commands, Periodically)
 
 	// Then: should have empty buckets map
 	assert.Empty(t, buckets)
 }
 
-// TestBucketByTimePeriod_SingleCommand tests single command
-func TestBucketByTimePeriod_SingleCommand(t *testing.T) {
+// TestBucketBy_Periodically_SingleCommand tests single command
+func TestBucketBy_Periodically_SingleCommand(t *testing.T) {
 	// Given: single command
 	timestamp := time.Date(2026, 1, 14, 9, 0, 0, 0, time.Local).Unix()
 	commands := []models.Command{
@@ -271,16 +271,16 @@ func TestBucketByTimePeriod_SingleCommand(t *testing.T) {
 	}
 
 	// When: bucketing by time period
-	buckets := BucketByTimePeriod(commands)
+	buckets := BucketBy(commands, Periodically)
 
 	// Then: should have one bucket with one command
 	require.Len(t, buckets, 1)
-	require.NotNil(t, buckets[Morning])
-	assert.Len(t, buckets[Morning].Commands, 1)
+	require.NotNil(t, buckets[0]) // Morning = 0
+	assert.Len(t, buckets[0].Commands, 1)
 
 	// And: first and last time should be the same
-	assert.Equal(t, timestamp, buckets[Morning].FirstTime)
-	assert.Equal(t, timestamp, buckets[Morning].LastTime)
+	assert.Equal(t, timestamp, buckets[0].FirstTime)
+	assert.Equal(t, timestamp, buckets[0].LastTime)
 }
 
 // TestGetOrderedPeriods tests chronological period ordering
@@ -290,10 +290,10 @@ func TestGetOrderedPeriods(t *testing.T) {
 
 	// Then: should be in chronological order
 	require.Len(t, periods, 4)
-	assert.Equal(t, Night, periods[0])
-	assert.Equal(t, Morning, periods[1])
-	assert.Equal(t, Afternoon, periods[2])
-	assert.Equal(t, Evening, periods[3])
+	assert.Equal(t, Morning, periods[0])
+	assert.Equal(t, Afternoon, periods[1])
+	assert.Equal(t, Evening, periods[2])
+	assert.Equal(t, Night, periods[3])
 }
 
 // TestGetHour tests extracting hour from timestamps
@@ -319,8 +319,8 @@ func TestGetHour(t *testing.T) {
 	}
 }
 
-// TestBucketByHour tests grouping commands by hour
-func TestBucketByHour(t *testing.T) {
+// TestBucketBy_Hourly tests grouping commands by hour
+func TestBucketBy_Hourly(t *testing.T) {
 	commands := []models.Command{
 		{
 			CommandText: "cmd1",
@@ -340,7 +340,7 @@ func TestBucketByHour(t *testing.T) {
 		},
 	}
 
-	buckets := BucketByHour(commands)
+	buckets := BucketBy(commands, Hourly)
 
 	// Should have 3 buckets (8, 9, 14)
 	assert.Len(t, buckets, 3)
@@ -362,16 +362,16 @@ func TestBucketByHour(t *testing.T) {
 	assert.Equal(t, "cmd4", buckets[14].Commands[0].CommandText)
 }
 
-// TestGetOrderedHours tests getting hours in chronological order
-func TestGetOrderedHours(t *testing.T) {
+// TestGetOrderedBuckets tests getting bucket IDs in chronological order
+func TestGetOrderedBuckets(t *testing.T) {
 	commands := []models.Command{
 		{Timestamp: time.Date(2026, 1, 14, 14, 0, 0, 0, time.Local).Unix()},
 		{Timestamp: time.Date(2026, 1, 14, 8, 0, 0, 0, time.Local).Unix()},
 		{Timestamp: time.Date(2026, 1, 14, 20, 0, 0, 0, time.Local).Unix()},
 	}
 
-	buckets := BucketByHour(commands)
-	hours := GetOrderedHours(buckets)
+	buckets := BucketBy(commands, Hourly)
+	hours := GetOrderedBuckets(buckets)
 
 	// Should be sorted: 8, 14, 20
 	require.Len(t, hours, 3)
@@ -402,8 +402,8 @@ func TestFormatHour(t *testing.T) {
 	}
 }
 
-// TestHourBucketTimeRange tests that first/last times are tracked correctly
-func TestHourBucketTimeRange(t *testing.T) {
+// TestBucketBy_Hourly_TimeRange tests that first/last times are tracked correctly
+func TestBucketBy_Hourly_TimeRange(t *testing.T) {
 	commands := []models.Command{
 		{
 			CommandText: "cmd1",
@@ -419,7 +419,7 @@ func TestHourBucketTimeRange(t *testing.T) {
 		},
 	}
 
-	buckets := BucketByHour(commands)
+	buckets := BucketBy(commands, Hourly)
 
 	bucket := buckets[8]
 	assert.NotNil(t, bucket)
@@ -433,4 +433,121 @@ func TestHourBucketTimeRange(t *testing.T) {
 	lastTime := time.Unix(bucket.LastTime, 0)
 	assert.Equal(t, 8, lastTime.Hour())
 	assert.Equal(t, 50, lastTime.Minute())
+}
+
+// TestBucketBy_Daily tests grouping commands by day
+func TestBucketBy_Daily(t *testing.T) {
+	// Given: commands from three different days
+	day1Time1 := time.Date(2026, 1, 14, 8, 30, 0, 0, time.Local).Unix()
+	day1Time2 := time.Date(2026, 1, 14, 14, 15, 0, 0, time.Local).Unix()
+	day2Time := time.Date(2026, 1, 15, 10, 0, 0, 0, time.Local).Unix()
+	day3Time := time.Date(2026, 1, 16, 16, 45, 0, 0, time.Local).Unix()
+
+	commands := []models.Command{
+		{CommandText: "day1-cmd1", Timestamp: day1Time1},
+		{CommandText: "day1-cmd2", Timestamp: day1Time2},
+		{CommandText: "day2-cmd", Timestamp: day2Time},
+		{CommandText: "day3-cmd", Timestamp: day3Time},
+	}
+
+	// When: bucketing by day
+	buckets := BucketBy(commands, Daily)
+
+	// Then: should have 3 buckets
+	assert.Len(t, buckets, 3)
+
+	// And: bucket IDs should be midnight timestamps in local timezone
+	day1Midnight := time.Date(2026, 1, 14, 0, 0, 0, 0, time.Local).Unix()
+	day2Midnight := time.Date(2026, 1, 15, 0, 0, 0, 0, time.Local).Unix()
+	day3Midnight := time.Date(2026, 1, 16, 0, 0, 0, 0, time.Local).Unix()
+
+	// Verify day 1 bucket
+	bucket1 := buckets[int(day1Midnight)]
+	require.NotNil(t, bucket1)
+	assert.Len(t, bucket1.Commands, 2)
+	assert.Equal(t, "day1-cmd1", bucket1.Commands[0].CommandText)
+	assert.Equal(t, "day1-cmd2", bucket1.Commands[1].CommandText)
+
+	// Verify day 2 bucket
+	bucket2 := buckets[int(day2Midnight)]
+	require.NotNil(t, bucket2)
+	assert.Len(t, bucket2.Commands, 1)
+	assert.Equal(t, "day2-cmd", bucket2.Commands[0].CommandText)
+
+	// Verify day 3 bucket
+	bucket3 := buckets[int(day3Midnight)]
+	require.NotNil(t, bucket3)
+	assert.Len(t, bucket3.Commands, 1)
+	assert.Equal(t, "day3-cmd", bucket3.Commands[0].CommandText)
+}
+
+// TestBucketBy_Daily_FormatsCorrectly tests that daily buckets format as dates
+func TestBucketBy_Daily_FormatsCorrectly(t *testing.T) {
+	// Given: commands from a specific day
+	commands := []models.Command{
+		{CommandText: "cmd", Timestamp: time.Date(2026, 1, 14, 15, 30, 0, 0, time.Local).Unix()},
+	}
+
+	// When: bucketing by day
+	buckets := BucketBy(commands, Daily)
+
+	// Then: should have 1 bucket
+	require.Len(t, buckets, 1)
+
+	// And: the bucket should format its label as a date
+	for _, bucket := range buckets {
+		label := bucket.FormatLabel()
+		assert.Equal(t, "2026-01-14", label)
+	}
+}
+
+// TestBucketBy_Daily_MidnightBoundary tests commands right at midnight boundaries
+func TestBucketBy_Daily_MidnightBoundary(t *testing.T) {
+	// Given: commands at midnight boundaries
+	lastSecondDay1 := time.Date(2026, 1, 14, 23, 59, 59, 0, time.Local).Unix()
+	firstSecondDay2 := time.Date(2026, 1, 15, 0, 0, 0, 0, time.Local).Unix()
+
+	commands := []models.Command{
+		{CommandText: "day1", Timestamp: lastSecondDay1},
+		{CommandText: "day2", Timestamp: firstSecondDay2},
+	}
+
+	// When: bucketing by day
+	buckets := BucketBy(commands, Daily)
+
+	// Then: should have 2 separate buckets
+	assert.Len(t, buckets, 2)
+
+	day1Midnight := time.Date(2026, 1, 14, 0, 0, 0, 0, time.Local).Unix()
+	day2Midnight := time.Date(2026, 1, 15, 0, 0, 0, 0, time.Local).Unix()
+
+	// Verify they're in different buckets
+	assert.NotNil(t, buckets[int(day1Midnight)])
+	assert.Equal(t, "day1", buckets[int(day1Midnight)].Commands[0].CommandText)
+
+	assert.NotNil(t, buckets[int(day2Midnight)])
+	assert.Equal(t, "day2", buckets[int(day2Midnight)].Commands[0].CommandText)
+}
+
+// TestBucketBy_CommandCounts tests that command execution counts are tracked
+func TestBucketBy_CommandCounts(t *testing.T) {
+	// Given: repeated commands in same hour
+	commands := []models.Command{
+		{CommandText: "git status", Timestamp: time.Date(2026, 1, 14, 9, 10, 0, 0, time.Local).Unix()},
+		{CommandText: "git status", Timestamp: time.Date(2026, 1, 14, 9, 15, 0, 0, time.Local).Unix()},
+		{CommandText: "git status", Timestamp: time.Date(2026, 1, 14, 9, 20, 0, 0, time.Local).Unix()},
+		{CommandText: "go test", Timestamp: time.Date(2026, 1, 14, 9, 25, 0, 0, time.Local).Unix()},
+		{CommandText: "go test", Timestamp: time.Date(2026, 1, 14, 9, 30, 0, 0, time.Local).Unix()},
+	}
+
+	// When: bucketing by hour
+	buckets := BucketBy(commands, Hourly)
+
+	// Then: command counts should be tracked
+	bucket := buckets[9]
+	require.NotNil(t, bucket)
+	require.NotNil(t, bucket.CommandCounts)
+
+	assert.Equal(t, int64(3), bucket.CommandCounts["git status"])
+	assert.Equal(t, int64(2), bucket.CommandCounts["go test"])
 }
