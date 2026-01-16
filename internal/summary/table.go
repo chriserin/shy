@@ -11,7 +11,7 @@ import (
 // FormatTable formats context summaries as a table
 func FormatTable(summaries []ContextSummary, date string, isYesterday bool) string {
 	if len(summaries) == 0 {
-		return formatEmptyState(date, isYesterday)
+		return formatEmptyState(date)
 	}
 
 	// Sort summaries by duration (desc), then command count (desc), then directory (asc)
@@ -20,7 +20,7 @@ func FormatTable(summaries []ContextSummary, date string, isYesterday bool) stri
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(formatTableHeader(date, isYesterday))
+	sb.WriteString(formatTableHeader(date))
 	sb.WriteString("\n\n")
 
 	// Calculate column widths
@@ -43,18 +43,14 @@ func FormatTable(summaries []ContextSummary, date string, isYesterday bool) stri
 	return sb.String()
 }
 
-func formatEmptyState(date string, isYesterday bool) string {
-	header := formatTableHeader(date, isYesterday)
+func formatEmptyState(date string) string {
+	header := formatTableHeader(date)
 	return header + "\n\nNo commands found for this date."
 }
 
-func formatTableHeader(date string, isYesterday bool) string {
+func formatTableHeader(date string) string {
 	var title string
-	if isYesterday {
-		title = fmt.Sprintf("Yesterday's Work Summary - %s", date)
-	} else {
-		title = fmt.Sprintf("Work Summary - %s", date)
-	}
+	title = fmt.Sprintf("Work Summary - %s", date)
 	separator := strings.Repeat("=", len(title))
 	return title + "\n" + separator
 }
@@ -94,7 +90,7 @@ func formatSummaryStats(summaries []ContextSummary) string {
 		plural = "s"
 	}
 
-	return fmt.Sprintf("Total: %d commands across %d context%s",
+	return fmt.Sprintf("Total: %d commands across %d context%s\n",
 		totalCommands, len(summaries), plural)
 }
 

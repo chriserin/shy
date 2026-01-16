@@ -319,7 +319,7 @@ func TestTabsumCommand(t *testing.T) {
 		output := runTabsumWithDate(t, dbPath, "yesterday")
 
 		// Then: shows yesterday's date with "Yesterday's" label
-		assertContains(t, output, "Yesterday's Work Summary - "+yesterdayStr)
+		assertContains(t, output, "Work Summary - "+yesterdayStr)
 	})
 
 	t.Run("command count accuracy across contexts", func(t *testing.T) {
