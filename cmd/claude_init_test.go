@@ -117,7 +117,7 @@ func TestClaudeInitIncludesPostHookScript(t *testing.T) {
 	assert.Contains(t, output, "# Claude Code Post-Tool Use Hook for shy", "should have post-hook header")
 	assert.Contains(t, output, "INPUT=$(cat)", "should read JSON from stdin")
 	assert.Contains(t, output, "COMMAND=$(echo \"$INPUT\" | jq -r '.tool_input.command')", "should extract command")
-	assert.Contains(t, output, "EXIT_CODE=$(echo \"$INPUT\" | jq -r '.tool_response.return_code // 0')", "should extract exit code")
+	assert.Contains(t, output, "EXIT_CODE=$(echo \"$INPUT\" | jq -r '.tool_response.exit_code // .tool_response.return_code // 0')", "should extract exit code")
 
 	// Should use correct flag names (not the old ones)
 	assert.Contains(t, output, "--status $EXIT_CODE", "should use --status flag")
@@ -143,7 +143,8 @@ func TestClaudeInitIncludesShyInsertCommand(t *testing.T) {
 	// Post-hook should build a shy insert command with all required fields
 	assert.Contains(t, output, "shy insert", "should call shy insert")
 	assert.Contains(t, output, "--command", "should include --command flag")
-	assert.Contains(t, output, "$COMMAND", "should use COMMAND variable")
+	assert.Contains(t, output, "ESCAPED_COMMAND=\"${COMMAND", "should escape COMMAND variable")
+	assert.Contains(t, output, "$ESCAPED_COMMAND", "should use ESCAPED_COMMAND variable")
 	assert.Contains(t, output, "--status $EXIT_CODE", "should include exit status")
 	assert.Contains(t, output, "--dir", "should include --dir flag")
 	assert.Contains(t, output, "$WORKING_DIR", "should use WORKING_DIR variable")
