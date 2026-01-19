@@ -575,8 +575,7 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 
 	query := `
 		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-		FROM commands
-		WHERE id >= ? AND id <= ?
+		FROM commands where id in (select max(id) from commands where id >= ? AND id <= ? group by command_text)
 		ORDER BY id ASC`
 
 	rows, err := db.conn.Query(query, first, last)
@@ -631,8 +630,13 @@ func (db *DB) GetCommandsByRangeWithPattern(first, last int64, pattern string) (
 	query := `
 		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
 		FROM commands
-		WHERE id >= ? AND id <= ?
-		AND command_text LIKE ? ESCAPE '\'
+		WHERE id IN (
+			SELECT max(id)
+			FROM commands
+			WHERE id >= ? AND id <= ?
+			AND command_text LIKE ? ESCAPE '\'
+			GROUP BY command_text
+		)
 		ORDER BY id ASC`
 
 	rows, err := db.conn.Query(query, first, last, pattern)
@@ -733,9 +737,14 @@ func (db *DB) GetCommandsByRangeInternal(first, last, sessionPid int64) ([]model
 	query := `
 		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
 		FROM commands
-		WHERE id >= ? AND id <= ?
-		AND source_pid = ?
-		AND source_active = 1
+		WHERE id IN (
+			SELECT max(id)
+			FROM commands
+			WHERE id >= ? AND id <= ?
+			AND source_pid = ?
+			AND source_active = 1
+			GROUP BY command_text
+		)
 		ORDER BY id ASC`
 
 	rows, err := db.conn.Query(query, first, last, sessionPid)
@@ -791,10 +800,15 @@ func (db *DB) GetCommandsByRangeWithPatternInternal(first, last, sessionPid int6
 	query := `
 		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
 		FROM commands
-		WHERE id >= ? AND id <= ?
-		AND command_text LIKE ? ESCAPE '\'
-		AND source_pid = ?
-		AND source_active = 1
+		WHERE id IN (
+			SELECT max(id)
+			FROM commands
+			WHERE id >= ? AND id <= ?
+			AND command_text LIKE ? ESCAPE '\'
+			AND source_pid = ?
+			AND source_active = 1
+			GROUP BY command_text
+		)
 		ORDER BY id ASC`
 
 	rows, err := db.conn.Query(query, first, last, pattern, sessionPid)
