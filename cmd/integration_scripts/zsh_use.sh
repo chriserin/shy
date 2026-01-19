@@ -107,3 +107,16 @@ bindkey '^[OB' _shy_down_line_or_history # Application mode down arrow
 alias history="shy history"
 alias fc="shy fc"
 alias r="shy fc -s"
+
+_shy_bind_viins() {
+  zvm_bindkey viins '^[[A' _shy_up_line_or_history   # Standard up arrow
+  zvm_bindkey viins '^[OA' _shy_up_line_or_history   # Application mode up arrow
+  zvm_bindkey viins '^[[B' _shy_down_line_or_history # Standard down arrow
+  zvm_bindkey viins '^[OB' _shy_down_line_or_history # Application mode down arrow
+  zvm_bindkey vicmd '^[[A' _shy_up_line_or_history   # Standard up arrow
+  zvm_bindkey vicmd '^[OA' _shy_up_line_or_history   # Application mode up arrow
+  zvm_bindkey vicmd '^[[B' _shy_down_line_or_history # Standard down arrow
+  zvm_bindkey vicmd '^[OB' _shy_down_line_or_history # Application mode down arrow
+}
+
+zvm_after_init_commands+=(_shy_bind_viins)
