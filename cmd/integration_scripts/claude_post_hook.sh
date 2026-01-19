@@ -7,7 +7,7 @@ INPUT=$(cat)
 
 # Extract fields
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command')
-EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_response.return_code // 0')
+EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_response.exit_code // .tool_response.return_code // 0')
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""')
 END_TIME=$(date +%s)
 
@@ -31,19 +31,24 @@ if [ -n "$CMD_ID" ] && [ -f "/tmp/shy-timer-${CMD_ID}" ]; then
   rm -f /tmp/shy-last-cmd-id
 fi
 
-# Get working directory
-WORKING_DIR="${PWD}"
+# Get working directory from JSON (Claude provides this as 'cwd')
+WORKING_DIR=$(echo "$INPUT" | jq -r '.cwd // .working_directory // ""')
 
-# Get git context
+# Get git context (run in the working directory)
 GIT_REPO=""
 GIT_BRANCH=""
-if git rev-parse --git-dir >/dev/null 2>&1; then
-  GIT_REPO=$(git config --get remote.origin.url 2>/dev/null || echo "")
-  GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+if [ -n "$WORKING_DIR" ] && [ -d "$WORKING_DIR" ]; then
+  cd "$WORKING_DIR" 2>/dev/null
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    GIT_REPO=$(git config --get remote.origin.url 2>/dev/null || echo "")
+    GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  fi
 fi
 
 # Build shy insert command
-INSERT_CMD="shy insert --command \"$COMMAND\" --status $EXIT_CODE --dir \"$WORKING_DIR\" --source-app claude-code --source-pid $SOURCE_PID"
+# Escape double quotes in the command so they survive the eval
+ESCAPED_COMMAND="${COMMAND//\"/\\\"}"
+INSERT_CMD="shy insert --command \"$ESCAPED_COMMAND\" --status $EXIT_CODE --dir \"$WORKING_DIR\" --source-app claude-code --source-pid $SOURCE_PID"
 
 # Add duration if available
 if [ -n "$DURATION" ]; then
