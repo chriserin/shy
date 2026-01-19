@@ -607,3 +607,407 @@ func TestGetContextSummary(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// TestGetCommandsByRange tests that GetCommandsByRange returns unique commands
+func TestGetCommandsByRange(t *testing.T) {
+	t.Run("returns unique commands by deduplication", func(t *testing.T) {
+		// Given: database with duplicate commands
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert commands with duplicates
+		commands := []string{
+			"echo hello",
+			"ls -la",
+			"echo hello", // duplicate
+			"pwd",
+			"ls -la", // duplicate
+			"echo hello", // duplicate
+		}
+
+		for _, cmdText := range commands {
+			cmd := models.NewCommand(cmdText, "/home/user", 0)
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: GetCommandsByRange is called
+		results, err := database.GetCommandsByRange(1, 6)
+		require.NoError(t, err)
+
+		// Then: should return only unique commands (most recent occurrence)
+		assert.Len(t, results, 3, "should return 3 unique commands")
+
+		// And: should contain the unique command texts
+		cmdTexts := make(map[string]bool)
+		for _, cmd := range results {
+			cmdTexts[cmd.CommandText] = true
+		}
+		assert.True(t, cmdTexts["echo hello"])
+		assert.True(t, cmdTexts["ls -la"])
+		assert.True(t, cmdTexts["pwd"])
+
+		// And: should return the most recent ID for each unique command
+		// "echo hello" appears at IDs 1, 3, 6 - should get ID 6
+		// "ls -la" appears at IDs 2, 5 - should get ID 5
+		// "pwd" appears at ID 4 - should get ID 4
+		idMap := make(map[string]int64)
+		for _, cmd := range results {
+			idMap[cmd.CommandText] = cmd.ID
+		}
+		assert.Equal(t, int64(6), idMap["echo hello"], "should get most recent 'echo hello'")
+		assert.Equal(t, int64(5), idMap["ls -la"], "should get most recent 'ls -la'")
+		assert.Equal(t, int64(4), idMap["pwd"], "should get 'pwd'")
+	})
+
+	t.Run("handles empty range", func(t *testing.T) {
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// When: called with invalid range (first > last)
+		results, err := database.GetCommandsByRange(10, 5)
+		require.NoError(t, err)
+
+		// Then: should return empty slice
+		assert.Empty(t, results)
+	})
+
+	t.Run("handles range with no duplicates", func(t *testing.T) {
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert unique commands
+		for i := 1; i <= 5; i++ {
+			cmd := models.NewCommand("command"+string(rune('0'+i)), "/home/user", 0)
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: GetCommandsByRange is called
+		results, err := database.GetCommandsByRange(1, 5)
+		require.NoError(t, err)
+
+		// Then: should return all 5 commands
+		assert.Len(t, results, 5)
+	})
+}
+
+// TestGetCommandsByRangeWithPattern tests pattern matching with deduplication
+func TestGetCommandsByRangeWithPattern(t *testing.T) {
+	t.Run("returns unique commands matching pattern", func(t *testing.T) {
+		// Given: database with duplicate commands
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert commands
+		commands := []string{
+			"git status",
+			"git commit -m 'test'",
+			"git status", // duplicate
+			"ls -la",
+			"git push",
+			"git status", // duplicate
+		}
+
+		for _, cmdText := range commands {
+			cmd := models.NewCommand(cmdText, "/home/user", 0)
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: GetCommandsByRangeWithPattern is called with pattern "git%"
+		results, err := database.GetCommandsByRangeWithPattern(1, 6, "git%")
+		require.NoError(t, err)
+
+		// Then: should return only unique git commands
+		assert.Len(t, results, 3, "should return 3 unique git commands")
+
+		// And: should contain the unique git command texts
+		cmdTexts := make(map[string]bool)
+		for _, cmd := range results {
+			cmdTexts[cmd.CommandText] = true
+		}
+		assert.True(t, cmdTexts["git status"])
+		assert.True(t, cmdTexts["git commit -m 'test'"])
+		assert.True(t, cmdTexts["git push"])
+
+		// And: should get most recent ID for "git status" (ID 6)
+		for _, cmd := range results {
+			if cmd.CommandText == "git status" {
+				assert.Equal(t, int64(6), cmd.ID, "should get most recent 'git status'")
+			}
+		}
+	})
+
+	t.Run("handles pattern with no matches", func(t *testing.T) {
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		cmd := models.NewCommand("echo hello", "/home/user", 0)
+		_, err = database.InsertCommand(cmd)
+		require.NoError(t, err)
+
+		// When: pattern doesn't match any commands
+		results, err := database.GetCommandsByRangeWithPattern(1, 1, "git%")
+		require.NoError(t, err)
+
+		// Then: should return empty slice
+		assert.Empty(t, results)
+	})
+}
+
+// TestGetCommandsByRangeInternal tests session filtering with deduplication
+func TestGetCommandsByRangeInternal(t *testing.T) {
+	t.Run("returns unique commands for specific session", func(t *testing.T) {
+		// Given: database with commands from multiple sessions
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert commands from session 1000
+		for _, cmdText := range []string{"echo session1", "ls", "echo session1"} {
+			cmd := models.NewCommand(cmdText, "/home/user", 0)
+			sessionPid := int64(1000)
+			cmd.SourcePid = &sessionPid
+			active := true
+			cmd.SourceActive = &active
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// Insert commands from session 2000
+		for _, cmdText := range []string{"echo session2", "pwd", "echo session2"} {
+			cmd := models.NewCommand(cmdText, "/home/user", 0)
+			sessionPid := int64(2000)
+			cmd.SourcePid = &sessionPid
+			active := true
+			cmd.SourceActive = &active
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: GetCommandsByRangeInternal is called for session 1000
+		results, err := database.GetCommandsByRangeInternal(1, 6, 1000)
+		require.NoError(t, err)
+
+		// Then: should return only unique commands from session 1000
+		assert.Len(t, results, 2, "should return 2 unique commands from session 1000")
+
+		// And: should contain the correct commands
+		cmdTexts := make(map[string]int)
+		for _, cmd := range results {
+			cmdTexts[cmd.CommandText]++
+		}
+		assert.Equal(t, 1, cmdTexts["echo session1"], "should have one 'echo session1'")
+		assert.Equal(t, 1, cmdTexts["ls"], "should have one 'ls'")
+		assert.Equal(t, 0, cmdTexts["echo session2"], "should not have 'echo session2'")
+	})
+
+	t.Run("respects source_active flag", func(t *testing.T) {
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert active command
+		cmd1 := models.NewCommand("echo active", "/home/user", 0)
+		sessionPid := int64(1000)
+		cmd1.SourcePid = &sessionPid
+		active := true
+		cmd1.SourceActive = &active
+		_, err = database.InsertCommand(cmd1)
+		require.NoError(t, err)
+
+		// Insert inactive command
+		cmd2 := models.NewCommand("echo inactive", "/home/user", 0)
+		cmd2.SourcePid = &sessionPid
+		inactive := false
+		cmd2.SourceActive = &inactive
+		_, err = database.InsertCommand(cmd2)
+		require.NoError(t, err)
+
+		// When: GetCommandsByRangeInternal is called
+		results, err := database.GetCommandsByRangeInternal(1, 2, 1000)
+		require.NoError(t, err)
+
+		// Then: should only return active command
+		assert.Len(t, results, 1)
+		assert.Equal(t, "echo active", results[0].CommandText)
+	})
+}
+
+// TestGetCommandsByRangeWithPatternInternal tests pattern + session filtering with deduplication
+func TestGetCommandsByRangeWithPatternInternal(t *testing.T) {
+	t.Run("returns unique commands matching pattern for session", func(t *testing.T) {
+		// Given: database with commands from multiple sessions
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Session 1000: git commands
+		for _, cmdText := range []string{"git status", "ls", "git commit", "git status"} {
+			cmd := models.NewCommand(cmdText, "/home/user", 0)
+			sessionPid := int64(1000)
+			cmd.SourcePid = &sessionPid
+			active := true
+			cmd.SourceActive = &active
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// Session 2000: different commands
+		cmd := models.NewCommand("git push", "/home/user", 0)
+		sessionPid := int64(2000)
+		cmd.SourcePid = &sessionPid
+		active := true
+		cmd.SourceActive = &active
+		_, err = database.InsertCommand(cmd)
+		require.NoError(t, err)
+
+		// When: GetCommandsByRangeWithPatternInternal is called for session 1000 with pattern "git%"
+		results, err := database.GetCommandsByRangeWithPatternInternal(1, 5, 1000, "git%")
+		require.NoError(t, err)
+
+		// Then: should return unique git commands from session 1000 only
+		assert.Len(t, results, 2, "should return 2 unique git commands from session 1000")
+
+		cmdTexts := make(map[string]bool)
+		for _, cmd := range results {
+			cmdTexts[cmd.CommandText] = true
+		}
+		assert.True(t, cmdTexts["git status"])
+		assert.True(t, cmdTexts["git commit"])
+		assert.False(t, cmdTexts["git push"], "should not include git push from session 2000")
+	})
+}
+
+// TestListCommandsInRange tests timestamp-based listing with deduplication
+func TestListCommandsInRange(t *testing.T) {
+	t.Run("returns unique commands in timestamp range", func(t *testing.T) {
+		// Given: database with duplicate commands at different times
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert commands with timestamps
+		commands := []struct {
+			text      string
+			timestamp int64
+		}{
+			{"echo hello", 1000},
+			{"ls -la", 2000},
+			{"echo hello", 3000}, // duplicate
+			{"pwd", 4000},
+			{"ls -la", 5000}, // duplicate
+			{"echo hello", 6000}, // duplicate
+		}
+
+		for _, cmdData := range commands {
+			cmd := models.NewCommand(cmdData.text, "/home/user", 0)
+			cmd.Timestamp = cmdData.timestamp
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: ListCommandsInRange is called
+		results, err := database.ListCommandsInRange(1000, 6000, 0)
+		require.NoError(t, err)
+
+		// Then: should return only unique commands
+		assert.Len(t, results, 3, "should return 3 unique commands")
+
+		// And: should get most recent occurrence of each
+		idMap := make(map[string]int64)
+		for _, cmd := range results {
+			idMap[cmd.CommandText] = cmd.ID
+		}
+		assert.Equal(t, int64(6), idMap["echo hello"], "should get most recent 'echo hello'")
+		assert.Equal(t, int64(5), idMap["ls -la"], "should get most recent 'ls -la'")
+		assert.Equal(t, int64(4), idMap["pwd"], "should get 'pwd'")
+	})
+
+	t.Run("returns unique commands with limit", func(t *testing.T) {
+		// Given: database with many duplicate commands
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert 10 commands: 5 unique, each repeated twice
+		for i := 0; i < 10; i++ {
+			cmd := models.NewCommand("cmd"+string(rune('0'+(i%5))), "/home/user", 0)
+			cmd.Timestamp = int64(1000 + i*1000)
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: ListCommandsInRange is called with limit 10
+		results, err := database.ListCommandsInRange(0, 0, 10)
+		require.NoError(t, err)
+
+		// Then: should return at most 5 unique commands (since we only have 5 unique)
+		assert.LessOrEqual(t, len(results), 5, "should return at most 5 unique commands")
+
+		// And: each command text should be unique
+		uniqueTexts := make(map[string]bool)
+		for _, cmd := range results {
+			assert.False(t, uniqueTexts[cmd.CommandText], "command text should appear only once")
+			uniqueTexts[cmd.CommandText] = true
+		}
+	})
+
+	t.Run("handles timestamp boundaries", func(t *testing.T) {
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+		database, err := New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert commands outside and inside range
+		cmd1 := models.NewCommand("before", "/home/user", 0)
+		cmd1.Timestamp = 500
+		_, err = database.InsertCommand(cmd1)
+		require.NoError(t, err)
+
+		cmd2 := models.NewCommand("inside", "/home/user", 0)
+		cmd2.Timestamp = 1500
+		_, err = database.InsertCommand(cmd2)
+		require.NoError(t, err)
+
+		cmd3 := models.NewCommand("after", "/home/user", 0)
+		cmd3.Timestamp = 2500
+		_, err = database.InsertCommand(cmd3)
+		require.NoError(t, err)
+
+		// When: ListCommandsInRange is called with specific range
+		results, err := database.ListCommandsInRange(1000, 2000, 0)
+		require.NoError(t, err)
+
+		// Then: should only return commands in range
+		assert.Len(t, results, 1)
+		assert.Equal(t, "inside", results[0].CommandText)
+	})
+}
