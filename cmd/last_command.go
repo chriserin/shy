@@ -76,13 +76,12 @@ func runLastCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Get N most recent commands (where N is 1-based: 1=most recent, 2=second most recent, etc.)
-	// ListCommands returns them ordered oldest-to-newest, so the first one
-	// is the Nth most recent command
+	// Get N most recent commands without consecutive duplicates
+	// The function returns them in descending order (most recent first)
 	limit := lastCommandOffset
-	commands, err := database.ListCommands(limit, sourceApp, sourcePid)
+	commands, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, sourceApp, sourcePid)
 	if err != nil {
-		return fmt.Errorf("failed to list commands: %w", err)
+		return fmt.Errorf("failed to get commands: %w", err)
 	}
 
 	// If we don't have enough commands, output nothing
@@ -90,9 +89,9 @@ func runLastCommand(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Output the oldest of the retrieved commands (which is the Nth most recent)
-	// commands[0] is the oldest of the set we retrieved
-	fmt.Fprintln(cmd.OutOrStdout(), commands[0].CommandText)
+	// Output the Nth most recent command (0-indexed, so offset-1)
+	// commands[0] is the most recent, commands[1] is second most recent, etc.
+	fmt.Fprintln(cmd.OutOrStdout(), commands[limit-1].CommandText)
 
 	return nil
 }

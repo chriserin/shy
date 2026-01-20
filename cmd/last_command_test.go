@@ -356,3 +356,81 @@ func TestScenario5_LastCommandWithSessionAutoDetect(t *testing.T) {
 	lastCommandCmd.Flags().Set("session", "")
 	lastCommandCmd.Flags().Set("current-session", "false")
 }
+
+// TestScenario6_LastCommandSkipsConsecutiveDuplicates tests that consecutive duplicates are skipped
+func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
+	// Given: I have a database with consecutive duplicate commands
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err, "failed to create database")
+	defer database.Close()
+
+	// Insert commands with consecutive duplicates
+	commands := []struct {
+		text      string
+		timestamp int64
+	}{
+		{"echo first", 1704470400},
+		{"echo dup", 1704470401},
+		{"echo dup", 1704470402},  // consecutive duplicate
+		{"echo dup", 1704470403},  // consecutive duplicate
+		{"ls -la", 1704470404},
+		{"echo dup", 1704470405},  // not consecutive, should be included
+		{"pwd", 1704470406},
+		{"pwd", 1704470407},       // consecutive duplicate
+	}
+
+	for _, c := range commands {
+		cmd := &models.Command{
+			CommandText: c.text,
+			WorkingDir:  "/home/test",
+			ExitStatus:  0,
+			Timestamp:   c.timestamp,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err, "failed to insert command")
+	}
+
+	// When: I run "shy last-command" (n=1, most recent)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"last-command", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+	assert.Equal(t, "pwd\n", buf.String(), "n=1 should return most recent (pwd), skipping consecutive duplicate")
+
+	// When: I run "shy last-command -n 2" (second most recent)
+	buf.Reset()
+	rootCmd.SetArgs([]string{"last-command", "-n", "2", "--db", dbPath})
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+	assert.Equal(t, "echo dup\n", buf.String(), "n=2 should return echo dup (not consecutive with pwd)")
+
+	// When: I run "shy last-command -n 3" (third most recent)
+	buf.Reset()
+	rootCmd.SetArgs([]string{"last-command", "-n", "3", "--db", dbPath})
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+	assert.Equal(t, "ls -la\n", buf.String(), "n=3 should return ls -la")
+
+	// When: I run "shy last-command -n 4" (fourth most recent)
+	buf.Reset()
+	rootCmd.SetArgs([]string{"last-command", "-n", "4", "--db", dbPath})
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+	assert.Equal(t, "echo dup\n", buf.String(), "n=4 should return echo dup (first occurrence, skipping 3 consecutive)")
+
+	// When: I run "shy last-command -n 5" (fifth most recent)
+	buf.Reset()
+	rootCmd.SetArgs([]string{"last-command", "-n", "5", "--db", dbPath})
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+	assert.Equal(t, "echo first\n", buf.String(), "n=5 should return echo first")
+
+	// Reset command for next test
+	rootCmd.SetArgs(nil)
+	lastCommandCmd.Flags().Set("offset", "1")
+}

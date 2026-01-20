@@ -565,6 +565,95 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 	return commands, nil
 }
 
+// GetRecentCommandsWithoutConsecutiveDuplicates retrieves recent commands without consecutive duplicates
+// Commands are ordered by timestamp descending (most recent first), then consecutive duplicates are removed
+// If sourceApp and sourcePid are provided, only active commands from that session are returned
+// Returns up to 'limit' commands after deduplication
+func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64) ([]models.Command, error) {
+	var query string
+	var whereClauses []string
+
+	// Add session filter if provided
+	if sourceApp != "" && sourcePid > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("source_app = '%s' AND source_pid = %d AND source_active = 1",
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid))
+	}
+
+	// Combine WHERE clauses
+	var whereClause string
+	if len(whereClauses) > 0 {
+		whereClause = "WHERE " + strings.Join(whereClauses, " AND ")
+	}
+
+	// Get all commands ordered by timestamp DESC (most recent first)
+	// We need to get more than the limit because we'll filter out consecutive duplicates
+	// Multiply by 10 to ensure we have enough after deduplication
+	fetchLimit := limit * 10
+	if fetchLimit < 100 {
+		fetchLimit = 100
+	}
+
+	query = fmt.Sprintf(`
+		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+		FROM commands
+		%s
+		ORDER BY timestamp DESC, id DESC
+		LIMIT %d`, whereClause, fetchLimit)
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query commands: %w", err)
+	}
+	defer rows.Close()
+
+	var allCommands []models.Command
+	for rows.Next() {
+		var cmd models.Command
+		var sourceActive *int64
+		if err := rows.Scan(
+			&cmd.ID,
+			&cmd.Timestamp,
+			&cmd.ExitStatus,
+			&cmd.CommandText,
+			&cmd.WorkingDir,
+			&cmd.GitRepo,
+			&cmd.GitBranch,
+			&cmd.Duration,
+			&cmd.SourceApp,
+			&cmd.SourcePid,
+			&sourceActive,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan command: %w", err)
+		}
+		// Convert source_active from integer to bool pointer
+		if sourceActive != nil {
+			active := *sourceActive != 0
+			cmd.SourceActive = &active
+		}
+		allCommands = append(allCommands, cmd)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating commands: %w", err)
+	}
+
+	// Remove consecutive duplicates
+	var deduplicated []models.Command
+	var prevCommandText string
+	for _, cmd := range allCommands {
+		if cmd.CommandText != prevCommandText {
+			deduplicated = append(deduplicated, cmd)
+			prevCommandText = cmd.CommandText
+		}
+		// Stop once we have enough
+		if len(deduplicated) >= limit {
+			break
+		}
+	}
+
+	return deduplicated, nil
+}
+
 // GetMostRecentEventID returns the ID of the most recent command
 // Returns 0 if no commands exist
 func (db *DB) GetMostRecentEventID() (int64, error) {
