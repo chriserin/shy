@@ -365,3 +365,132 @@ func TestScenario33_BashSessionTrackingWorksIndependently(t *testing.T) {
 	assert.Len(t, commands, 1)
 	assert.Equal(t, "zsh-cmd", commands[0].CommandText)
 }
+
+// TestInsertCommandWithLeadingSpace tests that commands with leading space are not inserted
+func TestInsertCommandWithLeadingSpace(t *testing.T) {
+	t.Run("command with leading space is not inserted", func(t *testing.T) {
+		// Given: a database exists
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+
+		// When: I insert a command with a leading space
+		rootCmd.SetArgs([]string{
+			"insert",
+			"--command", " secret command", // Leading space
+			"--dir", tempDir,
+			"--status", "0",
+			"--db", dbPath,
+		})
+
+		err := rootCmd.Execute()
+
+		// Then: the command should succeed (exit code 0)
+		require.NoError(t, err, "insert should succeed even with leading space")
+
+		// And: the database should be empty (command was not inserted)
+		database, err := db.New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		count, err := database.CountCommands()
+		require.NoError(t, err)
+		assert.Equal(t, 0, count, "database should be empty")
+
+		rootCmd.SetArgs(nil)
+	})
+
+	t.Run("command without leading space is inserted normally", func(t *testing.T) {
+		// Given: a database exists
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+
+		// When: I insert a command without a leading space
+		rootCmd.SetArgs([]string{
+			"insert",
+			"--command", "normal command",
+			"--dir", tempDir,
+			"--status", "0",
+			"--db", dbPath,
+		})
+
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+
+		// Then: the command should be inserted
+		database, err := db.New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		count, err := database.CountCommands()
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "database should have 1 command")
+
+		cmd, err := database.GetCommand(1)
+		require.NoError(t, err)
+		assert.Equal(t, "normal command", cmd.CommandText)
+
+		rootCmd.SetArgs(nil)
+	})
+
+	t.Run("command with multiple leading spaces is not inserted", func(t *testing.T) {
+		// Given: a database exists
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+
+		// When: I insert a command with multiple leading spaces
+		rootCmd.SetArgs([]string{
+			"insert",
+			"--command", "   command with multiple spaces",
+			"--dir", tempDir,
+			"--status", "0",
+			"--db", dbPath,
+		})
+
+		err := rootCmd.Execute()
+		require.NoError(t, err, "insert should succeed")
+
+		// Then: the database should be empty
+		database, err := db.New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		count, err := database.CountCommands()
+		require.NoError(t, err)
+		assert.Equal(t, 0, count, "database should be empty")
+
+		rootCmd.SetArgs(nil)
+	})
+
+	t.Run("command with trailing space is inserted and trimmed", func(t *testing.T) {
+		// Given: a database exists
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "history.db")
+
+		// When: I insert a command with trailing space (but no leading space)
+		rootCmd.SetArgs([]string{
+			"insert",
+			"--command", "command with trailing space ",
+			"--dir", tempDir,
+			"--status", "0",
+			"--db", dbPath,
+		})
+
+		err := rootCmd.Execute()
+		require.NoError(t, err)
+
+		// Then: the command should be inserted (trailing space doesn't prevent insertion)
+		database, err := db.New(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		count, err := database.CountCommands()
+		require.NoError(t, err)
+		assert.Equal(t, 1, count, "database should have 1 command")
+
+		cmd, err := database.GetCommand(1)
+		require.NoError(t, err)
+		assert.Equal(t, "command with trailing space", cmd.CommandText)
+
+		rootCmd.SetArgs(nil)
+	})
+}

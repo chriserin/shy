@@ -11,15 +11,15 @@ import (
 )
 
 var (
-	command    string
-	dir        string
-	status     int
-	gitRepo    string
-	gitBranch  string
-	timestamp  int64
-	duration   int64
-	sourceApp  string
-	sourcePid  int64
+	command   string
+	dir       string
+	status    int
+	gitRepo   string
+	gitBranch string
+	timestamp int64
+	duration  int64
+	sourceApp string
+	sourcePid int64
 )
 
 var insertCmd = &cobra.Command{
@@ -53,6 +53,12 @@ func runInsert(cmd *cobra.Command, args []string) error {
 	}
 	if dir == "" {
 		return fmt.Errorf("--dir is required")
+	}
+
+	// Skip insertion for commands with leading space (common pattern to exclude from history)
+	if len(command) > 0 && command[0] == ' ' {
+		// Exit successfully without inserting
+		return nil
 	}
 
 	// Open database
@@ -113,6 +119,8 @@ func runInsert(cmd *cobra.Command, args []string) error {
 		active := true
 		cmdModel.SourceActive = &active
 	}
+
+	cmdModel.TrimCommandText()
 
 	// Insert command
 	id, err := database.InsertCommand(cmdModel)

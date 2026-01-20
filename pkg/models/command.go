@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Command represents a shell command entry in the history database
 type Command struct {
@@ -15,6 +18,10 @@ type Command struct {
 	SourceApp    *string // Shell application (e.g., "zsh", "bash"), null if not tracked
 	SourcePid    *int64  // Process ID of the shell session, null if not tracked
 	SourceActive *bool   // Whether the shell session is still active, null if not tracked
+}
+
+func (c *Command) TrimCommandText() {
+	c.CommandText = strings.Trim(c.CommandText, "\n ")
 }
 
 // NewCommand creates a new Command with the current timestamp
