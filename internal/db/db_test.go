@@ -901,9 +901,9 @@ func TestGetCommandsByRangeWithPatternInternal(t *testing.T) {
 	})
 }
 
-// TestListCommandsInRange tests timestamp-based listing with deduplication
+// TestListCommandsInRange tests timestamp-based listing including duplicates
 func TestListCommandsInRange(t *testing.T) {
-	t.Run("returns unique commands in timestamp range", func(t *testing.T) {
+	t.Run("returns all commands in timestamp range including duplicates", func(t *testing.T) {
 		// Given: database with duplicate commands at different times
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
@@ -935,20 +935,19 @@ func TestListCommandsInRange(t *testing.T) {
 		results, err := database.ListCommandsInRange(1000, 6000, 0)
 		require.NoError(t, err)
 
-		// Then: should return only unique commands
-		assert.Len(t, results, 3, "should return 3 unique commands")
+		// Then: should return all commands including duplicates
+		assert.Len(t, results, 6, "should return 6 commands including duplicates")
 
-		// And: should get most recent occurrence of each
-		idMap := make(map[string]int64)
-		for _, cmd := range results {
-			idMap[cmd.CommandText] = cmd.ID
-		}
-		assert.Equal(t, int64(6), idMap["echo hello"], "should get most recent 'echo hello'")
-		assert.Equal(t, int64(5), idMap["ls -la"], "should get most recent 'ls -la'")
-		assert.Equal(t, int64(4), idMap["pwd"], "should get 'pwd'")
+		// And: commands should be ordered by timestamp
+		assert.Equal(t, "echo hello", results[0].CommandText)
+		assert.Equal(t, int64(1000), results[0].Timestamp)
+		assert.Equal(t, "ls -la", results[1].CommandText)
+		assert.Equal(t, int64(2000), results[1].Timestamp)
+		assert.Equal(t, "echo hello", results[2].CommandText)
+		assert.Equal(t, int64(3000), results[2].Timestamp)
 	})
 
-	t.Run("returns unique commands with limit", func(t *testing.T) {
+	t.Run("returns all commands with limit including duplicates", func(t *testing.T) {
 		// Given: database with many duplicate commands
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
@@ -968,14 +967,12 @@ func TestListCommandsInRange(t *testing.T) {
 		results, err := database.ListCommandsInRange(0, 0, 10)
 		require.NoError(t, err)
 
-		// Then: should return at most 5 unique commands (since we only have 5 unique)
-		assert.LessOrEqual(t, len(results), 5, "should return at most 5 unique commands")
+		// Then: should return all 10 commands including duplicates
+		assert.Equal(t, 10, len(results), "should return all 10 commands")
 
-		// And: each command text should be unique
-		uniqueTexts := make(map[string]bool)
-		for _, cmd := range results {
-			assert.False(t, uniqueTexts[cmd.CommandText], "command text should appear only once")
-			uniqueTexts[cmd.CommandText] = true
+		// And: commands should be ordered by timestamp
+		for i := 0; i < 10; i++ {
+			assert.Equal(t, int64(1000+i*1000), results[i].Timestamp, "command %d should have correct timestamp", i)
 		}
 	})
 

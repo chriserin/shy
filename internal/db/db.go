@@ -500,33 +500,23 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models
 	}
 
 	if limit > 0 {
-		// Get the N most recent commands in the range, deduplicate by command_text, then order them oldest-to-newest
+		// Get the N most recent commands in the range, then order them oldest-to-newest
 		query = fmt.Sprintf(`
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
-			FROM commands
-			WHERE id IN (
-				SELECT max(id)
-				FROM (
-					SELECT id, command_text
-					FROM commands
-					%s
-					ORDER BY timestamp DESC
-					LIMIT %d
-				)
-				GROUP BY command_text
+			FROM (
+				SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
+				FROM commands
+				%s
+				ORDER BY timestamp DESC
+				LIMIT %d
 			)
 			ORDER BY timestamp ASC`, whereClause, limit)
 	} else {
-		// Get all commands in the range, deduplicated by command_text
+		// Get all commands in the range
 		query = fmt.Sprintf(`
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration
 			FROM commands
-			WHERE id IN (
-				SELECT max(id)
-				FROM commands
-				%s
-				GROUP BY command_text
-			)
+			%s
 			ORDER BY timestamp ASC`, whereClause)
 	}
 

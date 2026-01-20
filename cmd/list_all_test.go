@@ -12,8 +12,8 @@ import (
 	"github.com/chris/shy/pkg/models"
 )
 
-// TestScenario6_5_ListAllCommands tests that list-all shows all unique commands
-// with deduplication by command_text (most recent occurrence)
+// TestScenario6_5_ListAllCommands tests that list-all shows all commands
+// including duplicates
 func TestScenario6_5_ListAllCommands(t *testing.T) {
 	// Given: I have a database with 100 commands (10 unique command texts, each repeated 10 times)
 	tempDir := t.TempDir()
@@ -45,12 +45,12 @@ func TestScenario6_5_ListAllCommands(t *testing.T) {
 
 	output := buf.String()
 
-	// Then: the output should contain 10 unique commands (deduplicated by command_text)
+	// Then: the output should contain all 100 commands including duplicates
 	// Count the number of lines (each command is one line)
 	lines := bytes.Split([]byte(output), []byte("\n"))
 	// Subtract 1 for the trailing newline
 	commandCount := len(lines) - 1
-	assert.Equal(t, 10, commandCount, "should display 10 unique commands after deduplication")
+	assert.Equal(t, 100, commandCount, "should display all 100 commands including duplicates")
 
 	// Verify all unique command texts are present
 	for i := 0; i < 10; i++ {
