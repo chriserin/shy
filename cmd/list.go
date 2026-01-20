@@ -19,6 +19,7 @@ var (
 	listYesterday bool
 	listThisWeek  bool
 	listLastWeek  bool
+	listSession   string
 )
 
 var listCmd = &cobra.Command{
@@ -36,6 +37,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listYesterday, "yesterday", false, "Show only commands from yesterday")
 	listCmd.Flags().BoolVar(&listThisWeek, "this-week", false, "Show only commands from this week")
 	listCmd.Flags().BoolVar(&listLastWeek, "last-week", false, "Show only commands from last week")
+	listCmd.Flags().StringVar(&listSession, "sesh", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
 }
 
 // formatDurationSeconds formats duration in milliseconds to human-readable format without milliseconds
@@ -111,6 +113,24 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
+	// Parse session filter if provided
+	var sourceApp string
+	var sourcePid int64
+	if listSession != "" {
+		parts := strings.Split(listSession, ":")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid session format: expected 'app:pid' (e.g., zsh:12345)")
+		}
+		sourceApp = parts[0]
+		_, err := fmt.Sscanf(parts[1], "%d", &sourcePid)
+		if err != nil {
+			return fmt.Errorf("invalid session PID: %s", parts[1])
+		}
+		if sourcePid <= 0 {
+			return fmt.Errorf("invalid session PID: must be positive")
+		}
+	}
+
 	// Calculate time range based on flags
 	var startTime, endTime int64
 	now := time.Now()
@@ -158,9 +178,9 @@ func runList(cmd *cobra.Command, args []string) error {
 	// List commands
 	var commands []models.Command
 	if startTime > 0 || endTime > 0 {
-		commands, err = database.ListCommandsInRange(startTime, endTime, listLimit)
+		commands, err = database.ListCommandsInRange(startTime, endTime, listLimit, sourceApp, sourcePid)
 	} else {
-		commands, err = database.ListCommands(listLimit)
+		commands, err = database.ListCommands(listLimit, sourceApp, sourcePid)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to list commands: %w", err)

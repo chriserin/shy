@@ -55,7 +55,7 @@ func TestScenario7_ListWithFlagToday(t *testing.T) {
 	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location()).Unix()
 
 	// Query directly with the time range (simulating what --today would do)
-	todayCommands, err := database.ListCommandsInRange(startOfToday, endOfToday, 0)
+	todayCommands, err := database.ListCommandsInRange(startOfToday, endOfToday, 0, "", 0)
 	require.NoError(t, err, "failed to list commands in range")
 
 	// Then: the output should contain today's commands
@@ -111,7 +111,7 @@ func TestScenario8_ListWithFlagYesterday(t *testing.T) {
 	startOfYesterday := time.Date(yesterdayDate.Year(), yesterdayDate.Month(), yesterdayDate.Day(), 0, 0, 0, 0, yesterdayDate.Location()).Unix()
 	endOfYesterday := time.Date(yesterdayDate.Year(), yesterdayDate.Month(), yesterdayDate.Day(), 23, 59, 59, 0, yesterdayDate.Location()).Unix()
 
-	yesterdayCommands, err := database.ListCommandsInRange(startOfYesterday, endOfYesterday, 0)
+	yesterdayCommands, err := database.ListCommandsInRange(startOfYesterday, endOfYesterday, 0, "", 0)
 	require.NoError(t, err, "failed to list commands in range")
 
 	var yesterdayCmdTexts []string
@@ -174,7 +174,7 @@ func TestScenario9_ListWithFlagThisWeek(t *testing.T) {
 	thisSunday := thisMonday.AddDate(0, 0, 6)
 	endOfWeek := time.Date(thisSunday.Year(), thisSunday.Month(), thisSunday.Day(), 23, 59, 59, 0, thisSunday.Location()).Unix()
 
-	weekCommands, err := database.ListCommandsInRange(startOfWeek, endOfWeek, 0)
+	weekCommands, err := database.ListCommandsInRange(startOfWeek, endOfWeek, 0, "", 0)
 	require.NoError(t, err, "failed to list commands in range")
 
 	var weekCmdTexts []string
@@ -238,7 +238,7 @@ func TestScenario10_ListWithFlagLastWeek(t *testing.T) {
 	prevSunday := prevMonday.AddDate(0, 0, 6)
 	endOfLastWeek := time.Date(prevSunday.Year(), prevSunday.Month(), prevSunday.Day(), 23, 59, 59, 0, prevSunday.Location()).Unix()
 
-	lastWeekCommands, err := database.ListCommandsInRange(startOfLastWeek, endOfLastWeek, 0)
+	lastWeekCommands, err := database.ListCommandsInRange(startOfLastWeek, endOfLastWeek, 0, "", 0)
 	require.NoError(t, err, "failed to list commands in range")
 
 	var lastWeekCmdTexts []string

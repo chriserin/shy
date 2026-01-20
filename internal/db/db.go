@@ -478,25 +478,39 @@ func (db *DB) GetTableSchema() ([]map[string]interface{}, error) {
 // ListCommands retrieves commands ordered by timestamp ascending (oldest first)
 // When a limit is applied, it returns the N most recent commands, but still ordered oldest-to-newest
 // If limit is 0, all commands are returned
-func (db *DB) ListCommands(limit int) ([]models.Command, error) {
-	return db.ListCommandsInRange(0, 0, limit)
+// If sourceApp and sourcePid are provided, only active commands from that session are returned
+func (db *DB) ListCommands(limit int, sourceApp string, sourcePid int64) ([]models.Command, error) {
+	return db.ListCommandsInRange(0, 0, limit, sourceApp, sourcePid)
 }
 
 // ListCommandsInRange retrieves commands within a timestamp range, ordered by timestamp ascending
 // If startTime is 0, no lower bound is applied
 // If endTime is 0, no upper bound is applied
 // If limit is 0, all matching commands are returned
-func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int) ([]models.Command, error) {
+// If sourceApp and sourcePid are provided, only active commands from that session are returned
+func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp string, sourcePid int64) ([]models.Command, error) {
 	var query string
-	var whereClause string
+	var whereClauses []string
 
 	// Build WHERE clause for time range
 	if startTime > 0 && endTime > 0 {
-		whereClause = fmt.Sprintf("WHERE timestamp >= %d AND timestamp <= %d", startTime, endTime)
+		whereClauses = append(whereClauses, fmt.Sprintf("timestamp >= %d AND timestamp <= %d", startTime, endTime))
 	} else if startTime > 0 {
-		whereClause = fmt.Sprintf("WHERE timestamp >= %d", startTime)
+		whereClauses = append(whereClauses, fmt.Sprintf("timestamp >= %d", startTime))
 	} else if endTime > 0 {
-		whereClause = fmt.Sprintf("WHERE timestamp <= %d", endTime)
+		whereClauses = append(whereClauses, fmt.Sprintf("timestamp <= %d", endTime))
+	}
+
+	// Add session filter if provided
+	if sourceApp != "" && sourcePid > 0 {
+		whereClauses = append(whereClauses, fmt.Sprintf("source_app = '%s' AND source_pid = %d AND source_active = 1",
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid))
+	}
+
+	// Combine WHERE clauses
+	var whereClause string
+	if len(whereClauses) > 0 {
+		whereClause = "WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
 	if limit > 0 {

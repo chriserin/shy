@@ -46,7 +46,7 @@ func runLastCommand(cmd *cobra.Command, args []string) error {
 	// ListCommands returns them ordered oldest-to-newest, so the first one
 	// is the Nth most recent command
 	limit := lastCommandOffset
-	commands, err := database.ListCommands(limit)
+	commands, err := database.ListCommands(limit, "", 0)
 	if err != nil {
 		return fmt.Errorf("failed to list commands: %w", err)
 	}

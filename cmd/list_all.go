@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	listAllFormat string
+	listAllFormat  string
+	listAllSession string
 )
 
 var listAllCmd = &cobra.Command{
@@ -25,6 +26,7 @@ var listAllCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(listAllCmd)
 	listAllCmd.Flags().StringVar(&listAllFormat, "fmt", "", "Format output with comma-separated columns (timestamp,status,pwd,cmd)")
+	listAllCmd.Flags().StringVar(&listAllSession, "sesh", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
 }
 
 func runListAll(cmd *cobra.Command, args []string) error {
@@ -39,8 +41,26 @@ func runListAll(cmd *cobra.Command, args []string) error {
 	}
 	defer database.Close()
 
+	// Parse session filter if provided
+	var sourceApp string
+	var sourcePid int64
+	if listAllSession != "" {
+		parts := strings.Split(listAllSession, ":")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid session format: expected 'app:pid' (e.g., zsh:12345)")
+		}
+		sourceApp = parts[0]
+		_, err := fmt.Sscanf(parts[1], "%d", &sourcePid)
+		if err != nil {
+			return fmt.Errorf("invalid session PID: %s", parts[1])
+		}
+		if sourcePid <= 0 {
+			return fmt.Errorf("invalid session PID: must be positive")
+		}
+	}
+
 	// List all commands (no limit)
-	commands, err := database.ListCommands(0)
+	commands, err := database.ListCommands(0, sourceApp, sourcePid)
 	if err != nil {
 		return fmt.Errorf("failed to list commands: %w", err)
 	}
