@@ -54,7 +54,7 @@ _shy_up_line_or_history() {
   fi
 
   # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
-  local cmd=$(shy last-command --sesh -n $__shy_history_index)
+  local cmd=$(shy last-command --current-session -n $__shy_history_index)
 
   if [[ -n "$cmd" ]]; then
     BUFFER="$cmd"
@@ -91,7 +91,7 @@ _shy_down_line_or_history() {
   fi
 
   # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
-  local cmd=$(shy last-command --sesh -n $__shy_history_index)
+  local cmd=$(shy last-command --current-session -n $__shy_history_index)
 
   if [[ -n "$cmd" ]]; then
     BUFFER="$cmd"

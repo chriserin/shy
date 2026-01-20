@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,13 +15,14 @@ import (
 )
 
 var (
-	listLimit     int
-	listFormat    string
-	listToday     bool
-	listYesterday bool
-	listThisWeek  bool
-	listLastWeek  bool
-	listSession   string
+	listLimit          int
+	listFormat         string
+	listToday          bool
+	listYesterday      bool
+	listThisWeek       bool
+	listLastWeek       bool
+	listSession        string
+	listCurrentSession bool
 )
 
 var listCmd = &cobra.Command{
@@ -37,7 +40,35 @@ func init() {
 	listCmd.Flags().BoolVar(&listYesterday, "yesterday", false, "Show only commands from yesterday")
 	listCmd.Flags().BoolVar(&listThisWeek, "this-week", false, "Show only commands from this week")
 	listCmd.Flags().BoolVar(&listLastWeek, "last-week", false, "Show only commands from last week")
-	listCmd.Flags().StringVar(&listSession, "sesh", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
+	listCmd.Flags().StringVar(&listSession, "session", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
+	listCmd.Flags().BoolVar(&listCurrentSession, "current-session", false, "Filter by current session (auto-detect from environment)")
+}
+
+// detectCurrentSession detects the current shell session from environment variables
+// Returns (sourceApp, sourcePid, detected, error)
+func detectCurrentSession() (string, int64, bool, error) {
+	// Check for SHY_SESSION_PID environment variable
+	sessionPidStr := os.Getenv("SHY_SESSION_PID")
+	if sessionPidStr == "" {
+		return "", 0, false, nil
+	}
+
+	// Parse the PID
+	sessionPid, err := strconv.ParseInt(sessionPidStr, 10, 64)
+	if err != nil {
+		return "", 0, false, fmt.Errorf("invalid SHY_SESSION_PID value: %s", sessionPidStr)
+	}
+
+	// Detect shell from SHELL environment variable
+	shellPath := os.Getenv("SHELL")
+	if shellPath == "" {
+		return "", 0, false, fmt.Errorf("SHELL environment variable not set")
+	}
+
+	// Extract shell name from path (e.g., /bin/zsh -> zsh)
+	shellName := filepath.Base(shellPath)
+
+	return shellName, sessionPid, true, nil
 }
 
 // formatDurationSeconds formats duration in milliseconds to human-readable format without milliseconds
@@ -116,7 +147,18 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Parse session filter if provided
 	var sourceApp string
 	var sourcePid int64
-	if listSession != "" {
+	if listCurrentSession {
+		// Auto-detect current session from environment
+		var detected bool
+		sourceApp, sourcePid, detected, err = detectCurrentSession()
+		if err != nil {
+			return fmt.Errorf("failed to detect current session: %w", err)
+		}
+		if !detected {
+			return fmt.Errorf("could not auto-detect session: SHY_SESSION_PID not set")
+		}
+	} else if listSession != "" {
+		// Parse provided session string
 		parts := strings.Split(listSession, ":")
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid session format: expected 'app:pid' (e.g., zsh:12345)")
