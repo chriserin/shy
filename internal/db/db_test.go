@@ -1008,3 +1008,145 @@ func TestListCommandsInRange(t *testing.T) {
 		assert.Equal(t, "inside", results[0].CommandText)
 	})
 }
+
+// TestGetRecentCommandsWithoutConsecutiveDuplicates_UnionWithDirectory tests that
+// session results are unioned with directory results when both filters are provided
+func TestGetRecentCommandsWithoutConsecutiveDuplicates_UnionWithDirectory(t *testing.T) {
+	// Given: database with commands from different sessions and directories
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Session commands (zsh:12345) in /session-dir
+	sourceApp1 := "zsh"
+	sourcePid1 := int64(12345)
+	sourceActive1 := true
+
+	sessionCommands := []struct {
+		text      string
+		timestamp int64
+	}{
+		{"session 1", 100},
+		{"session 2", 200},
+		{"session 3", 300},
+	}
+
+	for _, c := range sessionCommands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/session-dir",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp1,
+			SourcePid:    &sourcePid1,
+			SourceActive: &sourceActive1,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Directory commands (bash:99999) in /target-dir
+	sourceApp2 := "bash"
+	sourcePid2 := int64(99999)
+	sourceActive2 := true
+
+	dirCommands := []struct {
+		text      string
+		timestamp int64
+	}{
+		{"dir 1", 400},
+		{"dir 2", 500},
+		{"dir 3", 600},
+		{"dir 4", 700},
+		{"dir 5", 800},
+	}
+
+	for _, c := range dirCommands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/target-dir",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp2,
+			SourcePid:    &sourcePid2,
+			SourceActive: &sourceActive2,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: GetRecentCommandsWithoutConsecutiveDuplicates called with session filter and working dir
+	results, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(6, "zsh", 12345, "/target-dir")
+	require.NoError(t, err)
+
+	// Then: should return session commands first (most recent first), then directory commands
+	require.Len(t, results, 6, "should return 3 session + 3 dir commands")
+
+	// Session commands (reverse chronological)
+	assert.Equal(t, "session 3", results[0].CommandText, "1st should be most recent session command")
+	assert.Equal(t, "session 2", results[1].CommandText, "2nd should be second session command")
+	assert.Equal(t, "session 1", results[2].CommandText, "3rd should be third session command")
+
+	// Directory commands (reverse chronological)
+	assert.Equal(t, "dir 5", results[3].CommandText, "4th should be most recent dir command")
+	assert.Equal(t, "dir 4", results[4].CommandText, "5th should be second dir command")
+	assert.Equal(t, "dir 3", results[5].CommandText, "6th should be third dir command")
+}
+
+// TestGetRecentCommandsWithoutConsecutiveDuplicates_SessionOnly tests that
+// when no working directory is provided, only session filtering is applied
+func TestGetRecentCommandsWithoutConsecutiveDuplicates_SessionOnly(t *testing.T) {
+	// Given: database with commands from different sessions
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	sourceApp1 := "zsh"
+	sourcePid1 := int64(12345)
+	sourceActive1 := true
+
+	sourceApp2 := "bash"
+	sourcePid2 := int64(99999)
+	sourceActive2 := true
+
+	commands := []struct {
+		text      string
+		timestamp int64
+		app       *string
+		pid       *int64
+		active    *bool
+	}{
+		{"zsh 1", 100, &sourceApp1, &sourcePid1, &sourceActive1},
+		{"zsh 2", 200, &sourceApp1, &sourcePid1, &sourceActive1},
+		{"bash 1", 300, &sourceApp2, &sourcePid2, &sourceActive2},
+		{"zsh 3", 400, &sourceApp1, &sourcePid1, &sourceActive1},
+	}
+
+	for _, c := range commands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/test",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    c.app,
+			SourcePid:    c.pid,
+			SourceActive: c.active,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: GetRecentCommandsWithoutConsecutiveDuplicates called with session filter only (no dir)
+	results, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(5, "zsh", 12345, "")
+	require.NoError(t, err)
+
+	// Then: should return only zsh session commands
+	require.Len(t, results, 3, "should return only zsh commands")
+	assert.Equal(t, "zsh 3", results[0].CommandText)
+	assert.Equal(t, "zsh 2", results[1].CommandText)
+	assert.Equal(t, "zsh 1", results[2].CommandText)
+}

@@ -568,22 +568,10 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 // GetRecentCommandsWithoutConsecutiveDuplicates retrieves recent commands without consecutive duplicates
 // Commands are ordered by timestamp descending (most recent first), then consecutive duplicates are removed
 // If sourceApp and sourcePid are provided, only active commands from that session are returned
+// If workingDir is also provided along with session filters, results are unioned with directory commands (session first, then directory)
 // Returns up to 'limit' commands after deduplication
-func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64) ([]models.Command, error) {
+func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64, workingDir string) ([]models.Command, error) {
 	var query string
-	var whereClauses []string
-
-	// Add session filter if provided
-	if sourceApp != "" && sourcePid > 0 {
-		whereClauses = append(whereClauses, fmt.Sprintf("source_app = '%s' AND source_pid = %d AND source_active = 1",
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid))
-	}
-
-	// Combine WHERE clauses
-	var whereClause string
-	if len(whereClauses) > 0 {
-		whereClause = "WHERE " + strings.Join(whereClauses, " AND ")
-	}
 
 	// Get all commands ordered by timestamp DESC (most recent first)
 	// We need to get more than the limit because we'll filter out consecutive duplicates
@@ -593,12 +581,39 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 		fetchLimit = 100
 	}
 
-	query = fmt.Sprintf(`
-		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-		FROM commands
-		%s
-		ORDER BY timestamp DESC, id DESC
-		LIMIT %d`, whereClause, fetchLimit)
+	// Build query based on filter conditions
+	if sourceApp != "" && sourcePid > 0 && workingDir != "" {
+		// Union query: session commands first (priority 0), then directory commands (priority 1)
+		query = fmt.Sprintf(`
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+			FROM commands
+			WHERE (source_app = '%s' AND source_pid = %d AND source_active = 1)
+			   OR working_dir = '%s'
+			ORDER BY
+				CASE WHEN source_app = '%s' AND source_pid = %d AND source_active = 1 THEN 0 ELSE 1 END ASC,
+				timestamp DESC, id DESC
+			LIMIT %d`,
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
+			strings.ReplaceAll(workingDir, "'", "''"),
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
+			fetchLimit)
+	} else if sourceApp != "" && sourcePid > 0 {
+		// Session filter only
+		query = fmt.Sprintf(`
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+			FROM commands
+			WHERE source_app = '%s' AND source_pid = %d AND source_active = 1
+			ORDER BY timestamp DESC, id DESC
+			LIMIT %d`,
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid, fetchLimit)
+	} else {
+		// No filters
+		query = fmt.Sprintf(`
+			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+			FROM commands
+			ORDER BY timestamp DESC, id DESC
+			LIMIT %d`, fetchLimit)
+	}
 
 	rows, err := db.conn.Query(query)
 	if err != nil {

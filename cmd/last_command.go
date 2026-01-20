@@ -76,10 +76,18 @@ func runLastCommand(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Get current working directory for union with session results
+	workingDir, err := os.Getwd()
+	if err != nil {
+		// If we can't get working directory, just use empty string (no directory filter)
+		workingDir = ""
+	}
+
 	// Get N most recent commands without consecutive duplicates
 	// The function returns them in descending order (most recent first)
+	// If session is specified, results union with current directory after session is exhausted
 	limit := lastCommandOffset
-	commands, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, sourceApp, sourcePid)
+	commands, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, sourceApp, sourcePid, workingDir)
 	if err != nil {
 		return fmt.Errorf("failed to get commands: %w", err)
 	}
