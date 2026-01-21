@@ -274,6 +274,9 @@ func (db *DB) migrate() error {
 	}
 
 	// Create indexes
+	if _, err := db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_timestamp_desc ON commands (timestamp DESC)"); err != nil {
+		return fmt.Errorf("failed to create timestamp index: %w", err)
+	}
 	if _, err := db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_command_text_like ON commands (command_text COLLATE NOCASE)"); err != nil {
 		return fmt.Errorf("failed to create command_text index: %w", err)
 	}
