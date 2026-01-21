@@ -62,6 +62,7 @@ func TestSummary_Yesterday(t *testing.T) {
 			GitBranch:   c.branch,
 			ExitStatus:  0,
 			Timestamp:   timestamp,
+			SourceApp:   stringPtr("zsh"),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -131,6 +132,7 @@ func TestSummary_SpecificDate(t *testing.T) {
 			GitBranch:   &branch,
 			ExitStatus:  0,
 			Timestamp:   timestamp,
+			SourceApp:   stringPtr("zsh"),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -225,6 +227,7 @@ func TestSummary_MultipleBranches(t *testing.T) {
 			GitBranch:   c.branch,
 			ExitStatus:  0,
 			Timestamp:   timestamp,
+			SourceApp:   stringPtr("zsh"),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -289,6 +292,7 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 			GitBranch:   c.branch,
 			ExitStatus:  0,
 			Timestamp:   timestamp,
+			SourceApp:   stringPtr("zsh"),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -348,6 +352,7 @@ func TestSummary_AllTimePeriods(t *testing.T) {
 			GitBranch:   &branch,
 			ExitStatus:  0,
 			Timestamp:   timestamp,
+			SourceApp:   stringPtr("zsh"),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")

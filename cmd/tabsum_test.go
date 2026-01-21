@@ -422,7 +422,6 @@ func TestTabsumCommand(t *testing.T) {
 }
 
 // Helper functions
-
 func insertCommand(t *testing.T, database *db.DB, cmdText, workingDir, gitBranch, timeStr string) {
 	cmd := models.NewCommand(cmdText, workingDir, 0)
 	cmd.Timestamp = parseTimeLocal(timeStr)
@@ -491,8 +490,4 @@ func parseTimeLocal(timeStr string) int64 {
 	localTime := time.Date(year, month, day, hour, min, sec, 0, time.Local)
 
 	return localTime.Unix()
-}
-
-func stringPtr(s string) *string {
-	return &s
 }

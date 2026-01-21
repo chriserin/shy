@@ -384,14 +384,15 @@ func (db *DB) CountCommands() (int, error) {
 
 // GetCommandsByDateRange retrieves commands within a Unix timestamp range (inclusive start, exclusive end)
 // Returns commands ordered by timestamp ascending
-func (db *DB) GetCommandsByDateRange(startTime, endTime int64) ([]models.Command, error) {
+func (db *DB) GetCommandsByDateRange(startTime, endTime int64, sourceApp *string) ([]models.Command, error) {
 	query := `
 		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
 		FROM commands
 		WHERE timestamp >= ? AND timestamp < ?
+		AND source_app == ?
 		ORDER BY timestamp ASC`
 
-	rows, err := db.conn.Query(query, startTime, endTime)
+	rows, err := db.conn.Query(query, startTime, endTime, sourceApp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get commands by date range: %w", err)
 	}

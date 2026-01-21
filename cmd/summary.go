@@ -20,6 +20,7 @@ var (
 	uniqCommands       bool
 	multiCommands      bool
 	bucketSize         string
+	summarySourceApp   string
 )
 
 var summaryCmd = &cobra.Command{
@@ -38,6 +39,7 @@ func init() {
 	summaryCmd.Flags().BoolVar(&uniqCommands, "uniq-commands", false, "Display unique commands")
 	summaryCmd.Flags().BoolVar(&multiCommands, "multi-commands", false, "Display commands executed multiple times")
 	summaryCmd.Flags().StringVar(&bucketSize, "bucket", "hour", "Bucket size for commands (hour, period, day, week)")
+	summaryCmd.Flags().StringVar(&summarySourceApp, "source-app", "zsh", "sourceApp filter for commands (e.g., zsh, bash)")
 }
 
 func runSummary(cmd *cobra.Command, args []string) error {
@@ -59,7 +61,7 @@ func runSummary(cmd *cobra.Command, args []string) error {
 	defer database.Close()
 
 	// Query commands for date range
-	commands, err := database.GetCommandsByDateRange(startTime, endTime)
+	commands, err := database.GetCommandsByDateRange(startTime, endTime, stringPtr(summarySourceApp))
 	if err != nil {
 		return fmt.Errorf("failed to query commands: %w", err)
 	}
@@ -143,4 +145,8 @@ func isTerminal(w io.Writer) bool {
 		return term.IsTerminal(int(f.Fd()))
 	}
 	return false
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
