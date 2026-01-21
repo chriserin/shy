@@ -273,6 +273,11 @@ func (db *DB) migrate() error {
 		return fmt.Errorf("failed to rename new table: %w", err)
 	}
 
+	// Create indexes
+	if _, err := db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_command_text_like ON commands (command_text COLLATE NOCASE)"); err != nil {
+		return fmt.Errorf("failed to create command_text index: %w", err)
+	}
+
 	// Commit transaction
 	if _, err := db.conn.Exec("COMMIT"); err != nil {
 		return fmt.Errorf("failed to commit migration transaction: %w", err)
@@ -1049,9 +1054,9 @@ func (db *DB) LikeRecent(opts LikeRecentOptions) ([]string, error) {
 	query := `
 		SELECT command_text
 		FROM commands
-		WHERE command_text LIKE ? || '%'
+		WHERE command_text LIKE ?
 	`
-	args := []interface{}{opts.Prefix}
+	args := []any{opts.Prefix + "%"}
 
 	// Exclude shy commands by default
 	if !opts.IncludeShy {
