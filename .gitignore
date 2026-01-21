@@ -1,2 +1,4 @@
 shy
 dist/
+testdata/perf/history-medium.db
+testdata/perf/history-large.db

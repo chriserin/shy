@@ -1,0 +1,218 @@
+[0;34mRunning shy performance benchmarks...[0m
+
+Configuration:
+  Benchmark time: 3s
+  Iterations: 5
+  Results dir: /home/chris/projects/history/shy/testdata/perf/results
+
+[0;34mRunning all benchmarks...[0m
+goos: linux
+goarch: amd64
+pkg: github.com/chris/shy/internal/db
+cpu: AMD Ryzen 9 7950X 16-Core Processor            
+BenchmarkInsertCommand/medium-32                             	    2402	   1347727 ns/op	     616 B/op	      13 allocs/op
+BenchmarkInsertCommand/medium-32                             	    2474	   1349617 ns/op	     616 B/op	      13 allocs/op
+BenchmarkInsertCommand/medium-32                             	    2678	   1326684 ns/op	     619 B/op	      13 allocs/op
+BenchmarkInsertCommand/medium-32                             	    2580	   1317201 ns/op	     616 B/op	      13 allocs/op
+BenchmarkInsertCommand/medium-32                             	    2606	   1349035 ns/op	     616 B/op	      13 allocs/op
+BenchmarkInsertCommand/large-32                              	    2563	   1330508 ns/op	     618 B/op	      13 allocs/op
+BenchmarkInsertCommand/large-32                              	    2577	   1336252 ns/op	     616 B/op	      13 allocs/op
+BenchmarkInsertCommand/large-32                              	    2553	   1327753 ns/op	     616 B/op	      13 allocs/op
+BenchmarkInsertCommand/large-32                              	    2587	   1334798 ns/op	     619 B/op	      13 allocs/op
+BenchmarkInsertCommand/large-32                              	    2582	   1343813 ns/op	     616 B/op	      13 allocs/op
+BenchmarkLikeRecent/medium-32                                	    1246	   2855282 ns/op	  422268 B/op	   12932 allocs/op
+BenchmarkLikeRecent/medium-32                                	    1251	   2866937 ns/op	  422247 B/op	   12932 allocs/op
+BenchmarkLikeRecent/medium-32                                	    1250	   2862322 ns/op	  422419 B/op	   12938 allocs/op
+BenchmarkLikeRecent/medium-32                                	    1250	   2867469 ns/op	  422449 B/op	   12938 allocs/op
+BenchmarkLikeRecent/medium-32                                	    1242	   2847099 ns/op	  421905 B/op	   12923 allocs/op
+BenchmarkLikeRecent/large-32                                 	     268	  13250790 ns/op	 1021427 B/op	   33754 allocs/op
+BenchmarkLikeRecent/large-32                                 	     270	  13310840 ns/op	 1022977 B/op	   33798 allocs/op
+BenchmarkLikeRecent/large-32                                 	     268	  13307479 ns/op	 1021489 B/op	   33754 allocs/op
+BenchmarkLikeRecent/large-32                                 	     267	  13314766 ns/op	 1024001 B/op	   33832 allocs/op
+BenchmarkLikeRecent/large-32                                 	     268	  13421959 ns/op	 1021424 B/op	   33754 allocs/op
+BenchmarkLikeRecentWithFilters/medium/pwd-32                 	    1990	   1805844 ns/op	   21196 B/op	     888 allocs/op
+BenchmarkLikeRecentWithFilters/medium/pwd-32                 	    1976	   1802258 ns/op	   21217 B/op	     888 allocs/op
+BenchmarkLikeRecentWithFilters/medium/pwd-32                 	    1983	   1805959 ns/op	   21180 B/op	     888 allocs/op
+BenchmarkLikeRecentWithFilters/medium/pwd-32                 	    1990	   1803453 ns/op	   21176 B/op	     888 allocs/op
+BenchmarkLikeRecentWithFilters/medium/pwd-32                 	    1986	   1804460 ns/op	   21172 B/op	     888 allocs/op
+BenchmarkLikeRecentWithFilters/medium/session-32             	    2031	   1770743 ns/op	    5384 B/op	     178 allocs/op
+BenchmarkLikeRecentWithFilters/medium/session-32             	    2052	   1764321 ns/op	    5375 B/op	     178 allocs/op
+BenchmarkLikeRecentWithFilters/medium/session-32             	    2055	   1764595 ns/op	    5371 B/op	     178 allocs/op
+BenchmarkLikeRecentWithFilters/medium/session-32             	    2044	   1759696 ns/op	    5364 B/op	     178 allocs/op
+BenchmarkLikeRecentWithFilters/medium/session-32             	    2040	   1759991 ns/op	    5368 B/op	     178 allocs/op
+BenchmarkLikeRecentWithFilters/large/pwd-32                  	     295	  12197646 ns/op	  215560 B/op	    9020 allocs/op
+BenchmarkLikeRecentWithFilters/large/pwd-32                  	     294	  12262494 ns/op	  215532 B/op	    9020 allocs/op
+BenchmarkLikeRecentWithFilters/large/pwd-32                  	     295	  12193986 ns/op	  215560 B/op	    9020 allocs/op
+BenchmarkLikeRecentWithFilters/large/pwd-32                  	     294	  12222583 ns/op	  215532 B/op	    9020 allocs/op
+BenchmarkLikeRecentWithFilters/large/pwd-32                  	     295	  12230540 ns/op	  215587 B/op	    9020 allocs/op
+BenchmarkLikeRecentWithFilters/large/session-32              	     308	  11695173 ns/op	   40775 B/op	    1669 allocs/op
+BenchmarkLikeRecentWithFilters/large/session-32              	     308	  11771034 ns/op	   40722 B/op	    1669 allocs/op
+BenchmarkLikeRecentWithFilters/large/session-32              	     307	  11676555 ns/op	   40749 B/op	    1669 allocs/op
+BenchmarkLikeRecentWithFilters/large/session-32              	     306	  11762843 ns/op	   40723 B/op	    1669 allocs/op
+BenchmarkLikeRecentWithFilters/large/session-32              	     304	  11794394 ns/op	   40723 B/op	    1669 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     879	   4049466 ns/op	   72453 B/op	    2659 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     885	   4032949 ns/op	   72294 B/op	    2659 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     886	   4051257 ns/op	   72286 B/op	    2659 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     852	   4034706 ns/op	   72295 B/op	    2659 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     882	   4032618 ns/op	   72281 B/op	    2659 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     884	   4057730 ns/op	   73786 B/op	    2662 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     880	   4270949 ns/op	   73782 B/op	    2662 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     886	   4092520 ns/op	   73789 B/op	    2662 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     880	   4043323 ns/op	   73781 B/op	    2662 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     879	   4050691 ns/op	   73777 B/op	    2662 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     877	   4035705 ns/op	   75573 B/op	    2663 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     879	   4043915 ns/op	   75575 B/op	    2663 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     886	   4032841 ns/op	   75561 B/op	    2663 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     879	   4041524 ns/op	   75567 B/op	    2663 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     882	   4039684 ns/op	   75565 B/op	    2663 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     552	   6436247 ns/op	  151007 B/op	    5270 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     546	   6461518 ns/op	  150999 B/op	    5270 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     553	   6449794 ns/op	  150989 B/op	    5270 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     549	   6438036 ns/op	  150984 B/op	    5270 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     535	   6517490 ns/op	  150994 B/op	    5270 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     202	  17663980 ns/op	   71783 B/op	    2633 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     204	  17627308 ns/op	   71818 B/op	    2633 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     198	  17626501 ns/op	   71752 B/op	    2633 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     193	  17695752 ns/op	   71755 B/op	    2633 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     202	  17704077 ns/op	   71791 B/op	    2633 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     202	  17683102 ns/op	   73476 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     196	  17680046 ns/op	   73506 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     202	  17629537 ns/op	   73314 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     204	  17581902 ns/op	   73312 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     193	  17684187 ns/op	   73280 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     186	  18827188 ns/op	   75717 B/op	    2637 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     201	  18027177 ns/op	   75025 B/op	    2637 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     202	  17721998 ns/op	   75284 B/op	    2637 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     202	  17688062 ns/op	   75059 B/op	    2637 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     202	  17651577 ns/op	   75108 B/op	    2637 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26318513 ns/op	  151019 B/op	    5269 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26206915 ns/op	  150922 B/op	    5269 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26674244 ns/op	  150919 B/op	    5269 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26222081 ns/op	  150910 B/op	    5269 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26279585 ns/op	  150865 B/op	    5269 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	    1022	   3473521 ns/op	   76373 B/op	    2701 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	    1023	   3597523 ns/op	   76360 B/op	    2701 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	    1026	   3480264 ns/op	   76344 B/op	    2701 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	    1022	   3466097 ns/op	   76350 B/op	    2701 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	    1018	   3468344 ns/op	   76345 B/op	    2701 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     192	  18727400 ns/op	   75397 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     192	  19038983 ns/op	   75420 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     190	  18732928 ns/op	   75372 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     189	  18679641 ns/op	   75337 B/op	    2636 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     192	  18692915 ns/op	   75327 B/op	    2636 allocs/op
+BenchmarkListCommands/medium/limit-20-32                                         	    1671	   2118128 ns/op	   14556 B/op	     363 allocs/op
+BenchmarkListCommands/medium/limit-20-32                                         	    1690	   2112065 ns/op	   14538 B/op	     363 allocs/op
+BenchmarkListCommands/medium/limit-20-32                                         	    1670	   2117117 ns/op	   14534 B/op	     363 allocs/op
+BenchmarkListCommands/medium/limit-20-32                                         	    1681	   2114132 ns/op	   14530 B/op	     363 allocs/op
+BenchmarkListCommands/medium/limit-20-32                                         	    1670	   2109128 ns/op	   14524 B/op	     363 allocs/op
+BenchmarkListCommands/medium/limit-100-32                                        	     846	   4195042 ns/op	   64080 B/op	    1755 allocs/op
+BenchmarkListCommands/medium/limit-100-32                                        	     842	   4198001 ns/op	   64081 B/op	    1755 allocs/op
+BenchmarkListCommands/medium/limit-100-32                                        	     847	   4215836 ns/op	   64083 B/op	    1755 allocs/op
+BenchmarkListCommands/medium/limit-100-32                                        	     844	   4208691 ns/op	   64073 B/op	    1755 allocs/op
+BenchmarkListCommands/medium/limit-100-32                                        	     840	   4210347 ns/op	   64068 B/op	    1755 allocs/op
+BenchmarkListCommands/medium/limit-500-32                                        	     469	   7602060 ns/op	  285168 B/op	    8640 allocs/op
+BenchmarkListCommands/medium/limit-500-32                                        	     468	   7607311 ns/op	  285159 B/op	    8640 allocs/op
+BenchmarkListCommands/medium/limit-500-32                                        	     469	   7818042 ns/op	  285173 B/op	    8640 allocs/op
+BenchmarkListCommands/medium/limit-500-32                                        	     470	   7632345 ns/op	  285181 B/op	    8640 allocs/op
+BenchmarkListCommands/medium/limit-500-32                                        	     469	   7606640 ns/op	  285132 B/op	    8640 allocs/op
+BenchmarkListCommands/large/limit-20-32                                          	     324	  11067266 ns/op	   14716 B/op	     368 allocs/op
+BenchmarkListCommands/large/limit-20-32                                          	     326	  10986272 ns/op	   14696 B/op	     368 allocs/op
+BenchmarkListCommands/large/limit-20-32                                          	     321	  11059795 ns/op	   14691 B/op	     368 allocs/op
+BenchmarkListCommands/large/limit-20-32                                          	     322	  11031895 ns/op	   14688 B/op	     368 allocs/op
+BenchmarkListCommands/large/limit-20-32                                          	     325	  11081274 ns/op	   14691 B/op	     368 allocs/op
+BenchmarkListCommands/large/limit-100-32                                         	     194	  18447881 ns/op	   63664 B/op	    1729 allocs/op
+BenchmarkListCommands/large/limit-100-32                                         	     194	  18394222 ns/op	   63627 B/op	    1729 allocs/op
+BenchmarkListCommands/large/limit-100-32                                         	     194	  18281760 ns/op	   63669 B/op	    1729 allocs/op
+BenchmarkListCommands/large/limit-100-32                                         	     196	  18278649 ns/op	   63630 B/op	    1729 allocs/op
+BenchmarkListCommands/large/limit-100-32                                         	     196	  18285876 ns/op	   63620 B/op	    1729 allocs/op
+BenchmarkListCommands/large/limit-500-32                                         	     118	  30366641 ns/op	  283728 B/op	    8552 allocs/op
+BenchmarkListCommands/large/limit-500-32                                         	     117	  30096340 ns/op	  283675 B/op	    8552 allocs/op
+BenchmarkListCommands/large/limit-500-32                                         	     118	  30200404 ns/op	  283772 B/op	    8552 allocs/op
+BenchmarkListCommands/large/limit-500-32                                         	     118	  30344585 ns/op	  283683 B/op	    8552 allocs/op
+BenchmarkListCommands/large/limit-500-32                                         	     117	  30211878 ns/op	  283613 B/op	    8552 allocs/op
+BenchmarkGetCommandsForFzf/medium-32                                             	     134	  26840488 ns/op	  238239 B/op	   16265 allocs/op
+BenchmarkGetCommandsForFzf/medium-32                                             	     133	  27022181 ns/op	  238952 B/op	   16265 allocs/op
+BenchmarkGetCommandsForFzf/medium-32                                             	     132	  26912180 ns/op	  238404 B/op	   16265 allocs/op
+BenchmarkGetCommandsForFzf/medium-32                                             	     133	  26909697 ns/op	  238058 B/op	   16265 allocs/op
+BenchmarkGetCommandsForFzf/medium-32                                             	     132	  26858154 ns/op	  238000 B/op	   16265 allocs/op
+BenchmarkGetCommandsForFzf/large-32                                              	      22	 155948536 ns/op	  232079 B/op	   15719 allocs/op
+BenchmarkGetCommandsForFzf/large-32                                              	      24	 155062679 ns/op	  230838 B/op	   15719 allocs/op
+BenchmarkGetCommandsForFzf/large-32                                              	      22	 154920576 ns/op	  231334 B/op	   15719 allocs/op
+BenchmarkGetCommandsForFzf/large-32                                              	      22	 154808030 ns/op	  230962 B/op	   15719 allocs/op
+BenchmarkGetCommandsForFzf/large-32                                              	      22	 155119845 ns/op	  230962 B/op	   15719 allocs/op
+BenchmarkGetCommandsByRange/medium/last-10-32                                    	   76357	     46829 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-10-32                                    	   76999	     46895 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-10-32                                    	   77110	     46754 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-10-32                                    	   76672	     46777 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-10-32                                    	   76674	     46754 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-50-32                                    	   77143	     46923 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-50-32                                    	   76809	     47035 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-50-32                                    	   76419	     46900 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-50-32                                    	   77036	     46887 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/last-50-32                                    	   74721	     47423 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/medium/range-100-32                                  	   29114	    122879 ns/op	   20009 B/op	     797 allocs/op
+BenchmarkGetCommandsByRange/medium/range-100-32                                  	   29292	    122951 ns/op	   20009 B/op	     797 allocs/op
+BenchmarkGetCommandsByRange/medium/range-100-32                                  	   29061	    122617 ns/op	   20009 B/op	     797 allocs/op
+BenchmarkGetCommandsByRange/medium/range-100-32                                  	   29316	    122849 ns/op	   20009 B/op	     797 allocs/op
+BenchmarkGetCommandsByRange/medium/range-100-32                                  	   29132	    122714 ns/op	   20009 B/op	     797 allocs/op
+BenchmarkGetCommandsByRange/large/last-10-32                                     	   76950	     47167 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-10-32                                     	   75727	     47084 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-10-32                                     	   76527	     46524 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-10-32                                     	   76987	     46374 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-10-32                                     	   76454	     46730 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-50-32                                     	   76666	     46731 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-50-32                                     	   77145	     46744 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-50-32                                     	   77035	     46574 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-50-32                                     	   76596	     46695 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/last-50-32                                     	   76348	     46609 ns/op	     904 B/op	      23 allocs/op
+BenchmarkGetCommandsByRange/large/range-100-32                                   	   29484	    122617 ns/op	   19641 B/op	     772 allocs/op
+BenchmarkGetCommandsByRange/large/range-100-32                                   	   29420	    122644 ns/op	   19641 B/op	     772 allocs/op
+BenchmarkGetCommandsByRange/large/range-100-32                                   	   29612	    122043 ns/op	   19641 B/op	     772 allocs/op
+BenchmarkGetCommandsByRange/large/range-100-32                                   	   29404	    122426 ns/op	   19640 B/op	     772 allocs/op
+BenchmarkGetCommandsByRange/large/range-100-32                                   	   29408	    122101 ns/op	   19641 B/op	     772 allocs/op
+BenchmarkConcurrentInserts/concurrency-1-32                                      	     464	   6988113 ns/op	    1177 B/op	      27 allocs/op
+BenchmarkConcurrentInserts/concurrency-1-32                                      	     374	   8135222 ns/op	    1243 B/op	      30 allocs/op
+BenchmarkConcurrentInserts/concurrency-1-32                                      	     208	  14629478 ns/op	    1707 B/op	      41 allocs/op
+BenchmarkConcurrentInserts/concurrency-1-32                                      	     303	  10704466 ns/op	    1369 B/op	      33 allocs/op
+BenchmarkConcurrentInserts/concurrency-1-32                                      	     252	  12074268 ns/op	    1495 B/op	      36 allocs/op
+BenchmarkConcurrentInserts/concurrency-2-32                                      	     218	  13974868 ns/op	    2595 B/op	      63 allocs/op
+BenchmarkConcurrentInserts/concurrency-2-32                                      	     174	  17595580 ns/op	    2919 B/op	      75 allocs/op
+BenchmarkConcurrentInserts/concurrency-2-32                                      	     285	  10721347 ns/op	    2042 B/op	      52 allocs/op
+BenchmarkConcurrentInserts/concurrency-2-32                                      	     222	  14236339 ns/op	    2461 B/op	      62 allocs/op
+BenchmarkConcurrentInserts/concurrency-2-32                                      	     348	   9368752 ns/op	    1818 B/op	      45 allocs/op
+BenchmarkConcurrentInserts/concurrency-4-32                                      	     100	  41669025 ns/op	   10179 B/op	     224 allocs/op
+BenchmarkConcurrentInserts/concurrency-4-32                                      	     100	  47750777 ns/op	    8862 B/op	     224 allocs/op
+BenchmarkConcurrentInserts/concurrency-4-32                                      	     100	  30625249 ns/op	    8432 B/op	     223 allocs/op
+BenchmarkConcurrentInserts/concurrency-4-32                                      	     121	  34438889 ns/op	    7594 B/op	     187 allocs/op
+BenchmarkConcurrentInserts/concurrency-4-32                                      	     100	  34635471 ns/op	    8332 B/op	     222 allocs/op
+BenchmarkConcurrentInserts/concurrency-8-32                                      	--- FAIL: BenchmarkConcurrentInserts/concurrency-8-32
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+    db_bench_test.go:400: failed to insert: failed to insert command: database is locked (5) (SQLITE_BUSY)
+BenchmarkConcurrentInserts/concurrency-8-32                                      	     181	  22535685 ns/op	    9127 B/op	     245 allocs/op
+BenchmarkConcurrentInserts/concurrency-8-32                                      	     100	  38690730 ns/op	   16225 B/op	     430 allocs/op
+BenchmarkConcurrentInserts/concurrency-8-32                                      	     147	  22309028 ns/op	   11088 B/op	     298 allocs/op
+BenchmarkConcurrentInserts/concurrency-8-32                                      	     168	  19558369 ns/op	    9768 B/op	     261 allocs/op
+--- FAIL: BenchmarkConcurrentInserts
+FAIL
+exit status 1
+FAIL	github.com/chris/shy/internal/db	875.054s
+FAIL
+
+[0;32m✓ Benchmark complete[0m
+  Results: /home/chris/projects/history/shy/testdata/perf/results/bench-20260121-111016.txt
+  Memory profile: /home/chris/projects/history/shy/testdata/perf/results/mem-20260121-111016.prof
+  CPU profile: /home/chris/projects/history/shy/testdata/perf/results/cpu-20260121-111016.prof
+
+To analyze profiles:
+  go tool pprof -http=:8080 /home/chris/projects/history/shy/testdata/perf/results/cpu-20260121-111016.prof
+  go tool pprof -http=:8080 /home/chris/projects/history/shy/testdata/perf/results/mem-20260121-111016.prof
+
+To compare with previous run:
+  benchstat <old-result-file> /home/chris/projects/history/shy/testdata/perf/results/bench-20260121-111016.txt
