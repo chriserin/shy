@@ -1183,18 +1183,17 @@ func (db *DB) LikeRecentAfter(opts LikeRecentAfterOptions) ([]string, error) {
 
 // GetCommandsForFzf retrieves commands optimized for fzf integration
 // Calls fn for each deduplicated entry in reverse chronological order (most recent first)
-// Uses SQL window functions to deduplicate by command_text, keeping only the most recent occurrence
+// Deduplicates by command_text, keeping only the most recent occurrence (max id)
 func (db *DB) GetCommandsForFzf(fn func(id int64, cmdText string) error) error {
-	// Use window function to get only the most recent occurrence of each command
-	// ROW_NUMBER() OVER (PARTITION BY command_text ORDER BY id DESC) assigns 1 to the most recent
+	// Use the same max(id) deduplication pattern as other functions in this file
 	query := `
 		SELECT id, command_text
-		FROM (
-			SELECT id, command_text,
-				ROW_NUMBER() OVER (PARTITION BY command_text ORDER BY id DESC) as rn
+		FROM commands
+		WHERE id IN (
+			SELECT max(id)
 			FROM commands
+			GROUP BY command_text
 		)
-		WHERE rn = 1
 		ORDER BY id DESC`
 
 	rows, err := db.conn.Query(query)
