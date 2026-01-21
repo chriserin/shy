@@ -118,7 +118,7 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 
 						fmt.Fprintf(&output, "    %s  %s\n",
 							renderStyle(timestampStyle, timestamp, opts.NoColor),
-							renderStyle(commandStyle, cmd.CommandText, opts.NoColor))
+							renderStyle(commandStyle, truncate(cmd.CommandText), opts.NoColor))
 					}
 				}
 
@@ -136,7 +136,7 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 						if count > 1 {
 							fmt.Fprintf(&output, "    %s %s\n",
 								renderStyle(statValueStyle.Width(4).Align(lipgloss.Left), fmt.Sprintf("⟳ %d", count), opts.NoColor),
-								renderStyle(commandStyle, cmd, opts.NoColor))
+								renderStyle(commandStyle, truncate(cmd), opts.NoColor))
 						}
 					}
 				}
@@ -148,7 +148,7 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 
 							fmt.Fprintf(&output, "    %s  %s\n",
 								renderStyle(timestampStyle, timestamp, opts.NoColor),
-								renderStyle(commandStyle, cmd.CommandText, opts.NoColor))
+								renderStyle(commandStyle, truncate(cmd.CommandText), opts.NoColor))
 						}
 					}
 				}
@@ -164,6 +164,13 @@ func FormatSummary(grouped *GroupedCommands, opts FormatOptions) string {
 	}
 
 	return output.String()
+}
+
+func truncate(s string) string {
+	if strings.Split(s, "\n"); len(strings.Split(s, "\n")) > 1 {
+		return strings.Split(s, "\n")[0] + " ↵"
+	}
+	return s
 }
 
 func formatTimestamp(cmd models.Command, bucketSize BucketSize) string {
