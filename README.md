@@ -1,43 +1,60 @@
 # shy - Shell History Tracker
 
-A lightweight command-line tool for tracking shell command history in SQLite with rich metadata.
+A command-line tool for tracking shell command history in SQLite with rich metadata and conventional behaviour.
 
 ## Features
 
-- **SQLite Database**: Commands stored in a structured, queryable database
-- **Rich Metadata**: Captures command text, working directory, exit status, timestamp
-- **Git Context**: Auto-detects git repository and branch information
-- **Concurrent Safe**: Handles concurrent inserts using SQLite WAL mode
-- **Flexible**: Manual insertion with optional parameter overrides
+- **Rich Metadata**: working directory, start time, duration, git repo, git branch, session
+- **Tool Integrations**: zsh, television, fzf, zsh-autosuggestion
+- **Work Summary**: Yesterday's history in a report format
+- **Sensible Duplication Behaviour**
+- **Sensible Scopes**
 
-## Installation
+## Scopes: Session, Current Session, and All
 
-```bash
-go build -o shy .
-```
+There are 3 different scopes for `shy`.  The current session, the current
+working directory, and all.  These scopes support 3 different use cases:
 
-## Zsh Integration
+1. up/down arrow: Traverse previous commands of the **current session**.
+2. autosuggest: Suggest previous commands that have been used in the **current working directory**.
+3. ctrl-r: Search through **all** previous commands
+
+This is achievable with the zsh `SHARE_HISTORY` option, but needs tinkering to
+separate the up/down history from the all history, and this is mutually
+exclusive from collecting duration with the `INC_APPEND_HISTORY_TIME` option.
+
+## Duplicates
+
+There is a tension between collection duplicates and not collecting duplicates.
+
+1. **DUPS**: Command Context: Useful when re-executing commands in order with
+   the "accept-line-and-down-history" widget, or understanding how a command
+   was in context with other commands. 
+2. **NO DUPS**: Searching: It is not useful to find 10, 20, or 100 of the same
+   command when searching through commands
+3. **NO SEQ DUPS**: Traversing:  When moving through previous commands with the
+   up or down errors, it's not useful to traverse the same command more than
+   once.
+
+It is not possible in zsh to support all 3 use cases.  Duplicates in zsh are managed
+at the command time, not read time, so you have to choose one of the scenarios
+supported by the HIST_IGNORE_ALL_DUPS or HIST_IGNORE_DUPS options.
+
+In `shy`, all commands are stored, enabling the application to be intentional
+about when duplicates are presented or not presented.
+
+## Integration
+
+### ZSH
 
 Shy can automatically track your shell history by integrating with zsh. Add this to your `.zshrc`:
 
 ```bash
-# Basic integration (auto-tracking + Ctrl-R listing)
 eval "$(shy init zsh)"
 ```
 
-### Features
 
-The zsh integration provides:
-
-1. **Automatic command tracking** - Commands are automatically inserted into the database after execution with metadata (timestamps, exit codes, duration, git context)
-2. **History usage** - The zsh features that rely on history will now rely on shy's commands.
-
-- up and down arrows to navigate history one command at a time
-- aliases for `history`, `fc` and `r` to ensure scripts using these commands still function
-- ctrl-R functionality for different integrations including fzf and tv
-- zsh-autosuggestion integration
-
-### fzf Integration (Optional)
+### FZF
 
 For a better history search experience with fzf:
 
@@ -45,14 +62,11 @@ For a better history search experience with fzf:
 # Load fzf key-bindings first (if not already loaded)
 source /usr/share/fzf/key-bindings.zsh  # Adjust path for your system
 
-# Load shy with fzf integration
-eval "$(shy init zsh)"
-
-# Bind Ctrl-R to shy's fzf widget (replaces fzf's default history widget)
+# Bind ctrl-r for history search
 bindkey '^R' shy-fzf-history-widget
 ```
 
-### zsh-autosuggestions Integration (Optional)
+### zsh-autosuggestions
 
 Shy provides custom suggestion strategies for [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions):
 
@@ -63,12 +77,17 @@ source /path/to/zsh-autosuggestions/zsh-autosuggestions.zsh
 # Load shy integration
 eval "$(shy init zsh)"
 
-# Configure suggestion strategies (choose one or combine)
+# Configure suggestion strategy with your preferred strategy
 ZSH_AUTOSUGGEST_STRATEGY=(shy_history)              # Simple prefix matching
 ZSH_AUTOSUGGEST_STRATEGY=(shy_match_prev_cmd)      # Context-aware (matches after previous command)
 ZSH_AUTOSUGGEST_STRATEGY=(shy_pwd)                 # Directory-specific suggestions
 ZSH_AUTOSUGGEST_STRATEGY=(shy_session)             # Current session only
+
+# or choose multiple for graceful fallback
+# I prefer session before current directory before all history
+ZSH_AUTOSUGGEST_STRATEGY=(shy_session shy_pwd shy_history)
 ```
+
 
 ### television Integration (Optional)
 
@@ -79,22 +98,55 @@ Browse your command history with [television](https://github.com/alexpasmantier/
 shy tv config > ~/.config/television/cable/shy-history.toml
 
 # Launch television with the shy channel
-tv shy
+tv shy-history
 ```
+
 
 ### Configuration
 
 Control tracking behavior with environment variables:
 
 ```bash
-# Temporarily disable tracking
+# disable tracking
 SHY_DISABLE=1
 
-# Use a custom database location
+# insert to a db of your choosing
 SHY_DB_PATH=/path/to/custom.db
 ```
 
-## Usage
+## Commands
+
+### Command Overview
+
+| Command | Default Scope | Duplicates | Description |
+|---------|--------------|------------|-------------|
+| `fc` / `history` | ALL | NO DUPS | List or edit command history (use `--internal` for session, `--local` for pwd) |
+| `list` | ALL | DUPS | List recent commands (use `--session` or `--current-session` to filter) |
+| `list-all` | ALL | DUPS | List all commands (use `--session` or `--current-session` to filter) |
+| `last-command` | SESSION + PWD | NO SEQ DUPS | Get most recent command (unions session with current directory, skips consecutive duplicates) |
+| `fzf` | ALL | NO DUPS | Output history for fzf integration (SQL-based deduplication) |
+| `like-recent` | ALL | Single Result | Find most recent command with prefix (use `--pwd` or `--session` to filter) |
+| `like-recent-after` | ALL | Single Result | Context-aware command suggestions based on previous command |
+| `summary` | ALL | N/A | Show aggregated activity report (use `--source-app` to filter) |
+| `tabsum` | ALL | N/A | Tabular summary of command activity |
+| `insert` | N/A | N/A | Manually insert a command into the database |
+| `close-session` | N/A | N/A | Mark a session as inactive |
+| `init` | N/A | N/A | Generate shell integration scripts |
+| `tv` | N/A | N/A | Generate television channel configuration |
+
+
+**Scope Types:**
+- **ALL**: Searches entire command history across all sessions and directories
+- **SESSION**: Current shell session only (filtered by `source_app` and `source_pid`)
+- **PWD**: Current working directory only
+- **ALL + PWD**: Session results first, then union with current directory results
+
+**Duplicate Behavior:**
+- **DUPS**: Returns all commands including duplicates
+- **NO DUPS**: Filters out duplicate commands (keeps most recent)
+- **NO SEQ DUPS**: Filters out consecutive duplicate commands only
+- **Single Result**: Returns only the most recent matching command
+- **N/A**: Not applicable (command doesn't return history)
 
 ### Insert Command
 
@@ -103,54 +155,3 @@ Insert a command into the history database:
 ```bash
 shy insert --command "ls -la" --dir /home/user/project --status 0
 ```
-
-### Flags
-
-- `--command` (required): The command text to store
-- `--dir` (required): The working directory where the command was executed
-- `--status`: Exit status code (default: 0)
-- `--git-repo`: Git repository URL (auto-detected if not provided)
-- `--git-branch`: Git branch name (auto-detected if not provided)
-- `--timestamp`: Unix timestamp (default: current time)
-- `--db`: Database file path (default: $XDG_DATA_HOME/shy/history.db or ~/.local/share/shy/history.db)
-
-### Examples
-
-#### Basic command insertion
-
-```bash
-shy insert --command "npm test" --dir /home/user/myapp --status 0
-```
-
-#### Command with explicit git context
-
-```bash
-shy insert --command "git commit -m 'fix bug'" \
-  --dir /home/user/myapp \
-  --git-repo "https://github.com/user/myapp.git" \
-  --git-branch "feature/bugfix"
-```
-
-#### Command with custom timestamp
-
-```bash
-shy insert --command "make build" --dir /home/user/project --timestamp 1704067200
-```
-
-## Testing
-
-Run all tests:
-
-```bash
-go test ./... -v
-```
-
-## Future Iterations
-
-See `DEVELOPMENT_PLAN.md` for the roadmap:
-
-- Iteration 2: Basic query interface (list, search, stats)
-- Iteration 3: Rich metadata (duration, hostname, etc.)
-- Iteration 4: Privacy & configuration
-- Iteration 5: Work summarization
-- And more...
