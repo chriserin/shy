@@ -1,0 +1,36 @@
+goos: linux
+goarch: amd64
+pkg: github.com/chris/shy/internal/db
+cpu: AMD Ryzen 9 7950X 16-Core Processor            
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     852	   4192607 ns/op	    2254 B/op	      46 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     850	   4182062 ns/op	    2246 B/op	      46 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-1-32         	     855	   4170179 ns/op	    2205 B/op	      46 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     846	   4200751 ns/op	    5377 B/op	     157 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     852	   4181618 ns/op	    5326 B/op	     157 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-5-32         	     850	   4171031 ns/op	    5324 B/op	     157 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     848	   4233383 ns/op	    9086 B/op	     294 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     850	   4226541 ns/op	    9087 B/op	     294 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-10-32        	     848	   4196305 ns/op	    9084 B/op	     294 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     524	   6796741 ns/op	   17056 B/op	     546 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     522	   6772882 ns/op	   16939 B/op	     546 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/medium/limit-20-32        	     525	   6817988 ns/op	   16942 B/op	     546 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     200	  17916119 ns/op	    2283 B/op	      46 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     198	  17973744 ns/op	    2234 B/op	      46 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-1-32          	     200	  18180524 ns/op	    2324 B/op	      46 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     198	  17995258 ns/op	    5423 B/op	     157 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     200	  17965141 ns/op	    5371 B/op	     157 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-5-32          	     200	  18060185 ns/op	    5362 B/op	     157 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     199	  17961364 ns/op	    9149 B/op	     286 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     200	  18030937 ns/op	    9157 B/op	     286 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-10-32         	     199	  17962411 ns/op	    9098 B/op	     286 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26477665 ns/op	   17155 B/op	     551 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26682114 ns/op	   17276 B/op	     551 allocs/op
+BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates/large/limit-20-32         	     135	  26416766 ns/op	   17763 B/op	     551 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	     980	   3640791 ns/op	    9584 B/op	     293 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	     974	   3623842 ns/op	    9498 B/op	     293 allocs/op
+BenchmarkGetRecentCommandsWithSession/medium-32                                  	     979	   3632170 ns/op	    9480 B/op	     293 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     189	  18930264 ns/op	    9685 B/op	     296 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     188	  18979251 ns/op	    9686 B/op	     296 allocs/op
+BenchmarkGetRecentCommandsWithSession/large-32                                   	     189	  18811496 ns/op	    9685 B/op	     296 allocs/op
+PASS
+ok  	github.com/chris/shy/internal/db	145.908s

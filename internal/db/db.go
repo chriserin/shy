@@ -571,49 +571,104 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 // If sourceApp and sourcePid are provided, only active commands from that session are returned
 // If workingDir is also provided along with session filters, results are unioned with directory commands (session first, then directory)
 // Returns up to 'limit' commands after deduplication
+// Uses a hybrid approach: fetch a reasonable subset first, then apply window function for deduplication
 func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64, workingDir string) ([]models.Command, error) {
 	var query string
 
-	// Get all commands ordered by timestamp DESC (most recent first)
-	// We need to get more than the limit because we'll filter out consecutive duplicates
-	// Multiply by 10 to ensure we have enough after deduplication
+	// Calculate fetch limit: enough to handle duplicates but not too many
+	// Use 10x multiplier with a minimum of 100 and maximum of 10,000
 	fetchLimit := limit * 10
 	if fetchLimit < 100 {
 		fetchLimit = 100
 	}
+	if fetchLimit > 10000 {
+		fetchLimit = 10000
+	}
 
-	// Build query based on filter conditions
+	// Build query using CTE: first fetch a subset, then apply window function only on that subset
+	// This is much faster than applying window function to entire table
 	if sourceApp != "" && sourcePid > 0 && workingDir != "" {
 		// Union query: session commands first (priority 0), then directory commands (priority 1)
 		query = fmt.Sprintf(`
+			WITH recent_subset AS (
+				SELECT
+					id, timestamp, exit_status, command_text, working_dir,
+					git_repo, git_branch, duration, source_app, source_pid, source_active,
+					CASE WHEN source_app = '%s' AND source_pid = %d AND source_active = 1 THEN 0 ELSE 1 END AS priority
+				FROM commands
+				WHERE (source_app = '%s' AND source_pid = %d AND source_active = 1)
+				   OR working_dir = '%s'
+				ORDER BY
+					CASE WHEN source_app = '%s' AND source_pid = %d AND source_active = 1 THEN 0 ELSE 1 END ASC,
+					timestamp DESC, id DESC
+				LIMIT %d
+			),
+			deduped AS (
+				SELECT
+					id, timestamp, exit_status, command_text, working_dir,
+					git_repo, git_branch, duration, source_app, source_pid, source_active, priority,
+					LAG(command_text) OVER (ORDER BY priority ASC, timestamp DESC, id DESC) AS prev_command_text
+				FROM recent_subset
+			)
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-			FROM commands
-			WHERE (source_app = '%s' AND source_pid = %d AND source_active = 1)
-			   OR working_dir = '%s'
-			ORDER BY
-				CASE WHEN source_app = '%s' AND source_pid = %d AND source_active = 1 THEN 0 ELSE 1 END ASC,
-				timestamp DESC, id DESC
+			FROM deduped
+			WHERE command_text != prev_command_text OR prev_command_text IS NULL
+			ORDER BY priority ASC, timestamp DESC, id DESC
 			LIMIT %d`,
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
 			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
 			strings.ReplaceAll(workingDir, "'", "''"),
 			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
-			fetchLimit)
+			fetchLimit,
+			limit)
 	} else if sourceApp != "" && sourcePid > 0 {
 		// Session filter only
 		query = fmt.Sprintf(`
+			WITH recent_subset AS (
+				SELECT
+					id, timestamp, exit_status, command_text, working_dir,
+					git_repo, git_branch, duration, source_app, source_pid, source_active
+				FROM commands
+				WHERE source_app = '%s' AND source_pid = %d AND source_active = 1
+				ORDER BY timestamp DESC, id DESC
+				LIMIT %d
+			),
+			deduped AS (
+				SELECT
+					id, timestamp, exit_status, command_text, working_dir,
+					git_repo, git_branch, duration, source_app, source_pid, source_active,
+					LAG(command_text) OVER (ORDER BY timestamp DESC, id DESC) AS prev_command_text
+				FROM recent_subset
+			)
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-			FROM commands
-			WHERE source_app = '%s' AND source_pid = %d AND source_active = 1
+			FROM deduped
+			WHERE command_text != prev_command_text OR prev_command_text IS NULL
 			ORDER BY timestamp DESC, id DESC
 			LIMIT %d`,
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid, fetchLimit)
+			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid, fetchLimit, limit)
 	} else {
 		// No filters
 		query = fmt.Sprintf(`
+			WITH recent_subset AS (
+				SELECT
+					id, timestamp, exit_status, command_text, working_dir,
+					git_repo, git_branch, duration, source_app, source_pid, source_active
+				FROM commands
+				ORDER BY timestamp DESC, id DESC
+				LIMIT %d
+			),
+			deduped AS (
+				SELECT
+					id, timestamp, exit_status, command_text, working_dir,
+					git_repo, git_branch, duration, source_app, source_pid, source_active,
+					LAG(command_text) OVER (ORDER BY timestamp DESC, id DESC) AS prev_command_text
+				FROM recent_subset
+			)
 			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-			FROM commands
+			FROM deduped
+			WHERE command_text != prev_command_text OR prev_command_text IS NULL
 			ORDER BY timestamp DESC, id DESC
-			LIMIT %d`, fetchLimit)
+			LIMIT %d`, fetchLimit, limit)
 	}
 
 	rows, err := db.conn.Query(query)
@@ -622,7 +677,7 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 	}
 	defer rows.Close()
 
-	var allCommands []models.Command
+	var commands []models.Command
 	for rows.Next() {
 		var cmd models.Command
 		var sourceActive *int64
@@ -646,28 +701,14 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 			active := *sourceActive != 0
 			cmd.SourceActive = &active
 		}
-		allCommands = append(allCommands, cmd)
+		commands = append(commands, cmd)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating commands: %w", err)
 	}
 
-	// Remove consecutive duplicates
-	var deduplicated []models.Command
-	var prevCommandText string
-	for _, cmd := range allCommands {
-		if cmd.CommandText != prevCommandText {
-			deduplicated = append(deduplicated, cmd)
-			prevCommandText = cmd.CommandText
-		}
-		// Stop once we have enough
-		if len(deduplicated) >= limit {
-			break
-		}
-	}
-
-	return deduplicated, nil
+	return commands, nil
 }
 
 // GetMostRecentEventID returns the ID of the most recent command
