@@ -46,7 +46,7 @@ _zsh_autosuggest_strategy_shy_match_prev_cmd() {
 
 	# Get previous command from shy
 	local prev_cmd
-	prev_cmd=$(shy last-command -n 2 2>/dev/null)
+	prev_cmd=$(shy last-command --current-session -n 2 2>/dev/null)
 
 	# If we can't get previous command, fall back to empty suggestion
 	if [[ -z $prev_cmd ]]; then

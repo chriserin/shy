@@ -17,7 +17,7 @@ NC='\033[0m'
 mkdir -p "$RESULTS_DIR"
 
 # Default benchmark options
-BENCH_TIME="${BENCH_TIME:-3s}"
+BENCH_TIME="${BENCH_TIME:-1s}"
 BENCH_COUNT="${BENCH_COUNT:-3}"
 
 echo -e "${BLUE}Running shy performance benchmarks...${NC}"

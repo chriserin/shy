@@ -23,6 +23,10 @@ func TestScenario1_GetLastCommand(t *testing.T) {
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
+	sourceApp := "zsh"
+	sourcePid := int64(12345)
+	sourceActive := true
+
 	commands := []struct {
 		text      string
 		timestamp int64
@@ -34,10 +38,13 @@ func TestScenario1_GetLastCommand(t *testing.T) {
 
 	for _, c := range commands {
 		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  "/home/test",
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp,
+			SourcePid:    &sourcePid,
+			SourceActive: &sourceActive,
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -46,7 +53,7 @@ func TestScenario1_GetLastCommand(t *testing.T) {
 	// When: I run "shy last-command"
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
-	rootCmd.SetArgs([]string{"last-command", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "--db", dbPath, "--session", "zsh:12345"})
 
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
@@ -79,7 +86,7 @@ func TestScenario2_LastCommandWithNoHistory(t *testing.T) {
 	// When: I run "shy last-command"
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
-	rootCmd.SetArgs([]string{"last-command", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "--db", dbPath, "--session", "zsh:12345"})
 
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed even with empty database")
@@ -103,6 +110,10 @@ func TestScenario3_LastCommandWithOffset(t *testing.T) {
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
+	sourceApp := "zsh"
+	sourcePid := int64(12345)
+	sourceActive := true
+
 	commands := []struct {
 		text      string
 		timestamp int64
@@ -115,10 +126,13 @@ func TestScenario3_LastCommandWithOffset(t *testing.T) {
 
 	for _, c := range commands {
 		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  "/home/test",
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp,
+			SourcePid:    &sourcePid,
+			SourceActive: &sourceActive,
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -127,7 +141,7 @@ func TestScenario3_LastCommandWithOffset(t *testing.T) {
 	// When: I run "shy last-command -n 1" (most recent)
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
-	rootCmd.SetArgs([]string{"last-command", "-n", "1", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "1", "--db", dbPath, "--session", "zsh:12345"})
 
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
@@ -135,28 +149,28 @@ func TestScenario3_LastCommandWithOffset(t *testing.T) {
 
 	// When: I run "shy last-command -n 2" (second most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "2", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "2", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "cmd3\n", buf.String(), "n=2 should return second most recent")
 
 	// When: I run "shy last-command -n 3" (third most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "3", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "3", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "cmd2\n", buf.String(), "n=3 should return third most recent")
 
 	// When: I run "shy last-command -n 4" (fourth most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "4", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "4", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "cmd1\n", buf.String(), "n=4 should return fourth most recent")
 
 	// When: I run "shy last-command -n 5" (beyond available history)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "5", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "5", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "", buf.String(), "n beyond history should return empty")
@@ -367,6 +381,10 @@ func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
+	sourceApp := "zsh"
+	sourcePid := int64(12345)
+	sourceActive := true
+
 	// Insert commands with consecutive duplicates
 	commands := []struct {
 		text      string
@@ -384,10 +402,13 @@ func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
 
 	for _, c := range commands {
 		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  "/home/test",
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp,
+			SourcePid:    &sourcePid,
+			SourceActive: &sourceActive,
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -396,7 +417,7 @@ func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
 	// When: I run "shy last-command" (n=1, most recent)
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
-	rootCmd.SetArgs([]string{"last-command", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "--db", dbPath, "--session", "zsh:12345"})
 
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
@@ -404,28 +425,28 @@ func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
 
 	// When: I run "shy last-command -n 2" (second most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "2", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "2", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "echo dup\n", buf.String(), "n=2 should return echo dup (not consecutive with pwd)")
 
 	// When: I run "shy last-command -n 3" (third most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "3", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "3", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "ls -la\n", buf.String(), "n=3 should return ls -la")
 
 	// When: I run "shy last-command -n 4" (fourth most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "4", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "4", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "echo dup\n", buf.String(), "n=4 should return echo dup (first occurrence, skipping 3 consecutive)")
 
 	// When: I run "shy last-command -n 5" (fifth most recent)
 	buf.Reset()
-	rootCmd.SetArgs([]string{"last-command", "-n", "5", "--db", dbPath})
+	rootCmd.SetArgs([]string{"last-command", "-n", "5", "--db", dbPath, "--session", "zsh:12345"})
 	err = rootCmd.Execute()
 	require.NoError(t, err, "last-command should succeed")
 	assert.Equal(t, "echo first\n", buf.String(), "n=5 should return echo first")

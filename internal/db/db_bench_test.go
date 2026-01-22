@@ -156,8 +156,8 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 	}
 }
 
-// BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates measures last-command performance
-func BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates(b *testing.B) {
+// BenchmarkGetRecentCommandsWithSession measures last-command with session filter
+func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 	sizes := []struct {
 		name string
 		db   string
@@ -167,7 +167,7 @@ func BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates(b *testing.B) {
 		{"xlarge", "history-xlarge.db"},
 	}
 
-	limits := []int{1, 5, 10, 20}
+	limits := []int{1, 20, 50}
 
 	for _, size := range sizes {
 		dbPath := filepath.Join("../../testdata/perf", size.db)
@@ -186,49 +186,13 @@ func BenchmarkGetRecentCommandsWithoutConsecutiveDuplicates(b *testing.B) {
 
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, "", 0, "")
+					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, "zsh", 12345, "/home/user/projects/shy")
 					if err != nil {
 						b.Fatalf("failed to get commands: %v", err)
 					}
 				}
 			})
 		}
-	}
-}
-
-// BenchmarkGetRecentCommandsWithSession measures last-command with session filter
-func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
-	sizes := []struct {
-		name string
-		db   string
-	}{
-		{"medium", "history-medium.db"},
-		{"large", "history-large.db"},
-		{"xlarge", "history-xlarge.db"},
-	}
-
-	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
-		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-			b.Logf("Skipping %s: database not found", size.name)
-			continue
-		}
-
-		b.Run(size.name, func(b *testing.B) {
-			database, err := New(dbPath)
-			if err != nil {
-				b.Fatalf("failed to open database: %v", err)
-			}
-			defer database.Close()
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(10, "zsh", 12345, "/home/user/projects/shy")
-				if err != nil {
-					b.Fatalf("failed to get commands: %v", err)
-				}
-			}
-		})
 	}
 }
 

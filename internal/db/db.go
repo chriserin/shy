@@ -283,6 +283,9 @@ func (db *DB) migrate() error {
 	if _, err := db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_command_text ON commands (command_text, id)"); err != nil {
 		return fmt.Errorf("failed to create command_text composite index: %w", err)
 	}
+	if _, err := db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_source_desc ON commands (source_pid, source_app, timestamp DESC) WHERE source_active = 1"); err != nil {
+		return fmt.Errorf("failed to create source_desc partial index: %w", err)
+	}
 
 	// Commit transaction
 	if _, err := db.conn.Exec("COMMIT"); err != nil {
@@ -582,9 +585,12 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 // If sourceApp and sourcePid are provided, only active commands from that session are returned
 // If workingDir is also provided along with session filters, results are unioned with directory commands (session first, then directory)
 // Returns up to 'limit' commands after deduplication
-// Uses a hybrid approach: fetch a reasonable subset first, then apply window function for deduplication
+// Runs session and directory queries in parallel, only using directory results if session results < limit
+// Only populates ID and CommandText fields in the returned Command structs
 func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64, workingDir string) ([]models.Command, error) {
-	var query string
+	if sourceApp == "" || sourcePid == 0 {
+		return []models.Command{}, fmt.Errorf("both sourceApp and sourcePid must be provided for session filtering")
+	}
 
 	// Calculate fetch limit: enough to handle duplicates but not too many
 	// Use 10x multiplier with a minimum of 100 and maximum of 10,000
@@ -596,130 +602,148 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 		fetchLimit = 10000
 	}
 
-	// Build query using CTE: first fetch a subset, then apply window function only on that subset
-	// This is much faster than applying window function to entire table
-	if sourceApp != "" && sourcePid > 0 && workingDir != "" {
-		// Union query: session commands first (priority 0), then directory commands (priority 1)
-		query = fmt.Sprintf(`
+	// Session commands query
+	sessionQuery := fmt.Sprintf(`
+		WITH recent_subset AS (
+			SELECT timestamp, command_text
+			FROM commands
+			WHERE source_app = '%s' AND source_pid = %d AND source_active = 1
+			ORDER BY timestamp DESC
+			LIMIT %d
+		),
+		deduped AS (
+			SELECT
+				command_text,
+				LAG(command_text) OVER (ORDER BY timestamp DESC) AS prev_command_text
+			FROM recent_subset
+		)
+		SELECT command_text
+		FROM deduped
+		WHERE command_text != prev_command_text OR prev_command_text IS NULL
+		LIMIT %d`,
+		strings.ReplaceAll(sourceApp, "'", "''"), sourcePid, fetchLimit, limit)
+
+	// Execute session query
+	type queryResult struct {
+		commands []models.Command
+		err      error
+	}
+
+	sessionChan := make(chan queryResult, 1)
+	directoryChan := make(chan queryResult, 1)
+
+	// Run session query
+	go func() {
+		rows, err := db.conn.Query(sessionQuery)
+		if err != nil {
+			sessionChan <- queryResult{nil, fmt.Errorf("failed to query session commands: %w", err)}
+			return
+		}
+		defer rows.Close()
+
+		var commands []models.Command
+		for rows.Next() {
+			var cmd models.Command
+			if err := rows.Scan(&cmd.CommandText); err != nil {
+				sessionChan <- queryResult{nil, fmt.Errorf("failed to scan session command: %w", err)}
+				return
+			}
+			commands = append(commands, cmd)
+		}
+
+		if err := rows.Err(); err != nil {
+			sessionChan <- queryResult{nil, fmt.Errorf("error iterating session commands: %w", err)}
+			return
+		}
+
+		sessionChan <- queryResult{commands, nil}
+	}()
+
+	// Run directory query if workingDir is provided
+	if workingDir != "" {
+		directoryQuery := fmt.Sprintf(`
 			WITH recent_subset AS (
-				SELECT
-					id, timestamp, exit_status, command_text, working_dir,
-					git_repo, git_branch, duration, source_app, source_pid, source_active,
-					CASE WHEN source_app = '%s' AND source_pid = %d AND source_active = 1 THEN 0 ELSE 1 END AS priority
+				SELECT timestamp, command_text
 				FROM commands
-				WHERE (source_app = '%s' AND source_pid = %d AND source_active = 1)
-				   OR working_dir = '%s'
-				ORDER BY
-					CASE WHEN source_app = '%s' AND source_pid = %d AND source_active = 1 THEN 0 ELSE 1 END ASC,
-					timestamp DESC, id DESC
-				LIMIT %d
-			),
-			deduped AS (
-				SELECT
-					id, timestamp, exit_status, command_text, working_dir,
-					git_repo, git_branch, duration, source_app, source_pid, source_active, priority,
-					LAG(command_text) OVER (ORDER BY priority ASC, timestamp DESC, id DESC) AS prev_command_text
-				FROM recent_subset
-			)
-			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-			FROM deduped
-			WHERE command_text != prev_command_text OR prev_command_text IS NULL
-			ORDER BY priority ASC, timestamp DESC, id DESC
-			LIMIT %d`,
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
-			strings.ReplaceAll(workingDir, "'", "''"),
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid,
-			fetchLimit,
-			limit)
-	} else if sourceApp != "" && sourcePid > 0 {
-		// Session filter only
-		query = fmt.Sprintf(`
-			WITH recent_subset AS (
-				SELECT
-					id, timestamp, exit_status, command_text, working_dir,
-					git_repo, git_branch, duration, source_app, source_pid, source_active
-				FROM commands
-				WHERE source_app = '%s' AND source_pid = %d AND source_active = 1
+				WHERE working_dir = '%s'
 				ORDER BY timestamp DESC, id DESC
 				LIMIT %d
 			),
 			deduped AS (
 				SELECT
-					id, timestamp, exit_status, command_text, working_dir,
-					git_repo, git_branch, duration, source_app, source_pid, source_active,
-					LAG(command_text) OVER (ORDER BY timestamp DESC, id DESC) AS prev_command_text
+					command_text,
+					LAG(command_text) OVER (ORDER BY timestamp DESC) AS prev_command_text
 				FROM recent_subset
 			)
-			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
+			SELECT command_text
 			FROM deduped
 			WHERE command_text != prev_command_text OR prev_command_text IS NULL
-			ORDER BY timestamp DESC, id DESC
 			LIMIT %d`,
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid, fetchLimit, limit)
+			strings.ReplaceAll(workingDir, "'", "''"), fetchLimit, limit)
+
+		go func() {
+			rows, err := db.conn.Query(directoryQuery)
+			if err != nil {
+				directoryChan <- queryResult{nil, fmt.Errorf("failed to query directory commands: %w", err)}
+				return
+			}
+			defer rows.Close()
+
+			var commands []models.Command
+			for rows.Next() {
+				var cmd models.Command
+				if err := rows.Scan(&cmd.CommandText); err != nil {
+					directoryChan <- queryResult{nil, fmt.Errorf("failed to scan directory command: %w", err)}
+					return
+				}
+				commands = append(commands, cmd)
+			}
+
+			if err := rows.Err(); err != nil {
+				directoryChan <- queryResult{nil, fmt.Errorf("error iterating directory commands: %w", err)}
+				return
+			}
+
+			directoryChan <- queryResult{commands, nil}
+		}()
 	} else {
-		// No filters
-		query = fmt.Sprintf(`
-			WITH recent_subset AS (
-				SELECT
-					id, timestamp, exit_status, command_text, working_dir,
-					git_repo, git_branch, duration, source_app, source_pid, source_active
-				FROM commands
-				ORDER BY timestamp DESC, id DESC
-				LIMIT %d
-			),
-			deduped AS (
-				SELECT
-					id, timestamp, exit_status, command_text, working_dir,
-					git_repo, git_branch, duration, source_app, source_pid, source_active,
-					LAG(command_text) OVER (ORDER BY timestamp DESC, id DESC) AS prev_command_text
-				FROM recent_subset
-			)
-			SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-			FROM deduped
-			WHERE command_text != prev_command_text OR prev_command_text IS NULL
-			ORDER BY timestamp DESC, id DESC
-			LIMIT %d`, fetchLimit, limit)
+		// No directory query needed
+		directoryChan <- queryResult{nil, nil}
 	}
 
-	rows, err := db.conn.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query commands: %w", err)
+	// Wait for session results
+	sessionResult := <-sessionChan
+	if sessionResult.err != nil {
+		return nil, sessionResult.err
 	}
-	defer rows.Close()
 
-	var commands []models.Command
-	for rows.Next() {
-		var cmd models.Command
-		var sourceActive *int64
-		if err := rows.Scan(
-			&cmd.ID,
-			&cmd.Timestamp,
-			&cmd.ExitStatus,
-			&cmd.CommandText,
-			&cmd.WorkingDir,
-			&cmd.GitRepo,
-			&cmd.GitBranch,
-			&cmd.Duration,
-			&cmd.SourceApp,
-			&cmd.SourcePid,
-			&sourceActive,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan command: %w", err)
+	// If session commands meet the limit, return them
+	if len(sessionResult.commands) >= limit {
+		return sessionResult.commands[:limit], nil
+	}
+
+	// Wait for directory results
+	directoryResult := <-directoryChan
+	if directoryResult.err != nil {
+		return nil, directoryResult.err
+	}
+
+	// If no directory results, return session results
+	if directoryResult.commands == nil {
+		return sessionResult.commands, nil
+	}
+
+	// Combine results: session commands first, then directory commands up to limit
+	combined := append([]models.Command{}, sessionResult.commands...)
+	needed := limit - len(combined)
+	if needed > 0 {
+		if needed > len(directoryResult.commands) {
+			needed = len(directoryResult.commands)
 		}
-		// Convert source_active from integer to bool pointer
-		if sourceActive != nil {
-			active := *sourceActive != 0
-			cmd.SourceActive = &active
-		}
-		commands = append(commands, cmd)
+		combined = append(combined, directoryResult.commands[:needed]...)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating commands: %w", err)
-	}
-
-	return commands, nil
+	return combined, nil
 }
 
 // GetMostRecentEventID returns the ID of the most recent command
