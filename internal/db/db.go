@@ -1075,71 +1075,128 @@ type LikeRecentOptions struct {
 	IncludeShy bool
 	Exclude    string
 	WorkingDir string
-	SessionPID string
+	SourceApp  string
+	SourcePid  int64
 }
 
 // LikeRecent finds commands matching a prefix with various filters
+// Runs three parallel queries (session, working dir, whole history) and returns first non-empty result
+// Query priority: session (with workingdir if provided) > working dir only > whole history
 func (db *DB) LikeRecent(opts LikeRecentOptions) ([]string, error) {
-	// Build SQL query
-	query := `
-		SELECT command_text
-		FROM commands
-		WHERE command_text LIKE ?
-	`
-	args := []any{opts.Prefix + "%"}
+	type queryResult struct {
+		results []string
+		err     error
+	}
+
+	// Build base WHERE clause for common filters (prefix, IncludeShy, Exclude)
+	baseWhere := "command_text LIKE ?"
+	baseArgs := []any{opts.Prefix + "%"}
 
 	// Exclude shy commands by default
 	if !opts.IncludeShy {
-		query += ` AND command_text NOT LIKE 'shy %' AND command_text != 'shy'`
+		baseWhere += " AND command_text NOT LIKE 'shy %' AND command_text != 'shy'"
 	}
 
 	// Add exclude pattern filter
 	if opts.Exclude != "" {
-		query += ` AND command_text NOT GLOB ?`
-		args = append(args, opts.Exclude)
+		baseWhere += " AND command_text NOT GLOB ?"
+		baseArgs = append(baseArgs, opts.Exclude)
 	}
 
-	// Add working directory filter
-	if opts.WorkingDir != "" {
-		query += ` AND working_dir = ?`
-		args = append(args, opts.WorkingDir)
-	}
+	// Create channels for results
+	sessionChan := make(chan queryResult, 1)
+	workingDirChan := make(chan queryResult, 1)
+	historyChan := make(chan queryResult, 1)
 
-	// Add session PID filter
-	if opts.SessionPID != "" {
-		query += ` AND source_pid = ?`
-		args = append(args, opts.SessionPID)
-	}
+	// Helper function to execute query
+	executeQuery := func(whereClauses string, args []any, ch chan<- queryResult) {
+		query := "SELECT command_text FROM commands WHERE " + whereClauses + " ORDER BY timestamp DESC LIMIT 1"
 
-	// Order by timestamp descending and limit results
-	query += ` ORDER BY timestamp DESC`
-	if opts.Limit > 0 {
-		query += ` LIMIT ?`
-		args = append(args, opts.Limit)
-	}
-
-	// Execute query
-	rows, err := db.conn.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query commands: %w", err)
-	}
-	defer rows.Close()
-
-	// Collect results
-	var results []string
-	for rows.Next() {
-		var cmdText string
-		if err := rows.Scan(&cmdText); err != nil {
-			return nil, fmt.Errorf("failed to scan command: %w", err)
+		rows, err := db.conn.Query(query, args...)
+		if err != nil {
+			ch <- queryResult{nil, fmt.Errorf("failed to query commands: %w", err)}
+			return
 		}
-		results = append(results, cmdText)
+		defer rows.Close()
+
+		var results []string
+		for rows.Next() {
+			var cmdText string
+			if err := rows.Scan(&cmdText); err != nil {
+				ch <- queryResult{nil, fmt.Errorf("failed to scan command: %w", err)}
+				return
+			}
+			results = append(results, cmdText)
+		}
+
+		if err := rows.Err(); err != nil {
+			ch <- queryResult{nil, fmt.Errorf("error iterating commands: %w", err)}
+			return
+		}
+
+		ch <- queryResult{results, nil}
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating commands: %w", err)
+	// 1. Session query (if SourceApp and SourcePid provided)
+	// Includes working dir filter if also provided
+	if opts.SourceApp != "" && opts.SourcePid > 0 {
+		go func() {
+			sessionWhere := baseWhere + " AND source_app = ? AND source_pid = ? AND source_active = 1"
+			sessionArgs := append(append([]any{}, baseArgs...), opts.SourceApp, opts.SourcePid)
+
+			// Add working dir to session query if provided
+			if opts.WorkingDir != "" {
+				sessionWhere += " AND working_dir = ?"
+				sessionArgs = append(sessionArgs, opts.WorkingDir)
+			}
+
+			executeQuery(sessionWhere, sessionArgs, sessionChan)
+		}()
+	} else {
+		sessionChan <- queryResult{nil, nil}
 	}
 
-	return results, nil
+	// 2. Working directory query (if WorkingDir provided and no session filter)
+	// Only runs if session query didn't run
+	if opts.WorkingDir != "" && (opts.SourceApp == "" || opts.SourcePid == 0) {
+		go func() {
+			workingDirWhere := baseWhere + " AND working_dir = ?"
+			workingDirArgs := append(append([]any{}, baseArgs...), opts.WorkingDir)
+			executeQuery(workingDirWhere, workingDirArgs, workingDirChan)
+		}()
+	} else {
+		workingDirChan <- queryResult{nil, nil}
+	}
+
+	// 3. Whole history query (always run)
+	go func() {
+		executeQuery(baseWhere, baseArgs, historyChan)
+	}()
+
+	// Check results in order: session, working dir, history
+	// Return first non-empty result
+	sessionResult := <-sessionChan
+	if sessionResult.err != nil {
+		return nil, sessionResult.err
+	}
+	if len(sessionResult.results) > 0 {
+		return sessionResult.results, nil
+	}
+
+	workingDirResult := <-workingDirChan
+	if workingDirResult.err != nil {
+		return nil, workingDirResult.err
+	}
+	if len(workingDirResult.results) > 0 {
+		return workingDirResult.results, nil
+	}
+
+	historyResult := <-historyChan
+	if historyResult.err != nil {
+		return nil, historyResult.err
+	}
+
+	return historyResult.results, nil
 }
 
 // LikeRecentAfterOptions contains options for LikeRecentAfter query

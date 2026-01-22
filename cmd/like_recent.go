@@ -74,9 +74,13 @@ func runLikeRecent(cmd *cobra.Command, args []string) error {
 
 	// Add session filter if requested
 	if likeRecentSession {
-		sessionPID := os.Getenv("SHY_SESSION_PID")
-		if sessionPID != "" {
-			opts.SessionPID = sessionPID
+		sourceApp, sourcePid, detected, err := detectCurrentSession()
+		if err != nil {
+			return fmt.Errorf("failed to detect current session: %w", err)
+		}
+		if detected {
+			opts.SourceApp = sourceApp
+			opts.SourcePid = sourcePid
 		}
 	}
 

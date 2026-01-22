@@ -64,45 +64,6 @@ func BenchmarkInsertCommand(b *testing.B) {
 	}
 }
 
-// BenchmarkLikeRecent measures prefix search performance
-func BenchmarkLikeRecent(b *testing.B) {
-	sizes := []struct {
-		name string
-		db   string
-	}{
-		{"medium", "history-medium.db"},
-		{"large", "history-large.db"},
-		{"xlarge", "history-xlarge.db"},
-	}
-
-	prefixes := []string{"git", "ls", "cd", "echo", "npm"}
-
-	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
-		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-			b.Logf("Skipping %s: database not found", size.name)
-			continue
-		}
-
-		b.Run(size.name, func(b *testing.B) {
-			database, err := New(dbPath)
-			if err != nil {
-				b.Fatalf("failed to open database: %v", err)
-			}
-			defer database.Close()
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				prefix := prefixes[i%len(prefixes)]
-				_, err := database.LikeRecent(LikeRecentOptions{Prefix: prefix})
-				if err != nil {
-					b.Fatalf("failed to search: %v", err)
-				}
-			}
-		})
-	}
-}
-
 // BenchmarkLikeRecentWithFilters measures prefix search with pwd/session filters
 func BenchmarkLikeRecentWithFilters(b *testing.B) {
 	sizes := []struct {
@@ -127,32 +88,24 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 		}
 		defer database.Close()
 
-		b.Run(size.name+"/pwd", func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := database.LikeRecent(LikeRecentOptions{
-					Prefix:     "git",
-					WorkingDir: "/home/user/projects/shy",
+		for _, pid := range []int64{12347, 12345} {
+			for _, prefix := range []string{"g", "gi", "git", "git "} {
+				b.Run(fmt.Sprintf("%s/prefix-%s-%d", size.name, prefix, pid), func(b *testing.B) {
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						_, err := database.LikeRecent(LikeRecentOptions{
+							Prefix:     prefix,
+							WorkingDir: "/home/user/projects/shy",
+							SourceApp:  "zsh",
+							SourcePid:  pid,
+						})
+						if err != nil {
+							b.Fatalf("failed to search: %v", err)
+						}
+					}
 				})
-				if err != nil {
-					b.Fatalf("failed to search: %v", err)
-				}
 			}
-		})
-
-		b.Run(size.name+"/session", func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := database.LikeRecent(LikeRecentOptions{
-					Prefix:     "git",
-					WorkingDir: "/home/user/projects/shy",
-					SessionPID: "12345",
-				})
-				if err != nil {
-					b.Fatalf("failed to search: %v", err)
-				}
-			}
-		})
+		}
 	}
 }
 

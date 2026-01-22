@@ -381,28 +381,34 @@ func TestLikeRecentWithSession(t *testing.T) {
 	commands := []struct {
 		text      string
 		timestamp int64
+		app       string
 		pid       int64
+		active    bool
 	}{
-		{"git push origin main", 1704470400, 12345},
-		{"git push origin feature", 1704470401, 12346},
-		{"git push origin dev", 1704470402, 12345},
+		{"git push origin main", 1704470400, "zsh", 12345, true},
+		{"git push origin feature", 1704470401, "zsh", 12346, true},
+		{"git push origin dev", 1704470402, "zsh", 12345, true},
 	}
 
 	for _, c := range commands {
 		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  "/home/test",
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
-			SourcePid:   &c.pid,
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &c.app,
+			SourcePid:    &c.pid,
+			SourceActive: &c.active,
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
 	}
 
-	// Set session PID
+	// Set session environment variables
 	os.Setenv("SHY_SESSION_PID", "12345")
 	defer os.Unsetenv("SHY_SESSION_PID")
+	os.Setenv("SHELL", "/bin/zsh")
+	defer os.Unsetenv("SHELL")
 
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
@@ -481,21 +487,25 @@ func TestLikeRecentWithMultipleFilters(t *testing.T) {
 		text      string
 		timestamp int64
 		dir       string
+		app       string
 		pid       int64
+		active    bool
 	}{
-		{"git pull", 1704470400, proj1, 12345},
-		{"git push origin main", 1704470401, proj1, 12345},
-		{"git push origin dev", 1704470402, proj2, 12345},
-		{"git push origin test", 1704470403, proj1, 12346},
+		{"git pull", 1704470400, proj1, "zsh", 12345, true},
+		{"git push origin main", 1704470401, proj1, "zsh", 12345, true},
+		{"git push origin dev", 1704470402, proj2, "zsh", 12345, true},
+		{"git push origin test", 1704470403, proj1, "zsh", 12346, true},
 	}
 
 	for _, c := range commands {
 		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  c.dir,
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
-			SourcePid:   &c.pid,
+			CommandText:  c.text,
+			WorkingDir:   c.dir,
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &c.app,
+			SourcePid:    &c.pid,
+			SourceActive: &c.active,
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -508,6 +518,8 @@ func TestLikeRecentWithMultipleFilters(t *testing.T) {
 	require.NoError(t, err, "failed to change directory")
 	os.Setenv("SHY_SESSION_PID", "12345")
 	defer os.Unsetenv("SHY_SESSION_PID")
+	os.Setenv("SHELL", "/bin/zsh")
+	defer os.Unsetenv("SHELL")
 
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
