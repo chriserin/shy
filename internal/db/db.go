@@ -196,6 +196,40 @@ func (db *DB) migrate() error {
 		needsMigration = true
 	}
 
+	// Check if all required indexes exist
+	if !needsMigration {
+		indexRows, err := db.conn.Query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='commands'")
+		if err != nil {
+			return fmt.Errorf("failed to get index info: %w", err)
+		}
+
+		existingIndexes := make(map[string]bool)
+		for indexRows.Next() {
+			var name string
+			if err := indexRows.Scan(&name); err != nil {
+				indexRows.Close()
+				return fmt.Errorf("failed to scan index name: %w", err)
+			}
+			existingIndexes[name] = true
+		}
+		indexRows.Close()
+
+		// Required indexes
+		requiredIndexes := []string{
+			"idx_timestamp_desc",
+			"idx_command_text_like",
+			"idx_command_text",
+			"idx_source_desc",
+		}
+
+		for _, idx := range requiredIndexes {
+			if !existingIndexes[idx] {
+				needsMigration = true
+				break
+			}
+		}
+	}
+
 	if !needsMigration {
 		return nil
 	}
