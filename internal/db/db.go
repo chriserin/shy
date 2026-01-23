@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/duckdb/duckdb-go/v2"
 	_ "modernc.org/sqlite"
 
 	"github.com/chris/shy/internal/summary"
@@ -16,9 +17,9 @@ import (
 
 const (
 	defaultDBPath  = "~/.local/share/shy/history.db"
-	createTableSQL = `
+	CreateTableSQL = `
 		CREATE TABLE IF NOT EXISTS commands (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id INTEGER PRIMARY KEY %s,
 			timestamp INTEGER NOT NULL,
 			exit_status INTEGER NOT NULL,
 			duration INTEGER NOT NULL,
@@ -67,43 +68,62 @@ func New(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
+	dbType := DbType()
+
+	_, err := os.Stat(dbPath)
+	dbExists := err == nil
+
 	// Open database connection
-	conn, err := sql.Open("sqlite", dbPath)
+	conn, err := sql.Open(dbType, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	if !dbExists {
+		autinc := "AUTOINCREMENT"
+		// Create table
+		if dbType == "duckdb" {
+			seqSql := "CREATE SEQUENCE id_sequence START 1;"
+			if _, err := conn.Exec(seqSql); err != nil {
+				conn.Close()
+				return nil, fmt.Errorf("failed to create table: %w", err)
+			}
+			autinc = "DEFAULT nextval('id_sequence')"
+		}
+		if _, err := conn.Exec(fmt.Sprintf(CreateTableSQL, autinc)); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to create table: %w", err)
+		}
+	}
+
 	// Enable WAL mode for better concurrency
 	// Retry on database locked errors since concurrent connections may race to enable WAL
-	var walErr error
-	for i := 0; i < 5; i++ {
-		_, walErr = conn.Exec("PRAGMA journal_mode=WAL")
-		if walErr == nil {
+	if dbType == "sqlite" {
+
+		var walErr error
+		for i := 0; i < 5; i++ {
+			_, walErr = conn.Exec("PRAGMA journal_mode=WAL")
+			if walErr == nil {
+				break
+			}
+			// Check if it's a database locked error
+			if strings.Contains(walErr.Error(), "database is locked") {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			// Other errors are not retryable
 			break
 		}
-		// Check if it's a database locked error
-		if strings.Contains(walErr.Error(), "database is locked") {
-			time.Sleep(10 * time.Millisecond)
-			continue
+		if walErr != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to enable WAL mode: %w", walErr)
 		}
-		// Other errors are not retryable
-		break
-	}
-	if walErr != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to enable WAL mode: %w", walErr)
-	}
 
-	// Set busy timeout for handling concurrent writes
-	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
-	}
-
-	// Create table
-	if _, err := conn.Exec(createTableSQL); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to create table: %w", err)
+		// Set busy timeout for handling concurrent writes
+		if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+		}
 	}
 
 	// Run migrations
@@ -111,9 +131,11 @@ func New(dbPath string) (*DB, error) {
 		conn: conn,
 		path: dbPath,
 	}
-	if err := db.migrate(); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	if dbType == "sqlite" {
+		if err := db.migrate(); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to run migrations: %w", err)
+		}
 	}
 
 	return db, nil
@@ -144,6 +166,9 @@ func New(dbPath string) (*DB, error) {
 // Alternative approaches (deferred insert queues, migration state tables) add significant
 // complexity and are only justified for multi-hour migrations or high-throughput systems.
 func (db *DB) migrate() error {
+	if DbType() == "duckdb" {
+		return nil
+	}
 	// Check current schema
 	rows, err := db.conn.Query("PRAGMA table_info(commands)")
 	if err != nil {
@@ -378,12 +403,20 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 		return 0, fmt.Errorf("failed to insert command: %w", err)
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get last insert ID: %w", err)
+	if DbType() == "sqlite" {
+		id, err := result.LastInsertId()
+		if err != nil {
+			return 0, fmt.Errorf("failed to get last insert ID: %w", err)
+		}
+		return id, nil
+	} else if DbType() == "duckdb" {
+		var currval int64
+		result := db.conn.QueryRow("select currval('id_sequence')")
+		result.Scan(&currval)
+		return currval, nil
 	}
 
-	return id, nil
+	return 0, fmt.Errorf("No return possible")
 }
 
 // GetCommand retrieves a command by ID
@@ -392,8 +425,7 @@ func (db *DB) GetCommand(id int64) (*models.Command, error) {
 	var sourceActive *int64
 	err := db.conn.QueryRow(`
 		SELECT id, timestamp, exit_status, command_text, working_dir, git_repo, git_branch, duration, source_app, source_pid, source_active
-		FROM commands WHERE id = ?`,
-		id,
+		FROM commands where id = ?`, id,
 	).Scan(
 		&cmd.ID,
 		&cmd.Timestamp,
@@ -497,25 +529,22 @@ func (db *DB) TableExists() (bool, error) {
 }
 
 // GetTableSchema returns the schema of the commands table
-func (db *DB) GetTableSchema() ([]map[string]interface{}, error) {
+func (db *DB) GetTableSchema() ([]map[string]any, error) {
 	rows, err := db.conn.Query("PRAGMA table_info(commands)")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table schema: %w", err)
 	}
 	defer rows.Close()
 
-	var schema []map[string]interface{}
+	var schema []map[string]any
 	for rows.Next() {
-		var cid int
 		var name, colType string
-		var notNull, pk int
-		var dfltValue interface{}
-
-		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+		var placeholder any
+		if err := rows.Scan(&placeholder, &name, &colType, &placeholder, &placeholder, &placeholder); err != nil {
 			return nil, fmt.Errorf("failed to scan schema row: %w", err)
 		}
 
-		schema = append(schema, map[string]interface{}{
+		schema = append(schema, map[string]any{
 			"name": name,
 			"type": colType,
 		})
@@ -1105,7 +1134,6 @@ func (db *DB) CloseSession(sessionPid int64) (int64, error) {
 // LikeRecentOptions contains options for LikeRecent query
 type LikeRecentOptions struct {
 	Prefix     string
-	Limit      int
 	IncludeShy bool
 	Exclude    string
 	WorkingDir string
@@ -1129,12 +1157,6 @@ func (db *DB) LikeRecent(opts LikeRecentOptions) ([]string, error) {
 	// Exclude shy commands by default
 	if !opts.IncludeShy {
 		baseWhere += " AND command_text NOT LIKE 'shy %' AND command_text != 'shy'"
-	}
-
-	// Add exclude pattern filter
-	if opts.Exclude != "" {
-		baseWhere += " AND command_text NOT GLOB ?"
-		baseArgs = append(baseArgs, opts.Exclude)
 	}
 
 	// Create channels for results
@@ -1256,12 +1278,6 @@ func (db *DB) LikeRecentAfter(opts LikeRecentAfterOptions) ([]string, error) {
 	// Exclude shy commands by default
 	if !opts.IncludeShy {
 		query += ` AND c.command_text NOT LIKE 'shy %' AND c.command_text != 'shy'`
-	}
-
-	// Add exclude pattern filter
-	if opts.Exclude != "" {
-		query += ` AND c.command_text NOT GLOB ?`
-		args = append(args, opts.Exclude)
 	}
 
 	// Order by timestamp descending and limit to 200 recent matches for context search
@@ -1493,7 +1509,7 @@ func (db *DB) GetContextSummary(startTime, endTime int64) ([]summary.ContextSumm
 	query := `
 		SELECT
 			working_dir,
-			git_branch,
+			COALESCE(git_branch, ''),
 			COUNT(*) as command_count,
 			MIN(timestamp) as first_time,
 			MAX(timestamp) as last_time
@@ -1539,4 +1555,12 @@ func (db *DB) GetContextSummary(startTime, endTime int64) ([]summary.ContextSumm
 	}
 
 	return summaries, nil
+}
+
+func DbType() string {
+	if os.Getenv("SHY_DB_TYPE") == "duckdb" {
+		return "duckdb"
+	} else {
+		return "sqlite"
+	}
 }

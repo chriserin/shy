@@ -1,8 +1,6 @@
 package db
 
 import (
-	"os"
-
 	"github.com/chris/shy/internal/summary"
 	"github.com/chris/shy/pkg/models"
 )
@@ -39,13 +37,5 @@ type DatabaseInterface interface {
 // DB_IMPL=zombiezen uses ZDB (zombiezen.com/go/sqlite)
 // DB_IMPL=modernc or unset uses DB (modernc.org/sqlite)
 func NewDatabase(dbPath string) (DatabaseInterface, error) {
-	impl := os.Getenv("DB_IMPL")
-
-	switch impl {
-	case "zombiezen", "zdb", "z":
-		return NewZ(dbPath)
-	default:
-		// Default to modernc implementation
-		return New(dbPath)
-	}
+	return New(dbPath)
 }

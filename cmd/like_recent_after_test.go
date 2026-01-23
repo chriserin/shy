@@ -243,50 +243,6 @@ func TestLikeRecentAfterWithIncludeShy(t *testing.T) {
 	resetLikeRecentAfterFlags()
 }
 
-// TestLikeRecentAfterWithExclude tests --exclude flag
-func TestLikeRecentAfterWithExclude(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "history.db")
-
-	database, err := db.New(dbPath)
-	require.NoError(t, err, "failed to create database")
-	defer database.Close()
-
-	commands := []struct {
-		text      string
-		timestamp int64
-	}{
-		{"make build", 1704470400},
-		{"make clean", 1704470401},
-		{"make build", 1704470402},
-		{"make test", 1704470403},
-	}
-
-	for _, c := range commands {
-		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  "/home/test",
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
-		}
-		_, err := database.InsertCommand(cmd)
-		require.NoError(t, err, "failed to insert command")
-	}
-
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	rootCmd.SetArgs([]string{"like-recent-after", "make", "--prev", "make build", "--exclude", "make clean", "--db", dbPath})
-
-	err = rootCmd.Execute()
-	require.NoError(t, err, "like-recent-after should succeed")
-
-	output := buf.String()
-	assert.Equal(t, "make test\n", output, "should exclude specified pattern")
-
-	rootCmd.SetArgs(nil)
-	resetLikeRecentAfterFlags()
-}
-
 // TestLikeRecentAfterWithLimit tests --limit flag
 func TestLikeRecentAfterWithLimit(t *testing.T) {
 	tempDir := t.TempDir()

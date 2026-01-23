@@ -265,53 +265,6 @@ func TestLikeRecentWithIncludeShy(t *testing.T) {
 	resetLikeRecentFlags()
 }
 
-// TestLikeRecentWithLimit tests --limit flag
-func TestLikeRecentWithLimit(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "history.db")
-
-	database, err := db.New(dbPath)
-	require.NoError(t, err, "failed to create database")
-	defer database.Close()
-
-	commands := []struct {
-		text      string
-		timestamp int64
-	}{
-		{"git status", 1704470400},
-		{"git add .", 1704470401},
-		{"git commit -m \"msg\"", 1704470402},
-		{"git push", 1704470403},
-	}
-
-	for _, c := range commands {
-		cmd := &models.Command{
-			CommandText: c.text,
-			WorkingDir:  "/home/test",
-			ExitStatus:  0,
-			Timestamp:   c.timestamp,
-		}
-		_, err := database.InsertCommand(cmd)
-		require.NoError(t, err, "failed to insert command")
-	}
-
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	rootCmd.SetArgs([]string{"like-recent", "git", "--limit", "3", "--db", dbPath})
-
-	err = rootCmd.Execute()
-	require.NoError(t, err, "like-recent should succeed")
-
-	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
-	assert.Len(t, lines, 3, "should return exactly 3 results")
-	assert.Equal(t, "git push", string(lines[0]), "first should be most recent")
-	assert.Equal(t, "git commit -m \"msg\"", string(lines[1]))
-	assert.Equal(t, "git add .", string(lines[2]))
-
-	rootCmd.SetArgs(nil)
-	resetLikeRecentFlags()
-}
-
 // TestLikeRecentWithPwd tests --pwd flag
 func TestLikeRecentWithPwd(t *testing.T) {
 	tempDir := t.TempDir()
@@ -433,6 +386,7 @@ func TestLikeRecentWithExclude(t *testing.T) {
 	database, err := db.New(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
+	defer resetLikeRecentFlags()
 
 	commands := []struct {
 		text      string
@@ -465,7 +419,6 @@ func TestLikeRecentWithExclude(t *testing.T) {
 	assert.Equal(t, "git push origin dev\n", output, "should exclude git pull commands")
 
 	rootCmd.SetArgs(nil)
-	resetLikeRecentFlags()
 }
 
 // TestLikeRecentWithMultipleFilters tests combining multiple filters
@@ -482,6 +435,7 @@ func TestLikeRecentWithMultipleFilters(t *testing.T) {
 	database, err := db.New(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
+	defer resetLikeRecentFlags()
 
 	commands := []struct {
 		text      string
@@ -543,6 +497,7 @@ func TestLikeRecentWithSpecialCharacters(t *testing.T) {
 	database, err := db.New(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
+	defer resetLikeRecentFlags()
 
 	commands := []struct {
 		text      string
@@ -575,6 +530,7 @@ func TestLikeRecentWithSpecialCharacters(t *testing.T) {
 	assert.Equal(t, "echo \"hello world\"\n", output, "should handle special characters")
 
 	rootCmd.SetArgs(nil)
+	resetLikeRecentFlags()
 }
 
 // TestLikeRecentWithEmptyDatabase tests behavior with empty database
@@ -585,6 +541,7 @@ func TestLikeRecentWithEmptyDatabase(t *testing.T) {
 	database, err := db.New(dbPath)
 	require.NoError(t, err, "failed to create database")
 	database.Close()
+	defer resetLikeRecentFlags()
 
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
@@ -597,6 +554,7 @@ func TestLikeRecentWithEmptyDatabase(t *testing.T) {
 	assert.Equal(t, "", output, "should return empty output")
 
 	rootCmd.SetArgs(nil)
+	resetLikeRecentFlags()
 }
 
 // TestLikeRecentWithLimitZero tests --limit 0
@@ -607,6 +565,7 @@ func TestLikeRecentWithLimitZero(t *testing.T) {
 	database, err := db.New(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
+	defer resetLikeRecentFlags()
 
 	cmd := &models.Command{
 		CommandText: "git status",

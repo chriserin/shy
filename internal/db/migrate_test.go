@@ -13,6 +13,9 @@ import (
 
 // TestMigrate_NoMigrationNeeded tests that migrate is a no-op when schema is current
 func TestMigrate_NoMigrationNeeded(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with the current schema (created by New())
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -40,6 +43,9 @@ func TestMigrate_NoMigrationNeeded(t *testing.T) {
 
 // TestMigrate_FromLegacySchemaWithoutDuration tests migration from original schema
 func TestMigrate_FromLegacySchemaWithoutDuration(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with the legacy schema (no duration, no source columns)
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -123,6 +129,9 @@ func TestMigrate_FromLegacySchemaWithoutDuration(t *testing.T) {
 
 // TestMigrate_FromSchemaWithDurationButNoSource tests migration from intermediate schema
 func TestMigrate_FromSchemaWithDurationButNoSource(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with duration but no source columns
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -174,6 +183,9 @@ func TestMigrate_FromSchemaWithDurationButNoSource(t *testing.T) {
 
 // TestMigrate_FromSchemaWithWrongColumnOrder tests migration when columns are out of order
 func TestMigrate_FromSchemaWithWrongColumnOrder(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with all columns but duration in wrong position
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -233,6 +245,9 @@ func TestMigrate_FromSchemaWithWrongColumnOrder(t *testing.T) {
 
 // TestMigrate_PreservesMultipleRecords tests that migration preserves all data
 func TestMigrate_PreservesMultipleRecords(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with old schema and multiple records
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -302,6 +317,9 @@ func TestMigrate_PreservesMultipleRecords(t *testing.T) {
 
 // TestMigrate_CreatesAllIndexes tests that migration creates all required indexes
 func TestMigrate_CreatesAllIndexes(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with old schema
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -359,6 +377,9 @@ func TestMigrate_CreatesAllIndexes(t *testing.T) {
 
 // TestMigrate_Idempotent tests that running migrate multiple times is safe
 func TestMigrate_Idempotent(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database that has already been migrated
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -391,6 +412,9 @@ func TestMigrate_Idempotent(t *testing.T) {
 
 // TestMigrate_PreservesNullValues tests that NULL values are preserved correctly
 func TestMigrate_PreservesNullValues(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with old schema and NULL values
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -450,6 +474,9 @@ func TestMigrate_PreservesNullValues(t *testing.T) {
 
 // TestMigrate_HandlesSpecialCharacters tests that special characters are preserved
 func TestMigrate_HandlesSpecialCharacters(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with special characters in commands
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -505,6 +532,9 @@ func TestMigrate_HandlesSpecialCharacters(t *testing.T) {
 
 // TestMigrate_WithDurationNull tests migration handles NULL duration values
 func TestMigrate_WithDurationNull(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with duration column that has NULL values
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -550,6 +580,9 @@ func TestMigrate_WithDurationNull(t *testing.T) {
 
 // TestMigrate_MissingIndexes tests that migration runs when indexes are missing
 func TestMigrate_MissingIndexes(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with correct schema but missing indexes
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -633,6 +666,9 @@ func TestMigrate_MissingIndexes(t *testing.T) {
 
 // TestMigrate_PartialIndexes tests that migration runs when some indexes are missing
 func TestMigrate_PartialIndexes(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	// Given: a database with correct schema and only some indexes
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -707,6 +743,9 @@ func TestMigrate_PartialIndexes(t *testing.T) {
 
 // TestMigrate_LargeDataset tests migration performance with many records
 func TestMigrate_LargeDataset(t *testing.T) {
+	if DbType() == "duckdb" {
+		return
+	}
 	if testing.Short() {
 		t.Skip("skipping large dataset test in short mode")
 	}

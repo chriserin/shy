@@ -58,7 +58,6 @@ func runLikeRecent(cmd *cobra.Command, args []string) error {
 	// Build filter options
 	opts := db.LikeRecentOptions{
 		Prefix:     prefix,
-		Limit:      likeRecentLimit,
 		IncludeShy: likeRecentIncludeShy,
 		Exclude:    likeRecentExclude,
 	}

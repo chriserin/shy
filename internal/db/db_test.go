@@ -45,6 +45,11 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 	schema, err := database.GetTableSchema()
 	require.NoError(t, err, "failed to get table schema")
 
+	var textType = "TEXT"
+	if DbType() == "duckdb" {
+		textType = "VARCHAR"
+	}
+
 	expectedColumns := []struct {
 		name string
 		typ  string
@@ -53,11 +58,11 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 		{"timestamp", "INTEGER"},
 		{"exit_status", "INTEGER"},
 		{"duration", "INTEGER"},
-		{"command_text", "TEXT"},
-		{"working_dir", "TEXT"},
-		{"git_repo", "TEXT"},
-		{"git_branch", "TEXT"},
-		{"source_app", "TEXT"},
+		{"command_text", textType},
+		{"working_dir", textType},
+		{"git_repo", textType},
+		{"git_branch", textType},
+		{"source_app", textType},
 		{"source_pid", "INTEGER"},
 		{"source_active", "INTEGER"},
 	}
