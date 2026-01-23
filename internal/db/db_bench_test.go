@@ -29,7 +29,7 @@ func BenchmarkInsertCommand(b *testing.B) {
 		}
 
 		b.Run(size.name, func(b *testing.B) {
-			database, err := New(dbPath)
+			database, err := NewDatabase(dbPath)
 			if err != nil {
 				b.Fatalf("failed to open database: %v", err)
 			}
@@ -82,7 +82,7 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 			continue
 		}
 
-		database, err := New(dbPath)
+		database, err := NewDatabase(dbPath)
 		if err != nil {
 			b.Fatalf("failed to open database: %v", err)
 		}
@@ -131,7 +131,7 @@ func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
-				database, err := New(dbPath)
+				database, err := NewDatabase(dbPath)
 				if err != nil {
 					b.Fatalf("failed to open database: %v", err)
 				}
@@ -171,7 +171,7 @@ func BenchmarkListCommands(b *testing.B) {
 
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
-				database, err := New(dbPath)
+				database, err := NewDatabase(dbPath)
 				if err != nil {
 					b.Fatalf("failed to open database: %v", err)
 				}
@@ -208,7 +208,7 @@ func BenchmarkGetCommandsForFzf(b *testing.B) {
 		}
 
 		b.Run(size.name, func(b *testing.B) {
-			database, err := New(dbPath)
+			database, err := NewDatabase(dbPath)
 			if err != nil {
 				b.Fatalf("failed to open database: %v", err)
 			}
@@ -253,7 +253,7 @@ func BenchmarkGetCommandsByRange(b *testing.B) {
 			continue
 		}
 
-		database, err := New(dbPath)
+		database, err := NewDatabase(dbPath)
 		if err != nil {
 			b.Fatalf("failed to open database: %v", err)
 		}
@@ -279,7 +279,7 @@ func BenchmarkConcurrentInserts(b *testing.B) {
 	tempDir := b.TempDir()
 	dbPath := filepath.Join(tempDir, "concurrent.db")
 
-	database, err := New(dbPath)
+	database, err := NewDatabase(dbPath)
 	if err != nil {
 		b.Fatalf("failed to create database: %v", err)
 	}
@@ -292,7 +292,7 @@ func BenchmarkConcurrentInserts(b *testing.B) {
 			b.SetParallelism(concurrency)
 			b.RunParallel(func(pb *testing.PB) {
 				// Each goroutine opens its own connection
-				db, err := New(dbPath)
+				db, err := NewDatabase(dbPath)
 				if err != nil {
 					b.Fatalf("failed to open database: %v", err)
 				}
