@@ -44,10 +44,10 @@ func runGenerateTestdata(cmd *cobra.Command, args []string) error {
 		name string
 		size int
 	}{
-		{"medium", 10000},
-		{"large", 100000},
+		// {"medium", 10000},
+		// {"large", 100000},
 		// Uncomment for xlarge (takes a few minutes)
-		// {"xlarge", 1000000},
+		{"xlarge", 1000000},
 	}
 
 	for _, dbConfig := range databases {
