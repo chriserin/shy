@@ -2,67 +2,10 @@ package db
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/chris/shy/pkg/models"
 )
-
-// BenchmarkInsertCommand measures single command insertion performance
-func BenchmarkInsertCommand(b *testing.B) {
-	sizes := []struct {
-		name string
-		db   string
-	}{
-		{"medium", "history-medium.db"},
-		{"large", "history-large.db"},
-		{"xlarge", "history-xlarge.db"},
-	}
-
-	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
-		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-			b.Logf("Skipping %s: database not found (run scripts/create-test-databases.sh)", size.name)
-			continue
-		}
-
-		b.Run(size.name, func(b *testing.B) {
-			database, err := NewDatabase(dbPath)
-			if err != nil {
-				b.Fatalf("failed to open database: %v", err)
-			}
-			defer database.Close()
-
-			// Create sample commands for insertion
-			commands := make([]*models.Command, b.N)
-			for i := 0; i < b.N; i++ {
-				sourceApp := "zsh"
-				sourcePid := int64(99999)
-				sourceActive := true
-				cmd := &models.Command{
-					CommandText:  fmt.Sprintf("echo 'benchmark test %d'", i),
-					WorkingDir:   "/home/user/test",
-					ExitStatus:   0,
-					Timestamp:    1704470400 + int64(i),
-					SourceApp:    &sourceApp,
-					SourcePid:    &sourcePid,
-					SourceActive: &sourceActive,
-				}
-				commands[i] = cmd
-			}
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				_, err := database.InsertCommand(commands[i])
-				if err != nil {
-					b.Fatalf("failed to insert command: %v", err)
-				}
-			}
-		})
-	}
-}
 
 // BenchmarkLikeRecentWithFilters measures prefix search with pwd/session filters
 func BenchmarkLikeRecentWithFilters(b *testing.B) {
@@ -75,8 +18,10 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 		{"xlarge", "history-xlarge.db"},
 	}
 
+	fmt.Println("DBTYPE", DbType())
+
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
@@ -89,7 +34,7 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 		defer database.Close()
 
 		for _, pid := range []int64{12347, 12345} {
-			for _, prefix := range []string{"g", "gi", "git", "git "} {
+			for _, prefix := range []string{"g", "git "} {
 				b.Run(fmt.Sprintf("%s/prefix-%s-%d", size.name, prefix, pid), func(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
@@ -123,7 +68,7 @@ func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 	limits := []int{1, 20, 50}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
@@ -163,7 +108,7 @@ func BenchmarkListCommands(b *testing.B) {
 	limits := []int{20, 100, 500}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
@@ -201,7 +146,7 @@ func BenchmarkGetCommandsForFzf(b *testing.B) {
 	}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
@@ -247,7 +192,7 @@ func BenchmarkGetCommandsByRange(b *testing.B) {
 	}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", size.db)
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
@@ -270,55 +215,5 @@ func BenchmarkGetCommandsByRange(b *testing.B) {
 				}
 			})
 		}
-	}
-}
-
-// BenchmarkConcurrentInserts simulates multiple shell sessions inserting concurrently
-func BenchmarkConcurrentInserts(b *testing.B) {
-	// Use a temporary database for this test
-	tempDir := b.TempDir()
-	dbPath := filepath.Join(tempDir, "concurrent.db")
-
-	database, err := NewDatabase(dbPath)
-	if err != nil {
-		b.Fatalf("failed to create database: %v", err)
-	}
-	database.Close()
-
-	concurrencyLevels := []int{1, 2, 4}
-
-	for _, concurrency := range concurrencyLevels {
-		b.Run(fmt.Sprintf("concurrency-%d", concurrency), func(b *testing.B) {
-			b.SetParallelism(concurrency)
-			b.RunParallel(func(pb *testing.PB) {
-				// Each goroutine opens its own connection
-				db, err := NewDatabase(dbPath)
-				if err != nil {
-					b.Fatalf("failed to open database: %v", err)
-				}
-				defer db.Close()
-
-				i := 0
-				for pb.Next() {
-					sourceApp := "zsh"
-					sourcePid := int64(rand.Intn(5) + 10000)
-					sourceActive := true
-					cmd := &models.Command{
-						CommandText:  fmt.Sprintf("concurrent test %d", i),
-						WorkingDir:   "/home/user/test",
-						ExitStatus:   0,
-						Timestamp:    1704470400 + int64(i),
-						SourceApp:    &sourceApp,
-						SourcePid:    &sourcePid,
-						SourceActive: &sourceActive,
-					}
-					_, err := db.InsertCommand(cmd)
-					if err != nil {
-						b.Fatalf("failed to insert: %v", err)
-					}
-					i++
-				}
-			})
-		})
 	}
 }

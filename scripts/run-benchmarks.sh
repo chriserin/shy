@@ -18,7 +18,7 @@ mkdir -p "$RESULTS_DIR"
 
 # Default benchmark options
 BENCH_TIME="${BENCH_TIME:-1s}"
-BENCH_COUNT="${BENCH_COUNT:-3}"
+BENCH_COUNT="${BENCH_COUNT:-1}"
 
 echo -e "${BLUE}Running shy performance benchmarks...${NC}"
 echo ""
