@@ -27,17 +27,12 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 			continue
 		}
 
-		database, err := NewDatabase(dbPath)
-		if err != nil {
-			b.Fatalf("failed to open database: %v", err)
-		}
-		defer database.Close()
-
 		for _, pid := range []int64{12347, 12345} {
 			for _, prefix := range []string{"g", "git "} {
 				b.Run(fmt.Sprintf("%s/prefix-%s-%d", size.name, prefix, pid), func(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
+						database := OpenDB(b, dbPath)
 						_, err := database.LikeRecent(LikeRecentOptions{
 							Prefix:     prefix,
 							WorkingDir: "/home/user/projects/shy",
@@ -47,11 +42,20 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 						if err != nil {
 							b.Fatalf("failed to search: %v", err)
 						}
+						database.Close()
 					}
 				})
 			}
 		}
 	}
+}
+
+func OpenDB(b *testing.B, dbPath string) DatabaseInterface {
+	database, err := NewDatabase(dbPath)
+	if err != nil {
+		b.Fatalf("failed to open database: %v", err)
+	}
+	return database
 }
 
 // BenchmarkGetRecentCommandsWithSession measures last-command with session filter
@@ -76,18 +80,14 @@ func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
-				database, err := NewDatabase(dbPath)
-				if err != nil {
-					b.Fatalf("failed to open database: %v", err)
-				}
-				defer database.Close()
-
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					database := OpenDB(b, dbPath)
 					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, "zsh", 12345, "/home/user/projects/shy")
 					if err != nil {
 						b.Fatalf("failed to get commands: %v", err)
 					}
+					database.Close()
 				}
 			})
 		}
@@ -116,18 +116,14 @@ func BenchmarkListCommands(b *testing.B) {
 
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
-				database, err := NewDatabase(dbPath)
-				if err != nil {
-					b.Fatalf("failed to open database: %v", err)
-				}
-				defer database.Close()
-
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					database := OpenDB(b, dbPath)
 					_, err := database.ListCommands(limit, "", 0)
 					if err != nil {
 						b.Fatalf("failed to list commands: %v", err)
 					}
+					database.Close()
 				}
 			})
 		}
@@ -153,18 +149,14 @@ func BenchmarkGetCommandsForFzf(b *testing.B) {
 		}
 
 		b.Run(size.name, func(b *testing.B) {
-			database, err := NewDatabase(dbPath)
-			if err != nil {
-				b.Fatalf("failed to open database: %v", err)
-			}
-			defer database.Close()
-
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
+				database := OpenDB(b, dbPath)
 				err := database.GetCommandsForFzf(func(id int64, cmdText string) error { return nil })
 				if err != nil {
 					b.Fatalf("failed to get commands: %v", err)
 				}
+				database.Close()
 			}
 		})
 	}
@@ -198,20 +190,16 @@ func BenchmarkGetCommandsByRange(b *testing.B) {
 			continue
 		}
 
-		database, err := NewDatabase(dbPath)
-		if err != nil {
-			b.Fatalf("failed to open database: %v", err)
-		}
-		defer database.Close()
-
 		for _, r := range ranges {
 			b.Run(fmt.Sprintf("%s/%s", size.name, r.name), func(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					database := OpenDB(b, dbPath)
 					_, err := database.GetCommandsByRange(r.first, r.last)
 					if err != nil {
 						b.Fatalf("failed to get commands: %v", err)
 					}
+					database.Close()
 				}
 			})
 		}
