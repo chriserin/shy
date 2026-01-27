@@ -1506,9 +1506,9 @@ func (db *DB) GetContextSummary(startTime, endTime int64) ([]summary.ContextSumm
 }
 
 func DbType() string {
-	if os.Getenv("SHY_DB_TYPE") == "duckdb" {
-		return "duckdb"
-	} else {
+	if os.Getenv("SHY_DB_TYPE") == "sqlite" {
 		return "sqlite"
+	} else {
+		return "duckdb"
 	}
 }
