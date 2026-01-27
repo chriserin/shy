@@ -44,14 +44,6 @@ CPUPROFILE="$RESULTS_DIR/cpu-$TIMESTAMP.prof"
 
 # Run benchmarks based on argument
 case "${1:-all}" in
-"insert")
-    echo -e "${BLUE}Benchmarking: InsertCommand${NC}"
-    cd "$PROJECT_ROOT"
-    go test -bench=BenchmarkInsertCommand -benchtime="$BENCH_TIME" -count="$BENCH_COUNT" \
-        -benchmem -memprofile="$MEMPROFILE" -cpuprofile="$CPUPROFILE" \
-        ./internal/db | tee "$RESULT_FILE"
-    ;;
-
 "like-recent")
     echo -e "${BLUE}Benchmarking: LikeRecent${NC}"
     cd "$PROJECT_ROOT"

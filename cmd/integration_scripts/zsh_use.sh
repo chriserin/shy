@@ -41,17 +41,32 @@
 # bindkey '^R' _shy_shell_history
 
 # Up Arrow: Cycle through command history
-__shy_history_index=1
+__shy_history_index=0
+
+autoload -Uz add-zle-hook-widget 2>/dev/null
+add-zle-hook-widget line-pre-redraw _shy_pre_redraw 2>/dev/null
+
+# Check if we should reset history index (blacklist approach)
+# Only reset on explicit "start fresh" actions, preserve index for everything else
+_shy_should_reset_history_index() {
+  echo "LASTWIDGET: $LASTWIDGET" >>~/projects/history/shy/zsh.log
+
+  # Blacklist of "start fresh" widgets
+  case "$LASTWIDGET" in
+  zle-line-init | accept-line | send-break | keyboard-quit | push-line | push-line-or-edit | get-line)
+    return 0
+    ;;
+  esac
+
+  return 1
+}
 
 _shy_up_line_or_history() {
-  # If the last widget was also _shy_up_line_or_history (or an autosuggestion widget), keep cycling
-  # Otherwise, reset to 1 (most recent)
-  if [[ "$LASTWIDGET" != "_shy_up_line_or_history" && "$LASTWIDGET" != autosuggest-* ]]; then
-    __shy_history_index=1
-  else
-    # We're continuing to navigate backward, increment to get older command
-    ((__shy_history_index++))
+  if _shy_should_reset_history_index; then
+    __shy_history_index=0
   fi
+
+  ((__shy_history_index++))
 
   # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
   local cmd=$(shy last-command --current-session -n $__shy_history_index)
@@ -73,21 +88,15 @@ bindkey '^[OA' _shy_up_line_or_history # Application mode up arrow
 
 # Down Arrow: Cycle forward through command history (towards more recent)
 _shy_down_line_or_history() {
-  # If the last widget was also _shy_down_line_or_history (or an autosuggestion widget), keep cycling
-  # Otherwise, use current history index from up/down arrow navigation
-  if [[ "$LASTWIDGET" != "_shy_down_line_or_history" && "$LASTWIDGET" != autosuggest-* && "$LASTWIDGET" != "_shy_up_line_or_history" ]]; then
-    __shy_history_index=1
+  if _shy_should_reset_history_index; then
+    __shy_history_index=0
+  elif [[ $__shy_history_index -gt 0 ]]; then
+    ((__shy_history_index--))
   else
-    # We're continuing to navigate forward, decrement to get more recent command
-    if [[ $__shy_history_index -gt 1 ]]; then
-      ((__shy_history_index--))
-    else
-      # Already at most recent (index 1), clear the buffer
-      BUFFER=""
-      CURSOR=0
-      zle reset-prompt
-      return
-    fi
+    BUFFER=""
+    CURSOR=0
+    zle reset-prompt
+    return
   fi
 
   # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
@@ -96,6 +105,9 @@ _shy_down_line_or_history() {
   if [[ -n "$cmd" ]]; then
     BUFFER="$cmd"
     CURSOR=$#BUFFER
+  else
+    BUFFER=""
+    CURSOR=0
   fi
 
   zle reset-prompt
