@@ -18,7 +18,8 @@ mkdir -p "$RESULTS_DIR"
 
 # Default benchmark options
 BENCH_TIME="${BENCH_TIME:-1s}"
-BENCH_COUNT="${BENCH_COUNT:-1}"
+BENCH_COUNT="${BENCH_COUNT:-2}"
+SHY_DB_TYPE="${SHY_DB_TYPE:-sqlite}"
 
 echo -e "${BLUE}Running shy performance benchmarks...${NC}"
 echo ""
@@ -30,14 +31,14 @@ echo ""
 
 # Check if test databases exist
 TEST_DATA_DIR="$PROJECT_ROOT/testdata/perf"
-if [ ! -f "$TEST_DATA_DIR/history-medium.db" ]; then
+if [ ! -f "$TEST_DATA_DIR/$SHY_DB_TYPE-history-medium.db" ]; then
     echo -e "${YELLOW}Warning: Test databases not found. Run scripts/create-test-databases.sh first.${NC}"
     echo ""
 fi
 
 # Generate timestamp for this run
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-RESULT_FILE="$RESULTS_DIR/bench-$TIMESTAMP.txt"
+RESULT_FILE="$RESULTS_DIR/$SHY_DB_TYPE-bench-$TIMESTAMP.txt"
 MEMPROFILE="$RESULTS_DIR/mem-$TIMESTAMP.prof"
 CPUPROFILE="$RESULTS_DIR/cpu-$TIMESTAMP.prof"
 
