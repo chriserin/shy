@@ -43,6 +43,9 @@
 # Up Arrow: Cycle through command history
 __shy_history_index=0
 
+autoload -Uz add-zle-hook-widget 2>/dev/null
+add-zle-hook-widget line-pre-redraw _shy_pre_redraw 2>/dev/null
+
 # Check if we should reset history index (blacklist approach)
 # Only reset on explicit "start fresh" actions, preserve index for everything else
 _shy_should_reset_history_index() {
