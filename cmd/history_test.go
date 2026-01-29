@@ -1269,6 +1269,7 @@ func TestHistory_InternalFlag(t *testing.T) {
 			WorkingDir:   "/home/test",
 			ExitStatus:   0,
 			Timestamp:    int64(1704470400),
+			SourceApp:    stringPtr("zsh"),
 			SourcePid:    &cmd.pid,
 			SourceActive: &sourceActive,
 		}

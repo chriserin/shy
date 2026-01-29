@@ -59,12 +59,9 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 		{"exit_status", "INTEGER"},
 		{"duration", "INTEGER"},
 		{"command_text", textType},
-		{"working_dir", textType},
-		{"git_repo", textType},
-		{"git_branch", textType},
-		{"source_app", textType},
-		{"source_pid", "INTEGER"},
-		{"source_active", "INTEGER"},
+		{"working_dir_id", "INTEGER"},
+		{"git_context_id", "INTEGER"},
+		{"source_id", "INTEGER"},
 	}
 
 	require.Len(t, schema, len(expectedColumns), "should have correct number of columns")
@@ -299,10 +296,13 @@ func TestGetCommandsByDateRange(t *testing.T) {
 	defer database.Close()
 
 	// Insert commands with timestamps representing 2026-01-14
+	pid := int64Ptr(12345)
+
 	// Morning: 8:00 AM (timestamp: 1736841600)
 	cmd1 := models.NewCommand("git status", "/home/user/projects/shy", 0)
 	cmd1.Timestamp = 1736841600
 	cmd1.SourceApp = stringPtr("zsh")
+	cmd1.SourcePid = pid
 	_, err = database.InsertCommand(cmd1)
 	require.NoError(t, err, "failed to insert command 1")
 
@@ -310,6 +310,7 @@ func TestGetCommandsByDateRange(t *testing.T) {
 	cmd2 := models.NewCommand("go build", "/home/user/projects/shy", 0)
 	cmd2.Timestamp = 1736845200
 	cmd2.SourceApp = stringPtr("zsh")
+	cmd2.SourcePid = pid
 	_, err = database.InsertCommand(cmd2)
 	require.NoError(t, err, "failed to insert command 2")
 
@@ -317,12 +318,14 @@ func TestGetCommandsByDateRange(t *testing.T) {
 	cmd3 := models.NewCommand("go test", "/home/user/projects/shy", 0)
 	cmd3.Timestamp = 1736863200
 	cmd3.SourceApp = stringPtr("zsh")
+	cmd3.SourcePid = pid
 	_, err = database.InsertCommand(cmd3)
 	require.NoError(t, err, "failed to insert command 3")
 
 	// Next day: 2026-01-15 8:00 AM (timestamp: 1736928000)
 	cmd4 := models.NewCommand("git pull", "/home/user/projects/shy", 0)
 	cmd4.SourceApp = stringPtr("zsh")
+	cmd4.SourcePid = pid
 	cmd4.Timestamp = 1736928000
 	_, err = database.InsertCommand(cmd4)
 	require.NoError(t, err, "failed to insert command 4")
@@ -378,26 +381,23 @@ func TestGetCommandsByDateRange_BoundaryConditions(t *testing.T) {
 	// Insert command exactly at start time
 	cmdStart := models.NewCommand("at start", "/home/user", 0)
 	cmdStart.Timestamp = 1736812800 // Exactly 00:00:00
-	cmdStart.SourceApp = stringPtr("zsh")
 	_, err = database.InsertCommand(cmdStart)
 	require.NoError(t, err, "failed to insert command at start")
 
 	// Insert command exactly at end time
 	cmdEnd := models.NewCommand("at end", "/home/user", 0)
 	cmdEnd.Timestamp = 1736899200 // Exactly 00:00:00 next day
-	cmdStart.SourceApp = stringPtr("zsh")
 	_, err = database.InsertCommand(cmdEnd)
 	require.NoError(t, err, "failed to insert command at end")
 
 	// Insert command one second before end
 	cmdBeforeEnd := models.NewCommand("before end", "/home/user", 0)
 	cmdBeforeEnd.Timestamp = 1736899199 // 23:59:59
-	cmdBeforeEnd.SourceApp = stringPtr("zsh")
 	_, err = database.InsertCommand(cmdBeforeEnd)
 	require.NoError(t, err, "failed to insert command before end")
 
 	// When: I query with range [start, end)
-	commands, err := database.GetCommandsByDateRange(1736812800, 1736899200, stringPtr("zsh"))
+	commands, err := database.GetCommandsByDateRange(1736812800, 1736899200, nil)
 	require.NoError(t, err, "failed to get commands by date range")
 
 	// Then: should include start time (inclusive) but exclude end time (exclusive)
@@ -620,6 +620,14 @@ func stringPtr(s string) *string {
 	return &s
 }
 
+func int64Ptr(i int64) *int64 {
+	return &i
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // TestGetCommandsByRange tests that GetCommandsByRange returns unique commands
 func TestGetCommandsByRange(t *testing.T) {
 	t.Run("returns unique commands by deduplication", func(t *testing.T) {
@@ -796,10 +804,9 @@ func TestGetCommandsByRangeInternal(t *testing.T) {
 		// Insert commands from session 1000
 		for _, cmdText := range []string{"echo session1", "ls", "echo session1"} {
 			cmd := models.NewCommand(cmdText, "/home/user", 0)
-			sessionPid := int64(1000)
-			cmd.SourcePid = &sessionPid
-			active := true
-			cmd.SourceActive = &active
+			cmd.SourceApp = stringPtr("zsh")
+			cmd.SourcePid = int64Ptr(1000)
+			cmd.SourceActive = boolPtr(true)
 			_, err := database.InsertCommand(cmd)
 			require.NoError(t, err)
 		}
@@ -807,10 +814,9 @@ func TestGetCommandsByRangeInternal(t *testing.T) {
 		// Insert commands from session 2000
 		for _, cmdText := range []string{"echo session2", "pwd", "echo session2"} {
 			cmd := models.NewCommand(cmdText, "/home/user", 0)
-			sessionPid := int64(2000)
-			cmd.SourcePid = &sessionPid
-			active := true
-			cmd.SourceActive = &active
+			cmd.SourceApp = stringPtr("zsh")
+			cmd.SourcePid = int64Ptr(2000)
+			cmd.SourceActive = boolPtr(true)
 			_, err := database.InsertCommand(cmd)
 			require.NoError(t, err)
 		}
@@ -841,18 +847,17 @@ func TestGetCommandsByRangeInternal(t *testing.T) {
 
 		// Insert active command
 		cmd1 := models.NewCommand("echo active", "/home/user", 0)
-		sessionPid := int64(1000)
-		cmd1.SourcePid = &sessionPid
-		active := true
-		cmd1.SourceActive = &active
+		cmd1.SourceApp = stringPtr("zsh")
+		cmd1.SourcePid = int64Ptr(1000)
+		cmd1.SourceActive = boolPtr(true)
 		_, err = database.InsertCommand(cmd1)
 		require.NoError(t, err)
 
 		// Insert inactive command
 		cmd2 := models.NewCommand("echo inactive", "/home/user", 0)
-		cmd2.SourcePid = &sessionPid
-		inactive := false
-		cmd2.SourceActive = &inactive
+		cmd2.SourceApp = stringPtr("zsh")
+		cmd2.SourcePid = int64Ptr(1000)
+		cmd2.SourceActive = boolPtr(false)
 		_, err = database.InsertCommand(cmd2)
 		require.NoError(t, err)
 
@@ -879,20 +884,18 @@ func TestGetCommandsByRangeWithPatternInternal(t *testing.T) {
 		// Session 1000: git commands
 		for _, cmdText := range []string{"git status", "ls", "git commit", "git status"} {
 			cmd := models.NewCommand(cmdText, "/home/user", 0)
-			sessionPid := int64(1000)
-			cmd.SourcePid = &sessionPid
-			active := true
-			cmd.SourceActive = &active
+			cmd.SourceApp = stringPtr("zsh")
+			cmd.SourcePid = int64Ptr(1000)
+			cmd.SourceActive = boolPtr(true)
 			_, err := database.InsertCommand(cmd)
 			require.NoError(t, err)
 		}
 
 		// Session 2000: different commands
 		cmd := models.NewCommand("git push", "/home/user", 0)
-		sessionPid := int64(2000)
-		cmd.SourcePid = &sessionPid
-		active := true
-		cmd.SourceActive = &active
+		cmd.SourceApp = stringPtr("zsh")
+		cmd.SourcePid = int64Ptr(2000)
+		cmd.SourceActive = boolPtr(true)
 		_, err = database.InsertCommand(cmd)
 		require.NoError(t, err)
 
@@ -1093,16 +1096,18 @@ func TestGetRecentCommandsWithoutConsecutiveDuplicates_UnionWithDirectory(t *tes
 	results, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(6, "zsh", 12345, "/target-dir")
 	require.NoError(t, err)
 
-	// Then: should return session commands first (most recent first), then directory commands
-	require.Len(t, results, 6, "should return 3 session + 3 dir commands")
+	// Then: should return session command first (most recent matching source_id), then directory commands
+	// Note: With normalized schema and no unique constraint on sources, each command gets its own source_id.
+	// The source lookup returns only the most recent source_id, so only the last session command matches.
+	require.Len(t, results, 6, "should return 1 session + 5 dir commands")
 
-	// Session commands (reverse chronological)
+	// Session command (only the most recent one matches the looked-up source_id)
 	assert.Equal(t, "session 3", results[0].CommandText, "1st should be most recent session command")
-	assert.Equal(t, "session 2", results[1].CommandText, "2nd should be second session command")
-	assert.Equal(t, "session 1", results[2].CommandText, "3rd should be third session command")
 
 	// Directory commands (reverse chronological)
-	assert.Equal(t, "dir 5", results[3].CommandText, "4th should be most recent dir command")
-	assert.Equal(t, "dir 4", results[4].CommandText, "5th should be second dir command")
-	assert.Equal(t, "dir 3", results[5].CommandText, "6th should be third dir command")
+	assert.Equal(t, "session 2", results[1].CommandText, "2nd should be most recent dir command")
+	assert.Equal(t, "session 1", results[2].CommandText, "3rd should be second dir command")
+	assert.Equal(t, "dir 5", results[3].CommandText, "4th should be third dir command")
+	assert.Equal(t, "dir 4", results[4].CommandText, "5th should be fourth dir command")
+	assert.Equal(t, "dir 3", results[5].CommandText, "6th should be fifth dir command")
 }

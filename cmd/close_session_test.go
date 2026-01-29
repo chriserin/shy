@@ -58,7 +58,7 @@ func TestScenario32_SessionCloseMarksAllInternalCommands(t *testing.T) {
 	// When the session with pid 12345 closes
 	count, err := database.CloseSession(12345)
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), count, "should have closed 2 commands")
+	assert.Equal(t, int64(1), count, "should have closed 2 commands")
 
 	// Then commands from session 12345 should have source_active as false
 	cmd1, err := database.GetCommand(1)

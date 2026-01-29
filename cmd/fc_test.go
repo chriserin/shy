@@ -1949,6 +1949,7 @@ func TestFileOp_WriteWithInternalFilter(t *testing.T) {
 			WorkingDir:   "/home/test",
 			ExitStatus:   0,
 			Timestamp:    timestamp,
+			SourceApp:    stringPtr("zsh"),
 			SourcePid:    &cmd.pid,
 			SourceActive: &sourceActive,
 		}

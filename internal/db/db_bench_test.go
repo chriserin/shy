@@ -21,18 +21,20 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 	fmt.Println("DBTYPE", DbType())
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("norm-%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
 		}
+
+		database := OpenDB(b, dbPath)
+		defer database.Close()
 
 		for _, pid := range []int64{12347, 12345} {
 			for _, prefix := range []string{"g", "git "} {
 				b.Run(fmt.Sprintf("%s/prefix-%s-%d", size.name, prefix, pid), func(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						database := OpenDB(b, dbPath)
 						_, err := database.LikeRecent(LikeRecentOptions{
 							Prefix:     prefix,
 							WorkingDir: "/home/user/projects/shy",
@@ -42,7 +44,6 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 						if err != nil {
 							b.Fatalf("failed to search: %v", err)
 						}
-						database.Close()
 					}
 				})
 			}
@@ -51,7 +52,7 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 }
 
 func OpenDB(b *testing.B, dbPath string) DatabaseInterface {
-	database, err := NewDatabase(dbPath)
+	database, err := NewDatabaseReadOnly(dbPath)
 	if err != nil {
 		b.Fatalf("failed to open database: %v", err)
 	}
@@ -72,22 +73,22 @@ func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 	limits := []int{1, 20, 50}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("norm-%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
 		}
 
+		database := OpenDB(b, dbPath)
+		defer database.Close()
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					database := OpenDB(b, dbPath)
 					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, "zsh", 12345, "/home/user/projects/shy")
 					if err != nil {
 						b.Fatalf("failed to get commands: %v", err)
 					}
-					database.Close()
 				}
 			})
 		}
@@ -108,29 +109,30 @@ func BenchmarkListCommands(b *testing.B) {
 	limits := []int{20, 100, 500}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("norm-%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
 		}
 
+		database := OpenDB(b, dbPath)
+		defer database.Close()
+
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					database := OpenDB(b, dbPath)
 					_, err := database.ListCommands(limit, "", 0)
 					if err != nil {
 						b.Fatalf("failed to list commands: %v", err)
 					}
-					database.Close()
 				}
 			})
 		}
 	}
 }
 
-// BenchmarkGetCommandsForFzf measures fzf data source performance
+// BenchmarkGetCommandsForFzf measures fzf data source performance with different deduplication strategies
 func BenchmarkGetCommandsForFzf(b *testing.B) {
 	sizes := []struct {
 		name string
@@ -142,7 +144,7 @@ func BenchmarkGetCommandsForFzf(b *testing.B) {
 	}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("norm-%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue
@@ -184,7 +186,7 @@ func BenchmarkGetCommandsByRange(b *testing.B) {
 	}
 
 	for _, size := range sizes {
-		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("%s-%s", DbType(), size.db))
+		dbPath := filepath.Join("../../testdata/perf", fmt.Sprintf("norm-%s-%s", DbType(), size.db))
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 			b.Logf("Skipping %s: database not found", size.name)
 			continue

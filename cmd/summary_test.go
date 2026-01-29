@@ -63,6 +63,7 @@ func TestSummary_Yesterday(t *testing.T) {
 			ExitStatus:  0,
 			Timestamp:   timestamp,
 			SourceApp:   stringPtr("zsh"),
+			SourcePid:   int64Ptr(12345),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -133,6 +134,7 @@ func TestSummary_SpecificDate(t *testing.T) {
 			ExitStatus:  0,
 			Timestamp:   timestamp,
 			SourceApp:   stringPtr("zsh"),
+			SourcePid:   int64Ptr(12345),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -228,6 +230,7 @@ func TestSummary_MultipleBranches(t *testing.T) {
 			ExitStatus:  0,
 			Timestamp:   timestamp,
 			SourceApp:   stringPtr("zsh"),
+			SourcePid:   int64Ptr(12345),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -293,6 +296,7 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 			ExitStatus:  0,
 			Timestamp:   timestamp,
 			SourceApp:   stringPtr("zsh"),
+			SourcePid:   int64Ptr(12345),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")
@@ -316,6 +320,10 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 
 	// Reset
 	rootCmd.SetArgs(nil)
+}
+
+func int64Ptr(i int64) *int64 {
+	return &i
 }
 
 // TestSummary_AllTimePeriods tests commands distributed across all time periods
@@ -353,6 +361,7 @@ func TestSummary_AllTimePeriods(t *testing.T) {
 			ExitStatus:  0,
 			Timestamp:   timestamp,
 			SourceApp:   stringPtr("zsh"),
+			SourcePid:   int64Ptr(12345),
 		}
 		_, err := database.InsertCommand(cmd)
 		require.NoError(t, err, "failed to insert command")

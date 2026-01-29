@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	lastCommandOffset        int
-	lastCommandSession       string
+	lastCommandOffset         int
+	lastCommandSession        string
 	lastCommandCurrentSession bool
 )
 

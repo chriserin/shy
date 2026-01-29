@@ -39,3 +39,9 @@ type DatabaseInterface interface {
 func NewDatabase(dbPath string) (DatabaseInterface, error) {
 	return New(dbPath)
 }
+
+// NewDatabaseReadOnly opens an existing database in read-only mode (skips table creation).
+// Use this for benchmarks and read-only operations on existing databases.
+func NewDatabaseReadOnly(dbPath string) (DatabaseInterface, error) {
+	return NewWithOptions(dbPath, Options{ReadOnly: true})
+}

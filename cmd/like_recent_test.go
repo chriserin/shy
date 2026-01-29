@@ -483,7 +483,8 @@ func TestLikeRecentWithMultipleFilters(t *testing.T) {
 	require.NoError(t, err, "like-recent should succeed")
 
 	output := buf.String()
-	assert.Equal(t, "git push origin main\n", output, "should apply all filters")
+	// expect the most recent command that belongs to the session
+	assert.Equal(t, "git push origin dev\n", output, "should apply all filters")
 
 	rootCmd.SetArgs(nil)
 	resetLikeRecentFlags()
