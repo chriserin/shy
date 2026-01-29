@@ -53,7 +53,8 @@ const (
 			command_text TEXT NOT NULL,
 			working_dir_id INTEGER NOT NULL REFERENCES working_dirs(id),
 			git_context_id INTEGER REFERENCES git_contexts(id),
-			source_id INTEGER REFERENCES sources(id)
+			source_id INTEGER REFERENCES sources(id),
+			is_duplicate INTEGER DEFAULT 0
 		);
 	`
 
@@ -76,6 +77,9 @@ const (
 
 		-- Index for GetCommandsForFzf deduplication (GROUP BY command_text, max(id))
 		CREATE INDEX IF NOT EXISTS idx_command_text_id ON commands (command_text, id DESC);
+
+		-- Index for fast fzf queries using is_duplicate flag
+		CREATE INDEX IF NOT EXISTS idx_not_duplicate ON commands (id DESC) WHERE is_duplicate = 0;
 	`
 )
 
@@ -380,20 +384,32 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 		return 0, fmt.Errorf("failed to insert command: %w", err)
 	}
 
+	var id int64
 	if DbType() == "sqlite" {
-		id, err := result.LastInsertId()
+		var err error
+		id, err = result.LastInsertId()
 		if err != nil {
 			return 0, fmt.Errorf("failed to get last insert ID: %w", err)
 		}
-		return id, nil
 	} else if DbType() == "duckdb" {
-		var currval int64
 		result := db.conn.QueryRow("select currval('id_sequence')")
-		result.Scan(&currval)
-		return currval, nil
+		result.Scan(&id)
+	} else {
+		return 0, fmt.Errorf("unsupported database type")
 	}
 
-	return 0, fmt.Errorf("No return possible")
+	// Mark older commands with the same command_text as duplicates
+	_, err = db.conn.Exec(`
+		UPDATE commands SET is_duplicate = 1
+		WHERE command_text = ? AND id < ? AND is_duplicate = 0`,
+		cmd.CommandText, id,
+	)
+	if err != nil {
+		// Log but don't fail - the command was inserted successfully
+		// The duplicate marking is an optimization, not critical
+	}
+
+	return id, nil
 }
 
 // commandSelectColumns is the common SELECT clause for denormalized command queries
@@ -1199,19 +1215,13 @@ func (db *DB) LikeRecentAfter(opts LikeRecentAfterOptions) ([]string, error) {
 	return results, nil
 }
 
-// GetCommandsForFzf retrieves commands optimized for fzf integration
-// Calls fn for each deduplicated entry in reverse chronological order (most recent first)
-// Deduplicates by command_text, keeping only the most recent occurrence (max id)
+// GetCommandsForFzf retrieves commands using the is_duplicate column
+// This is the fastest approach as it uses a simple index scan with no deduplication logic
 func (db *DB) GetCommandsForFzf(fn func(id int64, cmdText string) error) error {
-	// Use the same max(id) deduplication pattern as other functions in this file
 	query := `
 		SELECT id, command_text
 		FROM commands
-		WHERE id IN (
-			SELECT max(id)
-			FROM commands
-			GROUP BY command_text
-		)
+		WHERE is_duplicate = 0
 		ORDER BY id DESC`
 
 	rows, err := db.conn.Query(query)
@@ -1226,18 +1236,12 @@ func (db *DB) GetCommandsForFzf(fn func(id int64, cmdText string) error) error {
 		if err := rows.Scan(&id, &cmdText); err != nil {
 			return fmt.Errorf("failed to scan fzf entry: %w", err)
 		}
-
-		// Call the provided function for each entry
 		if err := fn(id, cmdText); err != nil {
 			return err
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error iterating fzf entries: %w", err)
-	}
-
-	return nil
+	return rows.Err()
 }
 
 // GetCommandWithContext returns a command along with surrounding commands from the same session

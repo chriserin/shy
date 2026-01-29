@@ -62,6 +62,7 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 		{"working_dir_id", "INTEGER"},
 		{"git_context_id", "INTEGER"},
 		{"source_id", "INTEGER"},
+		{"is_duplicate", "INTEGER"},
 	}
 
 	require.Len(t, schema, len(expectedColumns), "should have correct number of columns")
