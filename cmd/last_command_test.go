@@ -456,8 +456,122 @@ func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
 	lastCommandCmd.Flags().Set("offset", "1")
 }
 
-// TestScenario7_LastCommandUnionWithDirectory tests that session results union with directory results
-func TestScenario7_LastCommandUnionWithDirectory(t *testing.T) {
+// TestScenario7_LastCommandWithNoSessionCommands tests fallback to working directory when session has no commands
+func TestScenario7_LastCommandWithNoSessionCommands(t *testing.T) {
+	// Given: I have a database with commands from a different session in the current working directory
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err, "failed to create database")
+	defer database.Close()
+
+	// Get current working directory (where the test is running)
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "failed to get working directory")
+
+	// Insert commands from a different session (bash:99999) in the current working directory
+	sourceApp := "bash"
+	sourcePid := int64(99999)
+	sourceActive := true
+
+	commands := []struct {
+		text      string
+		timestamp int64
+	}{
+		{"dir cmd1", 1704470400},
+		{"dir cmd2", 1704470401},
+		{"dir cmd3", 1704470402},
+	}
+
+	for _, c := range commands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   cwd, // Current working directory
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp,
+			SourcePid:    &sourcePid,
+			SourceActive: &sourceActive,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err, "failed to insert command")
+	}
+
+	// When: I run "shy last-command --session zsh:12345" (session with no commands)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"last-command", "--db", dbPath, "--session", "zsh:12345"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+
+	output := buf.String()
+
+	// Then: the output should be the most recent command from the working directory
+	assert.Equal(t, "dir cmd3\n", output, "should fall back to most recent working directory command")
+
+	// Reset command for next test
+	rootCmd.SetArgs(nil)
+}
+
+// TestScenario8_LastCommandFallbackToFullHistory tests fallback to full history when no session or working dir match
+func TestScenario8_LastCommandFallbackToFullHistory(t *testing.T) {
+	// Given: I have a database with commands from a different session and different directory
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err, "failed to create database")
+	defer database.Close()
+
+	// Insert commands from a different session in a different directory
+	sourceApp := "bash"
+	sourcePid := int64(99999)
+	sourceActive := true
+
+	commands := []struct {
+		text      string
+		timestamp int64
+	}{
+		{"history cmd1", 1704470400},
+		{"history cmd2", 1704470401},
+		{"history cmd3", 1704470402},
+	}
+
+	for _, c := range commands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/some/other/directory", // Not the current working directory
+			ExitStatus:   0,
+			Timestamp:    c.timestamp,
+			SourceApp:    &sourceApp,
+			SourcePid:    &sourcePid,
+			SourceActive: &sourceActive,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err, "failed to insert command")
+	}
+
+	// When: I run "shy last-command --session zsh:12345" (no matching session or working dir)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"last-command", "--db", dbPath, "--session", "zsh:12345"})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err, "last-command should succeed")
+
+	output := buf.String()
+
+	// Then: the output should be the most recent command from full history
+	assert.Equal(t, "history cmd3\n", output, "should fall back to most recent command from full history")
+
+	// Reset command for next test
+	rootCmd.SetArgs(nil)
+}
+
+// TestScenario9_LastCommandUnionWithDirectory tests that session results union with directory results
+func TestScenario9_LastCommandUnionWithDirectory(t *testing.T) {
 	// Given: I have a database with commands from a session and from current directory
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")

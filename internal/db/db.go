@@ -659,7 +659,8 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 	}
 
 	// Look up source ID for this session (single record)
-	var sourceID sql.NullInt64
+	// Use -1 as sentinel when session doesn't exist, so != comparisons work correctly in SQL
+	var sourceID int64 = -1
 	err := db.conn.QueryRow(
 		"SELECT id FROM sources WHERE app = ? AND pid = ? AND active = 1 ORDER BY id DESC LIMIT 1",
 		sourceApp, sourcePid,
@@ -669,7 +670,8 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 	}
 
 	// Look up working_dir ID
-	var workingDirID sql.NullInt64
+	// Use -1 as sentinel when working_dir doesn't exist
+	var workingDirID int64 = -1
 	err = db.conn.QueryRow(
 		"SELECT id FROM working_dirs WHERE path = ?",
 		workingDir,
