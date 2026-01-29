@@ -27,14 +27,13 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 			continue
 		}
 
-		database := OpenDB(b, dbPath)
-		defer database.Close()
-
 		for _, pid := range []int64{12347, 12345} {
 			for _, prefix := range []string{"g", "git "} {
 				b.Run(fmt.Sprintf("%s/prefix-%s-%d", size.name, prefix, pid), func(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
+						database := OpenDB(b, dbPath)
+						defer database.Close()
 						_, err := database.LikeRecent(LikeRecentOptions{
 							Prefix:     prefix,
 							WorkingDir: "/home/user/projects/shy",
@@ -79,12 +78,12 @@ func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 			continue
 		}
 
-		database := OpenDB(b, dbPath)
-		defer database.Close()
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					database := OpenDB(b, dbPath)
+					defer database.Close()
 					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, "zsh", 12345, "/home/user/projects/shy")
 					if err != nil {
 						b.Fatalf("failed to get commands: %v", err)
@@ -115,13 +114,12 @@ func BenchmarkListCommands(b *testing.B) {
 			continue
 		}
 
-		database := OpenDB(b, dbPath)
-		defer database.Close()
-
 		for _, limit := range limits {
 			b.Run(fmt.Sprintf("%s/limit-%d", size.name, limit), func(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
+					database := OpenDB(b, dbPath)
+					defer database.Close()
 					_, err := database.ListCommands(limit, "", 0)
 					if err != nil {
 						b.Fatalf("failed to list commands: %v", err)
