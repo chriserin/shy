@@ -53,7 +53,7 @@ func TestScenario9_InitWithUseFlag(t *testing.T) {
 
 	// Then: the output should include Ctrl-R binding for history search
 	assert.Contains(t, output, "bindkey '^R'", "should bind Ctrl-R")
-	assert.Contains(t, output, "shy list-all", "should use shy list-all for history")
+	assert.Contains(t, output, "shy fzf", "should use shy fzf for history")
 
 	// And: the output should include up arrow binding
 	assert.Contains(t, output, "bindkey '^[[A'", "should bind up arrow (standard)")
@@ -101,7 +101,7 @@ func TestScenario10_InitWithBothFlags(t *testing.T) {
 
 	// And: both shy commands should be present
 	assert.Contains(t, output, "shy insert", "should use shy insert for recording")
-	assert.Contains(t, output, "shy list-all", "should use shy list-all for history")
+	assert.Contains(t, output, "shy fzf", "should use shy fzf for history")
 	assert.Contains(t, output, "shy last-command", "should use shy last-command")
 
 	// Reset command and flags for next test
