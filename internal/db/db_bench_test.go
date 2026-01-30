@@ -68,7 +68,7 @@ func OpenDB(b *testing.B, dbPath string) DatabaseInterface {
 
 // BenchmarkGetRecentCommandsWithSession measures last-command with session filter
 func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
-	limits := []int{1, 20, 50}
+	offsets := []int{0, 19, 49} // 0-indexed: 0=1st, 19=20th, 49=50th
 
 	for _, size := range BenchmarkDBSizes {
 		dbPath := filepath.Join("../../testdata/perf", size.File)
@@ -77,13 +77,13 @@ func BenchmarkGetRecentCommandsWithSession(b *testing.B) {
 			continue
 		}
 
-		for _, limit := range limits {
-			b.Run(fmt.Sprintf("%s/limit-%d", size.Name, limit), func(b *testing.B) {
+		for _, offset := range offsets {
+			b.Run(fmt.Sprintf("%s/offset-%d", size.Name, offset), func(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					database := OpenDB(b, dbPath)
 					defer database.Close()
-					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, "zsh", 12345, "/home/user/projects/shy")
+					_, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(offset, "zsh", 12345, "/home/user/projects/shy")
 					if err != nil {
 						b.Fatalf("failed to get commands: %v", err)
 					}

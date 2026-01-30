@@ -17,7 +17,7 @@ type DatabaseInterface interface {
 	GetTableSchema() ([]map[string]interface{}, error)
 	ListCommands(limit int, sourceApp string, sourcePid int64) ([]models.Command, error)
 	ListCommandsInRange(startTime, endTime int64, limit int, sourceApp string, sourcePid int64) ([]models.Command, error)
-	GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64, workingDir string) ([]models.Command, error)
+	GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceApp string, sourcePid int64, workingDir string) (*models.Command, error)
 	GetMostRecentEventID() (int64, error)
 	GetCommandsByRange(first, last int64) ([]models.Command, error)
 	GetCommandsByRangeWithPattern(first, last int64, pattern string) ([]models.Command, error)

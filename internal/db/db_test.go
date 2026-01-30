@@ -1094,8 +1094,14 @@ func TestGetRecentCommandsWithoutConsecutiveDuplicates_UnionWithDirectory(t *tes
 	}
 
 	// When: GetRecentCommandsWithoutConsecutiveDuplicates called with session filter and working dir
-	results, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(6, "zsh", 12345, "/target-dir")
-	require.NoError(t, err)
+	// Collect results for offsets 0-5
+	var results []models.Command
+	for offset := 0; offset < 6; offset++ {
+		result, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(offset, "zsh", 12345, "/target-dir")
+		require.NoError(t, err)
+		require.NotNil(t, result, "offset %d should return a command", offset)
+		results = append(results, *result)
+	}
 
 	// Then: should return session command first (most recent matching source_id), then directory commands
 	// Note: With normalized schema and no unique constraint on sources, each command gets its own source_id.

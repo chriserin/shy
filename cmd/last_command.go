@@ -83,23 +83,21 @@ func runLastCommand(cmd *cobra.Command, args []string) error {
 		workingDir = ""
 	}
 
-	// Get N most recent commands without consecutive duplicates
-	// The function returns them in descending order (most recent first)
+	// Get the Nth most recent command without consecutive duplicates
+	// offset is 0-indexed: 0=most recent, 1=second most recent, etc.
 	// If session is specified, results union with current directory after session is exhausted
-	limit := lastCommandOffset
-	commands, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(limit, sourceApp, sourcePid, workingDir)
+	offset := lastCommandOffset - 1
+	command, err := database.GetRecentCommandsWithoutConsecutiveDuplicates(offset, sourceApp, sourcePid, workingDir)
 	if err != nil {
-		return fmt.Errorf("failed to get commands: %w", err)
+		return fmt.Errorf("failed to get command: %w", err)
 	}
 
-	// If we don't have enough commands, output nothing
-	if len(commands) < limit {
+	// If no command found at this offset, output nothing
+	if command == nil {
 		return nil
 	}
 
-	// Output the Nth most recent command (0-indexed, so offset-1)
-	// commands[0] is the most recent, commands[1] is second most recent, etc.
-	fmt.Fprintln(cmd.OutOrStdout(), commands[limit-1].CommandText)
+	fmt.Fprintln(cmd.OutOrStdout(), command.CommandText)
 
 	return nil
 }

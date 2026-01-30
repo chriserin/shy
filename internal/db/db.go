@@ -641,19 +641,20 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 	return commands, nil
 }
 
-// GetRecentCommandsWithoutConsecutiveDuplicates retrieves recent commands without consecutive duplicates
+// GetRecentCommandsWithoutConsecutiveDuplicates retrieves a single command at the given offset
 // Commands are gathered from session, working_dir, and full history contexts, sorted by context priority
 // (session=1, working_dir=2, history=3) then by timestamp DESC, and consecutive duplicates are removed using LAG
-// Returns up to 'limit' commands after deduplication
-// Only populates CommandText field in the returned Command structs
-func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp string, sourcePid int64, workingDir string) ([]models.Command, error) {
+// offset is 0-indexed: 0=most recent, 1=second most recent, etc.
+// Returns nil if no command exists at the given offset
+// Only populates CommandText field in the returned Command struct
+func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceApp string, sourcePid int64, workingDir string) (*models.Command, error) {
 	if sourceApp == "" || sourcePid == 0 {
-		return []models.Command{}, fmt.Errorf("both sourceApp and sourcePid must be provided for session filtering")
+		return nil, fmt.Errorf("both sourceApp and sourcePid must be provided for session filtering")
 	}
 
 	// Calculate fetch limit per priority bucket
 	// Use 3x multiplier with a minimum of 50 to handle duplicates
-	bucketLimit := limit * 3
+	bucketLimit := (offset + 1) * 3
 	if bucketLimit < 50 {
 		bucketLimit = 50
 	}
@@ -730,35 +731,25 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(limit int, sourceApp
 		SELECT command_text
 		FROM deduped
 		WHERE command_text != prev_command_text OR prev_command_text IS NULL
-		LIMIT ?`
+		LIMIT 1 OFFSET ?`
 
 	args := []any{
 		sourceID, bucketLimit, // Priority 1
 		workingDirID, sourceID, bucketLimit, // Priority 2
 		sourceID, workingDirID, bucketLimit, // Priority 3
-		limit, // Final limit
+		offset, // Offset to the desired command (0-indexed)
 	}
 
-	rows, err := db.conn.Query(query, args...)
+	var cmd models.Command
+	err = db.conn.QueryRow(query, args...).Scan(&cmd.CommandText)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to query commands: %w", err)
-	}
-	defer rows.Close()
-
-	var commands []models.Command
-	for rows.Next() {
-		var cmd models.Command
-		if err := rows.Scan(&cmd.CommandText); err != nil {
-			return nil, fmt.Errorf("failed to scan command: %w", err)
-		}
-		commands = append(commands, cmd)
+		return nil, fmt.Errorf("failed to query command: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating commands: %w", err)
-	}
-
-	return commands, nil
+	return &cmd, nil
 }
 
 // GetMostRecentEventID returns the ID of the most recent command
