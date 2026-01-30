@@ -13,32 +13,62 @@
 #   - Right Arrow: Complete with most recent matching command
 
 # Ctrl-R: Interactive history search
-# _shy_shell_history() {
-#   local selected
-#
-#   # Check if fzf is available
-#   if command -v fzf &>/dev/null; then
-#     # Use fzf for interactive selection
-#     selected=$(shy list-all --fmt=timestamp,status,pwd,cmd | fzf --tac --no-sort \
-#       --preview 'echo {}' \
-#       --preview-window=up:3:wrap \
-#       --height=40% \
-#       --bind 'ctrl-y:execute-silent(echo -n {4..} | pbcopy)' |
-#       awk -F'\t' '{print $4}')
-#   else
-#     # Fallback to basic completion
-#     selected=$(shy list-all | fzf --tac --no-sort --height=40%)
-#   fi
-#
-#   if [[ -n "$selected" ]]; then
-#     BUFFER="$selected"
-#     CURSOR=$#BUFFER
-#   fi
-#
-#   zle reset-prompt
-# }
-# zle -N _shy_shell_history
-# bindkey '^R' _shy_shell_history
+_shy_isearch() {
+  local search="" char match
+
+  while true; do
+    zle -R "bck-i-search: $search"
+    read -k char
+
+    case $char in
+    $'\r' | $'\n') break ;;                  # Enter - accept
+    $'\x7f' | $'\b') search="${search%?}" ;; # Backspace
+    $'\x03' | $'\x07')
+      BUFFER=""
+      break
+      ;;                                         # Ctrl-C/G - cancel
+    $'\e') read -k -t 0.01 && read -k -t 0.01 ;; # Discard escape sequences
+    [[:print:]]) search+="$char" ;;              # Only accept printable chars
+    esac
+
+    if [[ -n "$search" ]]; then
+      match=$(shy fc -l -n -1000 | grep -F "$search" | tail -1)
+      [[ -n "$match" ]] && BUFFER="$match"
+    fi
+  done
+
+  CURSOR=$#BUFFER
+  zle reset-prompt
+}
+
+_shy_shell_history() {
+  if command -v fzf &>/dev/null; then
+    local selected event_num
+
+    # shy fzf outputs: event_number<TAB>command<NULL>
+    # --read0: read null-terminated input (handles commands with newlines)
+    # -n2..: match from field 2 onwards (skip event number)
+    selected=$(shy fzf | fzf --read0 -n2.. --scheme=history --height=40%)
+
+    if [[ -n "$selected" ]]; then
+      # Extract event number (first field before tab)
+      event_num="${selected%%$'\t'*}"
+      # Look up exact command by event number (handles newlines/tabs safely)
+      selected=$(shy fc -l -n "$event_num" "$event_num" 2>/dev/null)
+    fi
+
+    if [[ -n "$selected" ]]; then
+      BUFFER="$selected"
+      CURSOR=$#BUFFER
+    fi
+
+    zle reset-prompt
+  else
+    _shy_isearch
+  fi
+}
+zle -N shy-shell-history _shy_shell_history
+bindkey '^R' shy-shell-history
 
 # Up Arrow: Cycle through command history
 __shy_history_index=0
@@ -117,6 +147,8 @@ _shy_bind_viins() {
   zvm_bindkey vicmd '^[OA' shy-up-line-or-history   # Application mode up arrow
   zvm_bindkey vicmd '^[[B' shy-down-line-or-history # Standard down arrow
   zvm_bindkey vicmd '^[OB' shy-down-line-or-history # Application mode down arrow
+  zvm_bindkey viins '^R' shy-shell-history
+  zvm_bindkey vicmd '^R' shy-shell-history
 }
 
 zvm_after_init_commands+=(_shy_bind_viins)

@@ -17,14 +17,10 @@ var zshUseScript string
 //go:embed integration_scripts/shy_autosuggest.zsh
 var zshAutosuggestScript string
 
-//go:embed integration_scripts/fzf.zsh
-var zshFzfScript string
-
 var (
 	initRecord      bool
 	initUse         bool
 	initAutosuggest bool
-	initFzf         bool
 )
 
 var initCmd = &cobra.Command{
@@ -40,7 +36,6 @@ func init() {
 	initCmd.Flags().BoolVar(&initRecord, "record", false, "Enable command recording (preexec/precmd hooks)")
 	initCmd.Flags().BoolVar(&initUse, "use", false, "Enable history usage (Ctrl-R, arrow keys)")
 	initCmd.Flags().BoolVar(&initAutosuggest, "autosuggest", false, "Enable zsh-autosuggestions integration (strategy functions)")
-	initCmd.Flags().BoolVar(&initFzf, "fzf", false, "Enable fzf history widget (Ctrl-R with fzf)")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -50,10 +45,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	record, _ := cmd.Flags().GetBool("record")
 	use, _ := cmd.Flags().GetBool("use")
 	autosuggest, _ := cmd.Flags().GetBool("autosuggest")
-	fzf, _ := cmd.Flags().GetBool("fzf")
 
 	// Default to all scripts if no flags specified (except fzf, which is opt-in)
-	if !record && !use && !autosuggest && !fzf {
+	if !record && !use && !autosuggest {
 		record = true
 		use = true
 		autosuggest = true
@@ -83,13 +77,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 			}
 			output.WriteString(zshAutosuggestScript)
 			needsNewline = true
-		}
-
-		if fzf {
-			if needsNewline {
-				output.WriteString("\n")
-			}
-			output.WriteString(zshFzfScript)
 		}
 
 		fmt.Fprint(cmd.OutOrStdout(), output.String())
