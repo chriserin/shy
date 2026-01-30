@@ -147,8 +147,12 @@ _shy_bind_viins() {
   zvm_bindkey vicmd '^[OA' shy-up-line-or-history   # Application mode up arrow
   zvm_bindkey vicmd '^[[B' shy-down-line-or-history # Standard down arrow
   zvm_bindkey vicmd '^[OB' shy-down-line-or-history # Application mode down arrow
+}
+
+_shy_bind_viins_ctrl_r() {
   zvm_bindkey viins '^R' shy-shell-history
   zvm_bindkey vicmd '^R' shy-shell-history
 }
 
 zvm_after_init_commands+=(_shy_bind_viins)
+# zvm_after_init_commands+=(_shy_bind_viins_ctrl_r)
