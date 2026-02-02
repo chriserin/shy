@@ -1755,7 +1755,7 @@ func TestFileOp_ReadExtendedFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify commands were imported with timestamps and durations
-	commands, err := database.GetCommandsByRange(1, 100)
+	commands, err := database.GetCommandsByRangeFull(1, 100)
 	require.NoError(t, err)
 	require.Len(t, commands, 3)
 
@@ -1799,7 +1799,7 @@ func TestFileOp_ReadMixedFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify all commands were imported
-	commands, err := database.GetCommandsByRange(1, 100)
+	commands, err := database.GetCommandsByRangeFull(1, 100)
 	require.NoError(t, err)
 	require.Len(t, commands, 3)
 

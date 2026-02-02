@@ -718,7 +718,7 @@ func getCommandsWithFilters(database *db.DB, first, last int64, pattern string, 
 		commands, err = database.GetCommandsByRangeWithPattern(first, last, likePattern)
 	} else {
 		// No filtering
-		commands, err = database.GetCommandsByRange(first, last)
+		commands, err = database.GetCommandsByRangeFull(first, last)
 	}
 
 	if err != nil {

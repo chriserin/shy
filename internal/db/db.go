@@ -804,6 +804,28 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 	return commands, nil
 }
 
+// GetCommandsByRangeFull retrieves commands by event ID range (inclusive) with all columns
+// Returns commands ordered by ID ascending
+// Use this when you need full command data (timestamp, duration, working_dir, etc.)
+func (db *DB) GetCommandsByRangeFull(first, last int64) ([]models.Command, error) {
+	// Handle invalid range
+	if first > last {
+		return []models.Command{}, nil
+	}
+
+	query := `SELECT ` + commandSelectColumns + commandFromJoins + `
+		WHERE c.id >= ? AND c.id <= ? AND c.is_duplicate = 0
+		ORDER BY c.id ASC`
+
+	rows, err := db.conn.Query(query, first, last)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commands by range: %w", err)
+	}
+	defer rows.Close()
+
+	return db.scanCommandRows(rows)
+}
+
 // GetCommandsByRangeWithPattern retrieves commands by event ID range (inclusive) that match a pattern
 // Returns commands ordered by ID ascending
 // The pattern uses glob syntax (* for any chars, ? for single char) and is translated to SQL LIKE
