@@ -68,7 +68,6 @@ _shy_shell_history() {
   fi
 }
 zle -N shy-shell-history _shy_shell_history
-bindkey '^R' shy-shell-history
 
 # Up Arrow: Cycle through command history
 __shy_history_index=0
@@ -149,10 +148,13 @@ _shy_bind_viins() {
   zvm_bindkey vicmd '^[OB' shy-down-line-or-history # Application mode down arrow
 }
 
+zvm_after_init_commands+=(_shy_bind_viins)
+
 _shy_bind_viins_ctrl_r() {
   zvm_bindkey viins '^R' shy-shell-history
   zvm_bindkey vicmd '^R' shy-shell-history
 }
 
-zvm_after_init_commands+=(_shy_bind_viins)
+# Uncomment for ctrl-r
 # zvm_after_init_commands+=(_shy_bind_viins_ctrl_r)
+# bindkey '^R' shy-shell-history

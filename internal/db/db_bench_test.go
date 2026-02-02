@@ -177,3 +177,33 @@ func BenchmarkGetCommandsByRange(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkGetAllHistory measures "shy history" / "shy fc -l -1 0" performance (all history)
+func BenchmarkGetAllHistory(b *testing.B) {
+	for _, size := range BenchmarkDBSizes {
+		dbPath := filepath.Join("../../testdata/perf", size.File)
+		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+			b.Logf("Skipping %s: database not found", size.Name)
+			continue
+		}
+
+		b.Run(size.Name, func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				database := OpenDB(b, dbPath)
+				// -1 means first event (1), 0 means most recent event
+				// This fetches all history like "shy fc -l -1 0" or "shy history"
+				mostRecent, err := database.GetMostRecentEventID()
+				if err != nil {
+					b.Fatalf("failed to get most recent event id: %v", err)
+				}
+
+				_, err = database.GetCommandsByRange(1, mostRecent)
+				if err != nil {
+					b.Fatalf("failed to get commands: %v", err)
+				}
+				database.Close()
+			}
+		})
+	}
+}

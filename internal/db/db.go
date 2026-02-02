@@ -775,9 +775,8 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 		return []models.Command{}, nil
 	}
 
-	query := `SELECT ` + commandSelectColumns + commandFromJoins + `
-		WHERE c.id IN (SELECT max(id) FROM commands WHERE id >= ? AND id <= ? GROUP BY command_text)
-		ORDER BY c.id ASC`
+	query := `SELECT id, command_text from commands
+		WHERE id >= ? AND id <= ?	AND is_duplicate = 0 ORDER BY id ASC`
 
 	rows, err := db.conn.Query(query, first, last)
 	if err != nil {
@@ -787,11 +786,15 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 
 	var commands []models.Command
 	for rows.Next() {
-		cmd, err := scanCommand(rows)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan command: %w", err)
+		var id int64
+		var cmdText string
+
+		if err := rows.Scan(&id, &cmdText); err != nil {
+			return nil, fmt.Errorf("failed to scan fzf entry: %w", err)
 		}
-		commands = append(commands, *cmd)
+		cmd := models.Command{ID: id, CommandText: cmdText}
+
+		commands = append(commands, cmd)
 	}
 
 	if err := rows.Err(); err != nil {

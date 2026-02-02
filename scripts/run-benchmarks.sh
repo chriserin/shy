@@ -84,6 +84,14 @@ case "${1:-all}" in
         ./internal/db | tee "$RESULT_FILE"
     ;;
 
+"all-history")
+    echo -e "${BLUE}Benchmarking: BenchmarkGetAllHistory${NC}"
+    cd "$PROJECT_ROOT"
+    go test -bench=BenchmarkGetAllHistory -benchtime="$BENCH_TIME" -count="$BENCH_COUNT" \
+        -benchmem -memprofile="$MEMPROFILE" -cpuprofile="$CPUPROFILE" \
+        ./internal/db | tee "$RESULT_FILE"
+    ;;
+
 "concurrent")
     echo -e "${BLUE}Benchmarking: Concurrent Inserts${NC}"
     cd "$PROJECT_ROOT"

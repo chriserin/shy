@@ -1,16 +1,16 @@
 # shy - Shell History Tracker
 
-A command-line tool for tracking shell command history in SQLite with rich metadata and conventional behaviour.
+A command-line tool for tracking shell command history in SQLite with rich metadata and opinionated behaviour.
 
 ## Features
 
-- **Rich Metadata**: working directory, start time, duration, git repo, git branch, session
-- **Tool Integrations**: zsh, television, fzf, zsh-autosuggestion
-- **Work Summary**: Yesterday's history in a report format
-- **Sensible Duplication Behaviour**
-- **Sensible Scopes**
+- **Metadata**: start time, duration, working directory, git repo, git branch, session
+- **Integrations**: zsh, zvm, television, fzf, zsh-autosuggestion, claude
+- **Summarization**: Reports to help summarize a previous period's activity
+- **Opinionated Command Duplication Behaviour**
+- **Opinionated Context Scoping**
 
-## Scopes: Session, Current Session, and All
+## Scopes
 
 There are 3 different scopes for `shy`.  The current session, the current
 working directory, and all.  These scopes support 3 different use cases:
@@ -19,9 +19,14 @@ working directory, and all.  These scopes support 3 different use cases:
 2. autosuggest: Suggest previous commands that have been used in the **current working directory**.
 3. ctrl-r: Search through **all** previous commands
 
-This is achievable with the zsh `SHARE_HISTORY` option, but needs tinkering to
-separate the up/down history from the all history, and this is mutually
-exclusive from collecting duration with the `INC_APPEND_HISTORY_TIME` option.
+### Compared to ZSH
+
+ZSH has a number of [options](https://zsh.sourceforge.io/Doc/Release/Options.html) that allow you to customize when a
+command is saved to the history file and when a command is
+read from the history file, but you have to choose between having access to a
+command from another session and having a session history that is linear and
+cohesive.  `shy` is opinionated about which use case should have access to
+which commands in a prioritized manner.
 
 ## Duplicates
 
@@ -36,20 +41,62 @@ There is a tension between collection duplicates and not collecting duplicates.
    up or down errors, it's not useful to traverse the same command more than
    once.
 
+### Compared to ZSH
+
 It is not possible in zsh to support all 3 use cases.  Duplicates in zsh are managed
 at the command time, not read time, so you have to choose one of the scenarios
 supported by the HIST_IGNORE_ALL_DUPS or HIST_IGNORE_DUPS options.
 
 In `shy`, all commands are stored, enabling the application to be intentional
-about when duplicates are presented or not presented.
+about when duplicates are presented or not presented according to each use case.
 
 ## Integration
+
+### Progressive Integration
+
+You can integrate `shy` into your environment gradually, taking advantage of
+shy's ability to record commands without utilizing shy's history or impacting
+zsh's ability to collect history.
+
+This command will enable shy to record history alongside zsh:
+
+```sh
+eval "$(shy init zsh --record)"
+```
+
+It provides the zsh hooks to record shy history, but not the zle functions to access that history through up/down arrows, ctrl-r or through auto suggestions.
+
+To stop using zsh's history and instead use shy's history, you can use the command:
+
+```sh
+eval "$(shy init zsh --use)"
+```
+
+This command adds aliases for `history`, `fc` and `r` as well as defining zle widgets for up/down arrows and ctrl-r.
+
+Additionally, if you use zsh_autosuggestion, you can add a zle widget with:
+
+```sh
+eval "$(shy init zsh --autosuggest)"
+```
+
+This command will add a zle widget for autosuggest, which can then be utilized with:
+
+```sh
+export ZSH_AUTOSUGGEST_STRATEGY=(shy_history)
+```
+
+If you feel confident in `shy`'s ability to integrate into your system, you can then stop zsh history collection with:
+
+```
+export HISTSIZE=1
+```
 
 ### ZSH
 
 Shy can automatically track your shell history by integrating with zsh. Add this to your `.zshrc`:
 
-```bash
+```sh
 eval "$(shy init zsh)"
 ```
 
@@ -59,48 +106,37 @@ eval "$(shy init zsh)"
 For a better history search experience with fzf:
 
 ```sh
-# Load fzf key-bindings first (if not already loaded)
-source /usr/share/fzf/key-bindings.zsh  # Adjust path for your system
-
 # Bind ctrl-r for history search
 bindkey '^R' shy-fzf-history-widget
 ```
 
+Place this after any fzf key bindings to ensure it overwrites other ctrl-r bindings.
+
 ### zsh-autosuggestions
 
-Shy provides custom suggestion strategies for [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions):
+Shy provides a custom strategy for zsh-autosuggestions, `shy_history`.
 
 ```sh
-# Load zsh-autosuggestions plugin first
-source /path/to/zsh-autosuggestions/zsh-autosuggestions.zsh
-
-# Load shy integration
-eval "$(shy init zsh)"
-
-# Configure suggestion strategy with your preferred strategy
-ZSH_AUTOSUGGEST_STRATEGY=(shy_history)              # Simple prefix matching
-ZSH_AUTOSUGGEST_STRATEGY=(shy_match_prev_cmd)      # Context-aware (matches after previous command)
-ZSH_AUTOSUGGEST_STRATEGY=(shy_pwd)                 # Directory-specific suggestions
-ZSH_AUTOSUGGEST_STRATEGY=(shy_session)             # Current session only
-
-# or choose multiple for graceful fallback
-# I prefer session before current directory before all history
-ZSH_AUTOSUGGEST_STRATEGY=(shy_session shy_pwd shy_history)
+ZSH_AUTOSUGGEST_STRATEGY=(shy_history)
 ```
 
+This can be placed at any point in your zsh setup.
 
-### television Integration (Optional)
+### television
 
-Browse your command history with [television](https://github.com/alexpasmantier/television), a fuzzy finder TUI:
+Television's history integration depends on the `history` command.  Shy aliases the `history` to `shy history` so no other steps are needed.
+
+If you would like to add a channel to your command history with [television](https://github.com/alexpasmantier/television), a fuzzy finder TUI:
 
 ```bash
 # Generate the television channel configuration
 shy tv config > ~/.config/television/cable/shy-history.toml
-
-# Launch television with the shy channel
-tv shy-history
 ```
 
+Your shy history is now available through television with the command `tv shy-history`.  This
+will provide a preview window of the command that provides all meta-data plus
+the 5 commands run before and the 5 commands run after the command in that
+session.
 
 ### Configuration
 
@@ -132,21 +168,20 @@ SHY_DB_PATH=/path/to/custom.db
 | `insert` | N/A | N/A | Manually insert a command into the database |
 | `close-session` | N/A | N/A | Mark a session as inactive |
 | `init` | N/A | N/A | Generate shell integration scripts |
-| `tv` | N/A | N/A | Generate television channel configuration |
+| `tv init` | N/A | N/A | Generate television channel configuration |
 
 
 **Scope Types:**
 - **ALL**: Searches entire command history across all sessions and directories
-- **SESSION**: Current shell session only (filtered by `source_app` and `source_pid`)
-- **PWD**: Current working directory only
-- **ALL + PWD**: Session results first, then union with current directory results
+- **SESSION**: Current shell session (filtered by `source_app` and `source_pid`)
+- **PWD**: Current working directory
 
 **Duplicate Behavior:**
 - **DUPS**: Returns all commands including duplicates
 - **NO DUPS**: Filters out duplicate commands (keeps most recent)
-- **NO SEQ DUPS**: Filters out consecutive duplicate commands only
+- **NO SEQ DUPS**: Filters out consecutive duplicate commands
 - **Single Result**: Returns only the most recent matching command
-- **N/A**: Not applicable (command doesn't return history)
+- **N/A**: Not applicable
 
 ### Insert Command
 
@@ -155,3 +190,15 @@ Insert a command into the history database:
 ```bash
 shy insert --command "ls -la" --dir /home/user/project --status 0
 ```
+
+## PERFORMANCE
+
+The performance goal is for all commands to execute in under 20ms for databases with command counts up to 5 million.
+
+
+| Use Case | Command | 10K | 1MIL | 5MIL |
+|----------|---------|-----|------|------|
+| up/arrow | `shy last-command`| 1.2ms | 2.6ms     |  2.9ms    |
+| ctrl-r (fzf) | `shy fzf` | 1.5ms  | 1.5ms | 1.5ms  |
+| ctrl-r (tv) | `shy history` | 1.6ms | 1.6ms | 1.6ms |
+| autosuggest | `shy like-recent` | 0.6ms | 0.7ms | 0.8ms |

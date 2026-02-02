@@ -14,7 +14,7 @@ var zshRecordScript string
 //go:embed integration_scripts/zsh_use.sh
 var zshUseScript string
 
-//go:embed integration_scripts/shy_autosuggest.zsh
+//go:embed integration_scripts/shy_autosuggest.sh
 var zshAutosuggestScript string
 
 var (
