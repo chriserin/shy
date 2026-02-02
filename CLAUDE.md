@@ -67,7 +67,7 @@ shy/
 #### Database Layer (`internal/db`)
 - Uses SQLite with WAL mode for concurrent writes from multiple shell sessions
 - Schema migrations via table recreation with exclusive locks
-- Main operations: `InsertCommand()`, `GetCommandsByRange()`, `LikeRecent()`, `LikeRecentAfter()`
+- Main operations: `InsertCommand()`, `GetCommandsByRange()`, `LikeRecent()`
 - Session filtering: Commands track `source_pid` and `source_active` for per-session isolation
 - Database path: `$XDG_DATA_HOME/shy/history.db` (default: `~/.local/share/shy/history.db`)
 
@@ -98,10 +98,7 @@ shy/
 - **zsh_record.sh**: `preexec`/`precmd` hooks to auto-insert commands with metadata
 - **zsh_use.sh**: Ctrl-R keybinding to list history with `shy fc -l`
 - **shy_autosuggest.zsh**: Custom strategies for zsh-autosuggestions plugin
-  - `shy_history`: Simple prefix matching
-  - `shy_match_prev_cmd`: Context-aware suggestions (matches after previous command)
-  - `shy_pwd`: Directory-specific suggestions
-  - `shy_session`: Session-specific suggestions
+  - `shy_history`: Simple prefix matching with session and pwd filters
 - **fzf.zsh** (`shy init zsh --fzf`): fzf history widget integration
   - Uses `shy fzf` command as data source
   - Replaces fzf's default history widget
@@ -146,7 +143,6 @@ For queries with filtering/patterns, prefer existing methods:
 - `GetCommandsByRangeWithPattern(first, last int, pattern string)` - With LIKE matching
 - `GetCommandsByRangeInternal(first, last int, pid int)` - Session-filtered
 - `LikeRecent(prefix string, opts LikeRecentOptions)` - Prefix matching with filters
-- `LikeRecentAfter(prefix, prevCmd string, opts LikeRecentOptions)` - Context-aware
 
 For new query types, add methods to `internal/db/db.go` following existing patterns.
 

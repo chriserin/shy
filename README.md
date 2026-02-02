@@ -162,7 +162,6 @@ SHY_DB_PATH=/path/to/custom.db
 | `last-command` | SESSION + PWD | NO SEQ DUPS | Get most recent command (unions session with current directory, skips consecutive duplicates) |
 | `fzf` | ALL | NO DUPS | Output history for fzf integration (SQL-based deduplication) |
 | `like-recent` | ALL | Single Result | Find most recent command with prefix (use `--pwd` or `--session` to filter) |
-| `like-recent-after` | ALL | Single Result | Context-aware command suggestions based on previous command |
 | `summary` | ALL | N/A | Show aggregated activity report (use `--source-app` to filter) |
 | `tabsum` | ALL | N/A | Tabular summary of command activity |
 | `insert` | N/A | N/A | Manually insert a command into the database |

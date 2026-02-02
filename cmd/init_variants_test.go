@@ -135,7 +135,6 @@ func TestScenario11_InitWithoutFlagsDefaultsToRecord(t *testing.T) {
 
 	// Autosuggest script
 	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_history", "should include shy_history strategy")
-	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_match_prev_cmd", "should include shy_match_prev_cmd strategy")
 
 	// Reset command and flags for next test
 	rootCmd.SetArgs(nil)

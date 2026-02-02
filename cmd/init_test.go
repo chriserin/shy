@@ -393,12 +393,9 @@ func TestInitWithAutosuggest(t *testing.T) {
 
 	// Should contain autosuggest strategy functions
 	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_history", "should define shy_history strategy")
-	assert.Contains(t, output, "_zsh_autosuggest_strategy_shy_match_prev_cmd", "should define shy_match_prev_cmd strategy")
 
 	// Should use shy commands
 	assert.Contains(t, output, "like-recent", "should use like-recent command")
-	assert.Contains(t, output, "like-recent-after", "should use like-recent-after command")
-	assert.Contains(t, output, "shy last-command", "should use shy last-command")
 
 	// Reset init flags
 	initRecord = false

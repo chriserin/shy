@@ -27,7 +27,6 @@ type DatabaseInterface interface {
 	GetCommandsByRangeWithPatternInternal(first, last, sessionPid int64, pattern string) ([]models.Command, error)
 	CloseSession(sessionPid int64) (int64, error)
 	LikeRecent(opts LikeRecentOptions) ([]string, error)
-	LikeRecentAfter(opts LikeRecentAfterOptions) ([]string, error)
 	GetCommandsForFzf(fn func(id int64, cmdText string) error) error
 	GetCommandWithContext(id int64, contextSize int) ([]models.Command, *models.Command, []models.Command, error)
 	GetContextSummary(startTime, endTime int64) ([]summary.ContextSummary, error)

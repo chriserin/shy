@@ -5,16 +5,15 @@
 # Installation:
 #   Add to your ~/.zshrc after loading zsh-autosuggestions:
 #     source "$(shy init zsh --autosuggest)"
-#     ZSH_AUTOSUGGEST_STRATEGY=(shy_history shy_match_prev_cmd)
+#     ZSH_AUTOSUGGEST_STRATEGY=(shy_history)
 #
 # Available Strategies:
 #   - shy_history: Simple prefix matching with session and pwd filters
-#   - shy_match_prev_cmd: Context-aware matching based on previous command
 #
 # Configuration:
 #   ZSH_AUTOSUGGEST_HISTORY_IGNORE - Pattern to exclude from suggestions (same as default)
 
-# Strategy 1: Simple history matching using shy
+# Strategy: Simple history matching using shy
 _zsh_autosuggest_strategy_shy_history() {
   emulate -L zsh
 
@@ -29,42 +28,6 @@ _zsh_autosuggest_strategy_shy_history() {
   fi
 
   # Query shy for suggestion (suppress errors)
-  local result
-  result=$(shy "${shy_args[@]}" 2>/dev/null)
-
-  # Set global suggestion variable (required by zsh-autosuggestions)
-  typeset -g suggestion="$result"
-}
-
-# Strategy 2: Context-aware matching using shy (matches previous command)
-_zsh_autosuggest_strategy_shy_match_prev_cmd() {
-  emulate -L zsh
-
-  local prefix="$1"
-
-  # Get previous command from shy
-  local prev_cmd
-  prev_cmd=$(shy last-command --current-session -n 2 2>/dev/null)
-
-  # If we can't get previous command, fall back to empty suggestion
-  if [[ -z $prev_cmd ]]; then
-    typeset -g suggestion=""
-    return
-  fi
-
-  # Build shy command arguments
-  local shy_args=(
-    "like-recent-after"
-    "$prefix"
-    --prev "$prev_cmd"
-  )
-
-  # Add exclude pattern if set
-  if [[ -n $ZSH_AUTOSUGGEST_HISTORY_IGNORE ]]; then
-    shy_args+=(--exclude "$ZSH_AUTOSUGGEST_HISTORY_IGNORE")
-  fi
-
-  # Query shy for contextual suggestion (suppress errors)
   local result
   result=$(shy "${shy_args[@]}" 2>/dev/null)
 
