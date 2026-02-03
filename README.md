@@ -2,6 +2,23 @@
 
 A command-line tool for tracking shell command history in SQLite with rich metadata and opinionated behaviour.
 
+- [Features](#features)
+- [Scopes](#scopes)
+- [Duplicates](#duplicates)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Integration](#integration)
+  - [Progressive Integration](#progressive-integration)
+  - [ZSH](#zsh)
+  - [FZF](#fzf)
+  - [zsh-autosuggestions](#zsh-autosuggestions)
+  - [television](#television)
+  - [zsh-vim-mode (zvm)](#zsh-vim-mode-zvm)
+  - [claude code](#claude-code)
+- [Configuration](#configuration)
+- [Commands](#commands)
+- [Performance](#performance)
+
 ## Features
 
 - **Metadata**: start time, duration, working directory, git repo, git branch, session
