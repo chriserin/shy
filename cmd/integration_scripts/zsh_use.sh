@@ -10,6 +10,7 @@
 #   - Ctrl-R: Interactive history search
 #   - Up Arrow: Navigate backward through command history (older commands)
 #   - Down Arrow: Navigate forward through command history (newer commands)
+#   - Ctrl-O: Accept line and show next (newer) history entry (for replaying sequences)
 #   - Right Arrow: Complete with most recent matching command
 
 # Ctrl-R: Interactive history search
@@ -71,10 +72,23 @@ zle -N shy-shell-history _shy_shell_history
 
 # Up Arrow: Cycle through command history
 __shy_history_index=0
+__shy_replay_index=0  # Persists across prompts for accept-line-and-down-history
 
 # Reset history index when a new line starts
 _shy_reset_history_index() {
-  __shy_history_index=0
+  # Check if we're in replay mode (accept-line-and-down-history)
+  if [[ $__shy_replay_index -gt 0 ]]; then
+    __shy_history_index=$__shy_replay_index
+    __shy_replay_index=0
+    # Pre-fill the buffer with the next command in sequence
+    local cmd=$(shy last-command --current-session -n $__shy_history_index)
+    if [[ -n "$cmd" ]]; then
+      BUFFER="$cmd"
+      CURSOR=$#BUFFER
+    fi
+  else
+    __shy_history_index=0
+  fi
 }
 zle -N shy-reset-history-index _shy_reset_history_index
 
@@ -133,6 +147,25 @@ zle -N shy-down-line-or-history _shy_down_line_or_history
 bindkey '^[[B' shy-down-line-or-history # Standard down arrow
 bindkey '^[OB' shy-down-line-or-history # Application mode down arrow
 
+# Ctrl-O: Accept line and move to next (newer) history entry
+# Useful for replaying a sequence of commands
+_shy_accept_line_and_down_history() {
+  # If we're navigating history, set up to show the next newer command
+  # Note: After the command executes and is recorded, all indices shift up by 1
+  # So the "next" command (old index-1) will be at the same numeric index
+  if [[ $__shy_history_index -gt 1 ]]; then
+    __shy_replay_index=$__shy_history_index
+  else
+    __shy_replay_index=0
+  fi
+
+  # Accept the current line (execute it)
+  # The zle-line-init hook will pick up __shy_replay_index and pre-fill the buffer
+  zle accept-line
+}
+zle -N shy-accept-line-and-down-history _shy_accept_line_and_down_history
+bindkey '^O' shy-accept-line-and-down-history
+
 alias history="shy history"
 alias fc="shy fc"
 alias r="shy fc -s"
@@ -142,10 +175,12 @@ _shy_bind_viins() {
   zvm_bindkey viins '^[OA' shy-up-line-or-history   # Application mode up arrow
   zvm_bindkey viins '^[[B' shy-down-line-or-history # Standard down arrow
   zvm_bindkey viins '^[OB' shy-down-line-or-history # Application mode down arrow
+  zvm_bindkey viins '^O' shy-accept-line-and-down-history # Accept and show next
   zvm_bindkey vicmd '^[[A' shy-up-line-or-history   # Standard up arrow
   zvm_bindkey vicmd '^[OA' shy-up-line-or-history   # Application mode up arrow
   zvm_bindkey vicmd '^[[B' shy-down-line-or-history # Standard down arrow
   zvm_bindkey vicmd '^[OB' shy-down-line-or-history # Application mode down arrow
+  zvm_bindkey vicmd '^O' shy-accept-line-and-down-history # Accept and show next
 }
 
 zvm_after_init_commands+=(_shy_bind_viins)

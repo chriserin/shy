@@ -34,8 +34,8 @@ func init() {
 }
 
 func runListAll(cmd *cobra.Command, args []string) error {
-	// Open database
-	database, err := db.New(dbPath)
+	// Open database in read-only mode to avoid lock contention
+	database, err := db.NewWithOptions(dbPath, db.Options{ReadOnly: true})
 	if err != nil {
 		// Check if it's a "file doesn't exist" error
 		if os.IsNotExist(err) || (err.Error() != "" && os.IsNotExist(fmt.Errorf("%w", err))) {

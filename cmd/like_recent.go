@@ -44,8 +44,8 @@ func runLikeRecent(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Open database
-	database, err := db.New(dbPath)
+	// Open database in read-only mode to avoid lock contention
+	database, err := db.NewWithOptions(dbPath, db.Options{ReadOnly: true})
 	if err != nil {
 		// If database doesn't exist, return empty (no error)
 		if os.IsNotExist(err) {

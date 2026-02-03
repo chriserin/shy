@@ -20,8 +20,8 @@ All filtering is done interactively within fzf.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 
-		// Open database
-		database, err := db.New(dbPath)
+		// Open database in read-only mode to avoid lock contention
+		database, err := db.NewWithOptions(dbPath, db.Options{ReadOnly: true})
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
