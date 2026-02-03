@@ -1,5 +1,6 @@
 # shy - Shell History Tracker
 
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/chriserin/shy/main/LICENSE)
 [![Tests](https://github.com/chriserin/shy/actions/workflows/test.yml/badge.svg)](https://github.com/chriserin/shy/actions/workflows/test.yml)
 
 A command-line tool for tracking shell command history in SQLite with rich metadata and opinionated behaviour.
