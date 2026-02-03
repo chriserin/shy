@@ -60,7 +60,7 @@ Install from the [releases page](https://github.com/chriserin/shy/releases) or i
 Full, integration, just go for it:
 
 ``` sh
-shy init --db # create the database
+shy init-db # create the database
 ```
 
 Somewhere in your dot files:
