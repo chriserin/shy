@@ -14,8 +14,14 @@ import (
 func setupGitRepo(t *testing.T, dir, remote, branch string) {
 	t.Helper()
 
-	// Initialize git repo
-	cmd := exec.Command("git", "init")
+	// Determine initial branch name
+	initBranch := branch
+	if initBranch == "" {
+		initBranch = "main"
+	}
+
+	// Initialize git repo with explicit branch name
+	cmd := exec.Command("git", "init", "-b", initBranch)
 	cmd.Dir = dir
 	err := cmd.Run()
 	require.NoError(t, err, "failed to init git repo")
@@ -54,13 +60,6 @@ func setupGitRepo(t *testing.T, dir, remote, branch string) {
 	err = cmd.Run()
 	require.NoError(t, err, "failed to git commit")
 
-	// Checkout branch if not main/master
-	if branch != "" && branch != "master" && branch != "main" {
-		cmd = exec.Command("git", "checkout", "-b", branch)
-		cmd.Dir = dir
-		err = cmd.Run()
-		require.NoError(t, err, "failed to checkout branch")
-	}
 }
 
 // TestScenario8_AutoDetectGitContextFromWorkingDirectory tests auto-detection
