@@ -150,9 +150,6 @@ func TestScenario12_InsertFailsWithMissingRequiredParameters(t *testing.T) {
 // TestScenario14_DatabaseHandlesConcurrentInserts tests that the database
 // can handle concurrent insert operations
 func TestScenario14_DatabaseHandlesConcurrentInserts(t *testing.T) {
-	if db.DbType() == "duckdb" {
-		return
-	}
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath_val := filepath.Join(tempDir, "history.db")

@@ -5,7 +5,7 @@ VERSION=${1}
 ARCHIVES_DIR="dist/archives"
 
 if [ -z "$VERSION" ]; then
-    echo "Usage: ./scripts/release.sh v0.1.0"
+    echo "Usage: ./relscripts/release.sh v0.1.0"
     exit 1
 fi
 
@@ -21,7 +21,7 @@ echo "Creating GitHub release ${VERSION}..."
 # Check if tag exists
 if ! git rev-parse ${VERSION} >/dev/null 2>&1; then
     echo "Error: Tag ${VERSION} does not exist."
-    echo "Run ./scripts/version.sh ${VERSION} first to update version and create tag."
+    echo "Run ./relscripts/version.sh ${VERSION} first to update version and create tag."
     exit 1
 fi
 
@@ -39,7 +39,7 @@ fi
 
 # Generate release notes from conventional commits
 echo "Generating release notes..."
-NOTES=$(./scripts/release-notes.sh ${VERSION})
+NOTES=$(./relscripts/release-notes.sh ${VERSION})
 
 # Create release
 echo "Creating release on GitHub..."

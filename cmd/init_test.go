@@ -222,9 +222,6 @@ error_output=$(shy "${shy_args[@]}" 2>&1) || {
 // TestScenario2_IntegrationScriptCapturesCommandText tests that the
 // integration captures command text and metadata
 func TestScenario2_IntegrationScriptCapturesCommandText(t *testing.T) {
-	if db.DbType() == "duckdb" {
-		return
-	}
 	// Skip if zsh is not available
 	if _, err := exec.LookPath("zsh"); err != nil {
 		t.Skip("zsh not available")
@@ -264,10 +261,6 @@ func TestScenario2_IntegrationScriptCapturesCommandText(t *testing.T) {
 // TestScenario3_IntegrationScriptCapturesExitStatus tests capturing
 // non-zero exit status
 func TestScenario3_IntegrationScriptCapturesExitStatus(t *testing.T) {
-	if db.DbType() == "duckdb" {
-		return
-	}
-
 	if _, err := exec.LookPath("zsh"); err != nil {
 		t.Skip("zsh not available")
 	}
@@ -293,9 +286,6 @@ func TestScenario3_IntegrationScriptCapturesExitStatus(t *testing.T) {
 // TestScenario4_IntegrationScriptCapturesSuccessfulCommands tests capturing
 // successful commands with exit status 0
 func TestScenario4_IntegrationScriptCapturesSuccessfulCommands(t *testing.T) {
-	if db.DbType() == "duckdb" {
-		return
-	}
 
 	if _, err := exec.LookPath("zsh"); err != nil {
 		t.Skip("zsh not available")

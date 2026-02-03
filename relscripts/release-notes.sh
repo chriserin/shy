@@ -5,7 +5,7 @@ VERSION=${1}
 PREVIOUS_TAG=${2}
 
 if [ -z "$VERSION" ]; then
-    echo "Usage: ./scripts/release-notes.sh v0.1.0 [previous-tag]"
+    echo "Usage: ./relscripts/release-notes.sh v0.1.0 [previous-tag]"
     exit 1
 fi
 

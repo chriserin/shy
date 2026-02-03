@@ -4,7 +4,7 @@ set -e
 VERSION=${1}
 
 if [ -z "$VERSION" ]; then
-    echo "Usage: ./scripts/version.sh v0.1.0"
+    echo "Usage: ./relscripts/version.sh v0.1.0"
     exit 1
 fi
 

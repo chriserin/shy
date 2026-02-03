@@ -26,8 +26,6 @@ var BenchmarkDBSizes = []BenchmarkDBSize{
 
 // BenchmarkLikeRecentWithFilters measures prefix search with pwd/session filters
 func BenchmarkLikeRecentWithFilters(b *testing.B) {
-	fmt.Println("DBTYPE", DbType())
-
 	for _, size := range BenchmarkDBSizes {
 		dbPath := filepath.Join("../../testdata/perf", size.File)
 		if _, err := os.Stat(dbPath); os.IsNotExist(err) {

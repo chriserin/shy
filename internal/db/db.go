@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/duckdb/duckdb-go/v2"
 	_ "modernc.org/sqlite"
 
 	"github.com/chris/shy/internal/summary"
@@ -20,14 +19,14 @@ const (
 
 	CreateWorkingDirsTableSQL = `
 		CREATE TABLE IF NOT EXISTS working_dirs (
-			id INTEGER PRIMARY KEY %s,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			path TEXT NOT NULL UNIQUE
 		);
 	`
 
 	CreateGitContextsTableSQL = `
 		CREATE TABLE IF NOT EXISTS git_contexts (
-			id INTEGER PRIMARY KEY %s,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			repo TEXT,
 			branch TEXT,
 			UNIQUE(repo, branch)
@@ -36,7 +35,7 @@ const (
 
 	CreateSourcesTableSQL = `
 		CREATE TABLE IF NOT EXISTS sources (
-			id INTEGER PRIMARY KEY %s,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			app TEXT NOT NULL,
 			pid INTEGER NOT NULL,
 			active INTEGER DEFAULT 1,
@@ -46,7 +45,7 @@ const (
 
 	CreateTableSQL = `
 		CREATE TABLE IF NOT EXISTS commands (
-			id INTEGER PRIMARY KEY %s,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			timestamp INTEGER NOT NULL,
 			exit_status INTEGER NOT NULL,
 			duration INTEGER NOT NULL,
@@ -129,44 +128,28 @@ func NewWithOptions(dbPath string, opts Options) (*DB, error) {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
-	dbType := DbType()
-
 	// Open database connection
-	conn, err := sql.Open(dbType, dbPath)
+	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	// Create tables unless ReadOnly mode
 	if !opts.ReadOnly {
-		autinc := "AUTOINCREMENT"
-		if dbType == "duckdb" {
-			// Check if sequence already exists
-			var seqExists int
-			conn.QueryRow("SELECT COUNT(*) FROM duckdb_sequences() WHERE sequence_name = 'id_sequence'").Scan(&seqExists)
-			if seqExists == 0 {
-				seqSql := "CREATE SEQUENCE id_sequence START 1;"
-				if _, err := conn.Exec(seqSql); err != nil {
-					conn.Close()
-					return nil, fmt.Errorf("failed to create sequence: %w", err)
-				}
-			}
-			autinc = "DEFAULT nextval('id_sequence')"
-		}
 		// Create lookup tables first (commands table has foreign keys to them)
-		if _, err := conn.Exec(fmt.Sprintf(CreateWorkingDirsTableSQL, autinc)); err != nil {
+		if _, err := conn.Exec(CreateWorkingDirsTableSQL); err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to create working_dirs table: %w", err)
 		}
-		if _, err := conn.Exec(fmt.Sprintf(CreateGitContextsTableSQL, autinc)); err != nil {
+		if _, err := conn.Exec(CreateGitContextsTableSQL); err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to create git_contexts table: %w", err)
 		}
-		if _, err := conn.Exec(fmt.Sprintf(CreateSourcesTableSQL, autinc)); err != nil {
+		if _, err := conn.Exec(CreateSourcesTableSQL); err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to create sources table: %w", err)
 		}
-		if _, err := conn.Exec(fmt.Sprintf(CreateTableSQL, autinc)); err != nil {
+		if _, err := conn.Exec(CreateTableSQL); err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to create commands table: %w", err)
 		}
@@ -178,32 +161,29 @@ func NewWithOptions(dbPath string, opts Options) (*DB, error) {
 
 	// Enable WAL mode for better concurrency
 	// Retry on database locked errors since concurrent connections may race to enable WAL
-	if dbType == "sqlite" {
-
-		var walErr error
-		for i := 0; i < 5; i++ {
-			_, walErr = conn.Exec("PRAGMA journal_mode=WAL")
-			if walErr == nil {
-				break
-			}
-			// Check if it's a database locked error
-			if strings.Contains(walErr.Error(), "database is locked") {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
-			// Other errors are not retryable
+	var walErr error
+	for i := 0; i < 5; i++ {
+		_, walErr = conn.Exec("PRAGMA journal_mode=WAL")
+		if walErr == nil {
 			break
 		}
-		if walErr != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to enable WAL mode: %w", walErr)
+		// Check if it's a database locked error
+		if strings.Contains(walErr.Error(), "database is locked") {
+			time.Sleep(10 * time.Millisecond)
+			continue
 		}
+		// Other errors are not retryable
+		break
+	}
+	if walErr != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", walErr)
+	}
 
-		// Set busy timeout for handling concurrent writes
-		if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to set busy timeout: %w", err)
-		}
+	// Set busy timeout for handling concurrent writes
+	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
 	// Run migrations
@@ -384,18 +364,9 @@ func (db *DB) InsertCommand(cmd *models.Command) (int64, error) {
 		return 0, fmt.Errorf("failed to insert command: %w", err)
 	}
 
-	var id int64
-	if DbType() == "sqlite" {
-		var err error
-		id, err = result.LastInsertId()
-		if err != nil {
-			return 0, fmt.Errorf("failed to get last insert ID: %w", err)
-		}
-	} else if DbType() == "duckdb" {
-		result := db.conn.QueryRow("select currval('id_sequence')")
-		result.Scan(&id)
-	} else {
-		return 0, fmt.Errorf("unsupported database type")
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last insert ID: %w", err)
 	}
 
 	// Mark older commands with the same command_text as duplicates
@@ -795,10 +766,10 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceAp
 	)
 
 	args := []any{
-		bucketLimit,                   // Priority 1 LIMIT
-		workingDirID, bucketLimit,     // Priority 2
-		workingDirID, bucketLimit,     // Priority 3
-		offset,                        // OFFSET
+		bucketLimit,               // Priority 1 LIMIT
+		workingDirID, bucketLimit, // Priority 2
+		workingDirID, bucketLimit, // Priority 3
+		offset, // OFFSET
 	}
 
 	var cmd models.Command
@@ -1420,12 +1391,4 @@ func (db *DB) GetContextSummary(startTime, endTime int64) ([]summary.ContextSumm
 	}
 
 	return summaries, nil
-}
-
-func DbType() string {
-	if os.Getenv("SHY_DB_TYPE") == "duckdb" {
-		return "duckdb"
-	} else {
-		return "sqlite"
-	}
 }

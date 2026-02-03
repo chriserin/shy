@@ -4,7 +4,7 @@ set -e
 VERSION=${1}
 
 if [ -z "$VERSION" ]; then
-    echo "Usage: ./scripts/release-all.sh v0.1.0"
+    echo "Usage: ./relscripts/release-all.sh v0.1.0"
     exit 1
 fi
 
@@ -24,29 +24,29 @@ echo ""
 
 # Update version in main.go and create tag
 echo "Step 2/7: Updating version and creating tag..."
-./scripts/version.sh ${VERSION}
+./relscripts/version.sh ${VERSION}
 echo ""
 
 # Build binaries
 echo "Step 3/7: Building binaries..."
-./scripts/build.sh ${VERSION}
+./relscripts/build.sh ${VERSION}
 echo ""
 
 # Package archives
 echo "Step 4/7: Creating archives..."
-./scripts/package.sh ${VERSION}
+./relscripts/package.sh ${VERSION}
 echo ""
 
 # Generate checksums
 echo "Step 5/7: Generating checksums..."
-./scripts/checksums.sh
+./relscripts/checksums.sh
 echo ""
 
 # Preview release notes
 echo "Step 6/7: Generating release notes..."
 echo ""
 echo "======================================"
-./scripts/release-notes.sh ${VERSION}
+./relscripts/release-notes.sh ${VERSION}
 echo "======================================"
 echo ""
 read -p "Continue with GitHub release? (y/n) " -n 1 -r
@@ -58,7 +58,7 @@ fi
 
 # Create GitHub release
 echo "Step 7/7: Creating GitHub release..."
-./scripts/release.sh ${VERSION}
+./relscripts/release.sh ${VERSION}
 
 echo ""
 echo "======================================"
