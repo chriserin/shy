@@ -590,10 +590,18 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 		whereClauses = append(whereClauses, fmt.Sprintf("w.path = '%s'", cwd))
 	}
 
-	// Add session filter if provided
-	if sourceApp != "" && sourcePid > 0 {
-		whereClauses = append(whereClauses, fmt.Sprintf("s.app = '%s' AND s.pid = %d AND s.active = 1",
-			strings.ReplaceAll(sourceApp, "'", "''"), sourcePid))
+	// Add session filter if provided (app and/or pid)
+	if sourceApp != "" || sourcePid > 0 {
+		var sessionClauses []string
+		if sourceApp != "" {
+			sessionClauses = append(sessionClauses, fmt.Sprintf("s.app = '%s'",
+				strings.ReplaceAll(sourceApp, "'", "''")))
+		}
+		if sourcePid > 0 {
+			sessionClauses = append(sessionClauses, fmt.Sprintf("s.pid = %d", sourcePid))
+		}
+		sessionClauses = append(sessionClauses, "s.active = 1")
+		whereClauses = append(whereClauses, strings.Join(sessionClauses, " AND "))
 	}
 
 	// Combine WHERE clauses
@@ -651,9 +659,10 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 // offset is 0-indexed: 0=most recent, 1=second most recent, etc.
 // Returns nil if no command exists at the given offset
 // Only populates CommandText field in the returned Command struct
+// sourceApp is required; sourcePid can be 0 to match all pids for that app
 func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceApp string, sourcePid int64, workingDir string) (*models.Command, error) {
-	if sourceApp == "" || sourcePid == 0 {
-		return nil, fmt.Errorf("both sourceApp and sourcePid must be provided for session filtering")
+	if sourceApp == "" {
+		return nil, fmt.Errorf("sourceApp must be provided for session filtering")
 	}
 
 	// Calculate fetch limit per priority bucket
@@ -663,15 +672,39 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceAp
 		bucketLimit = 50
 	}
 
-	// Look up source ID for this session (single record)
-	// Use -1 as sentinel when session doesn't exist, so != comparisons work correctly in SQL
-	var sourceID int64 = -1
-	err := db.conn.QueryRow(
-		"SELECT id FROM sources WHERE app = ? AND pid = ? AND active = 1 ORDER BY id DESC LIMIT 1",
-		sourceApp, sourcePid,
-	).Scan(&sourceID)
-	if err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("failed to query source ID: %w", err)
+	// Look up source IDs for this session
+	// If sourcePid is provided, look for exact match; otherwise match all pids for this app
+	var sourceIDs []int64
+	var rows *sql.Rows
+	var err error
+
+	if sourcePid > 0 {
+		// Exact match: app + pid
+		rows, err = db.conn.Query(
+			"SELECT id FROM sources WHERE app = ? AND pid = ? AND active = 1",
+			sourceApp, sourcePid,
+		)
+	} else {
+		// App-only match: all active sessions for this app
+		rows, err = db.conn.Query(
+			"SELECT id FROM sources WHERE app = ? AND active = 1",
+			sourceApp,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query source IDs: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan source ID: %w", err)
+		}
+		sourceIDs = append(sourceIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating source IDs: %w", err)
 	}
 
 	// Look up working_dir ID
@@ -685,19 +718,39 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceAp
 		return nil, fmt.Errorf("failed to query working_dir ID: %w", err)
 	}
 
+	// Build source_id condition for SQL
+	// If no matching sources, use impossible condition (-1) so session bucket is empty
+	var sourceCondition string
+	var sourceExcludeCondition string
+	if len(sourceIDs) == 0 {
+		sourceCondition = "source_id = -1" // Will match nothing
+		sourceExcludeCondition = "1=1"     // Exclude nothing
+	} else if len(sourceIDs) == 1 {
+		sourceCondition = fmt.Sprintf("source_id = %d", sourceIDs[0])
+		sourceExcludeCondition = fmt.Sprintf("(source_id IS NULL OR source_id != %d)", sourceIDs[0])
+	} else {
+		// Multiple source IDs - build IN clause
+		ids := make([]string, len(sourceIDs))
+		for i, id := range sourceIDs {
+			ids[i] = fmt.Sprintf("%d", id)
+		}
+		sourceCondition = fmt.Sprintf("source_id IN (%s)", strings.Join(ids, ","))
+		sourceExcludeCondition = fmt.Sprintf("(source_id IS NULL OR source_id NOT IN (%s))", strings.Join(ids, ","))
+	}
+
 	// Build UNION ALL query with separate indexed queries for each priority
 	// Each branch can use its own index efficiently
 	// Priority 1: session (source_id match)
 	// Priority 2: working_dir match (excluding session matches)
 	// Priority 3: everything else (excluding session and working_dir matches)
 	// Note: SQLite requires wrapping in subqueries to use ORDER BY/LIMIT in UNION branches
-	query := `
+	query := fmt.Sprintf(`
 		WITH ranked AS (
 			-- Priority 1: session commands
 			SELECT * FROM (
 				SELECT timestamp, command_text, 1 as priority
 				FROM commands
-				WHERE source_id = ?
+				WHERE %s
 				ORDER BY timestamp DESC
 				LIMIT ?
 			)
@@ -709,7 +762,7 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceAp
 				SELECT timestamp, command_text, 2 as priority
 				FROM commands
 				WHERE working_dir_id = ?
-				  AND (source_id IS NULL OR source_id != ?)
+				  AND %s
 				ORDER BY timestamp DESC
 				LIMIT ?
 			)
@@ -720,7 +773,7 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceAp
 			SELECT * FROM (
 				SELECT timestamp, command_text, 3 as priority
 				FROM commands
-				WHERE (source_id IS NULL OR source_id != ?)
+				WHERE %s
 				  AND (working_dir_id IS NULL OR working_dir_id != ?)
 				ORDER BY timestamp DESC
 				LIMIT ?
@@ -735,13 +788,17 @@ func (db *DB) GetRecentCommandsWithoutConsecutiveDuplicates(offset int, sourceAp
 		SELECT command_text
 		FROM deduped
 		WHERE command_text != prev_command_text OR prev_command_text IS NULL
-		LIMIT 1 OFFSET ?`
+		LIMIT 1 OFFSET ?`,
+		sourceCondition,        // Priority 1: WHERE source_id IN (...)
+		sourceExcludeCondition, // Priority 2: AND source_id NOT IN (...)
+		sourceExcludeCondition, // Priority 3: WHERE source_id NOT IN (...)
+	)
 
 	args := []any{
-		sourceID, bucketLimit, // Priority 1
-		workingDirID, sourceID, bucketLimit, // Priority 2
-		sourceID, workingDirID, bucketLimit, // Priority 3
-		offset, // Offset to the desired command (0-indexed)
+		bucketLimit,                   // Priority 1 LIMIT
+		workingDirID, bucketLimit,     // Priority 2
+		workingDirID, bucketLimit,     // Priority 3
+		offset,                        // OFFSET
 	}
 
 	var cmd models.Command

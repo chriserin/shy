@@ -390,3 +390,161 @@ func resetListFlags() {
 	listCurrentSession = false
 	listPwd = false
 }
+
+// TestListWithSessionAppOnly tests filtering by app name only (without pid)
+func TestListWithSessionAppOnly(t *testing.T) {
+	defer resetListFlags()
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands from zsh sessions (different pids)
+	zshApp := "zsh"
+	zshPid1 := int64(12345)
+	zshPid2 := int64(67890)
+	active := true
+
+	zshCommands := []struct {
+		text string
+		pid  int64
+		ts   int64
+	}{
+		{"zsh cmd 1", zshPid1, 1704470400},
+		{"zsh cmd 2", zshPid1, 1704470401},
+		{"zsh cmd 3", zshPid2, 1704470402},
+	}
+
+	for _, c := range zshCommands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.ts,
+			SourceApp:    &zshApp,
+			SourcePid:    &c.pid,
+			SourceActive: &active,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Insert commands from bash session
+	bashApp := "bash"
+	bashPid := int64(11111)
+
+	bashCommands := []struct {
+		text string
+		ts   int64
+	}{
+		{"bash cmd 1", 1704470403},
+		{"bash cmd 2", 1704470404},
+	}
+
+	for _, c := range bashCommands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.ts,
+			SourceApp:    &bashApp,
+			SourcePid:    &bashPid,
+			SourceActive: &active,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy list --session zsh" (app only, no pid)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"list", "--session", "zsh", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: should contain all zsh commands from both pids
+	assert.Contains(t, output, "zsh cmd 1")
+	assert.Contains(t, output, "zsh cmd 2")
+	assert.Contains(t, output, "zsh cmd 3")
+
+	// And: should NOT contain bash commands
+	assert.NotContains(t, output, "bash cmd")
+
+	// Count lines (should be 3 zsh commands)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	assert.Equal(t, 3, len(lines), "should have exactly 3 zsh commands")
+
+	rootCmd.SetArgs(nil)
+}
+
+// TestListWithSessionAppAndPid tests filtering by both app and pid
+func TestListWithSessionAppAndPid(t *testing.T) {
+	defer resetListFlags()
+
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands from two different zsh pids
+	zshApp := "zsh"
+	zshPid1 := int64(12345)
+	zshPid2 := int64(67890)
+	active := true
+
+	commands := []struct {
+		text string
+		pid  int64
+		ts   int64
+	}{
+		{"pid1 cmd 1", zshPid1, 1704470400},
+		{"pid1 cmd 2", zshPid1, 1704470401},
+		{"pid2 cmd 1", zshPid2, 1704470402},
+		{"pid2 cmd 2", zshPid2, 1704470403},
+	}
+
+	for _, c := range commands {
+		cmd := &models.Command{
+			CommandText:  c.text,
+			WorkingDir:   "/home/test",
+			ExitStatus:   0,
+			Timestamp:    c.ts,
+			SourceApp:    &zshApp,
+			SourcePid:    &c.pid,
+			SourceActive: &active,
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// When: I run "shy list --session zsh:12345" (specific pid)
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"list", "--session", "zsh:12345", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Then: should contain only pid1 commands
+	assert.Contains(t, output, "pid1 cmd 1")
+	assert.Contains(t, output, "pid1 cmd 2")
+
+	// And: should NOT contain pid2 commands
+	assert.NotContains(t, output, "pid2 cmd")
+
+	// Count lines (should be 2 commands)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	assert.Equal(t, 2, len(lines), "should have exactly 2 commands from pid 12345")
+
+	rootCmd.SetArgs(nil)
+}

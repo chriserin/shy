@@ -28,7 +28,7 @@ var listAllCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(listAllCmd)
 	listAllCmd.Flags().StringVar(&listAllFormat, "fmt", "", "Format output with comma-separated columns (timestamp,status,pwd,cmd)")
-	listAllCmd.Flags().StringVar(&listAllSession, "session", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
+	listAllCmd.Flags().StringVar(&listAllSession, "session", "", "Filter by session (format: app or app:pid, e.g., zsh or zsh:12345)")
 	listAllCmd.Flags().BoolVar(&listAllCurrentSession, "current-session", false, "Filter by current session (auto-detect from environment)")
 	listAllCmd.Flags().BoolVar(&listAllPwd, "pwd", false, "Filter by current working directory")
 }
@@ -46,32 +46,9 @@ func runListAll(cmd *cobra.Command, args []string) error {
 	defer database.Close()
 
 	// Parse session filter if provided
-	var sourceApp string
-	var sourcePid int64
-	if listAllCurrentSession {
-		// Auto-detect current session from environment
-		var detected bool
-		sourceApp, sourcePid, detected, err = detectCurrentSession()
-		if err != nil {
-			return fmt.Errorf("failed to detect current session: %w", err)
-		}
-		if !detected {
-			return fmt.Errorf("could not auto-detect session: SHY_SESSION_PID not set")
-		}
-	} else if listAllSession != "" {
-		// Parse provided session string
-		parts := strings.Split(listAllSession, ":")
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid session format: expected 'app:pid' (e.g., zsh:12345)")
-		}
-		sourceApp = parts[0]
-		_, err := fmt.Sscanf(parts[1], "%d", &sourcePid)
-		if err != nil {
-			return fmt.Errorf("invalid session PID: %s", parts[1])
-		}
-		if sourcePid <= 0 {
-			return fmt.Errorf("invalid session PID: must be positive")
-		}
+	sourceApp, sourcePid, err := parseSessionFilter(listAllCurrentSession, listAllSession)
+	if err != nil {
+		return err
 	}
 
 	var cwd string = ""
