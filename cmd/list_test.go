@@ -150,11 +150,12 @@ func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
+	testTimestamp := int64(1704470400)
 	cmd := &models.Command{
 		CommandText: "git commit -m 'test'",
 		WorkingDir:  "/home/project",
 		ExitStatus:  0,
-		Timestamp:   1704470400, // 2024-01-05 11:00:00
+		Timestamp:   testTimestamp,
 	}
 	_, err = database.InsertCommand(cmd)
 	require.NoError(t, err, "failed to insert command")
@@ -169,6 +170,9 @@ func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
 
 	output := buf.String()
 
+	// Compute expected timestamp in local timezone (same as the code does)
+	expectedTimestamp := time.Unix(testTimestamp, 0).Local().Format("2006-01-02 15:04:05")
+
 	// Then: the output should show the command text
 	assert.Contains(t, output, "git commit -m 'test'", "should show command text")
 
@@ -179,13 +183,13 @@ func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
 	assert.Contains(t, output, "0", "should show exit status")
 
 	// And: the output should show a readable timestamp
-	assert.Contains(t, output, "2024-01-05 11:00:00", "should show readable timestamp")
+	assert.Contains(t, output, expectedTimestamp, "should show readable timestamp")
 
 	// And: the columns should be tab separated
 	assert.Contains(t, output, "\t", "should have tab-separated columns")
 
 	// Verify the exact format: timestamp\tstatus\tpwd\tcmd
-	expectedLine := "2024-01-05 11:00:00\t0\t/home/project\tgit commit -m 'test'"
+	expectedLine := expectedTimestamp + "\t0\t/home/project\tgit commit -m 'test'"
 	assert.Contains(t, output, expectedLine, "should match expected tab-separated format")
 
 	// Reset command for next test
