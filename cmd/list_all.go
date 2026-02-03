@@ -15,6 +15,7 @@ var (
 	listAllFormat         string
 	listAllSession        string
 	listAllCurrentSession bool
+	listAllPwd            bool
 )
 
 var listAllCmd = &cobra.Command{
@@ -29,6 +30,7 @@ func init() {
 	listAllCmd.Flags().StringVar(&listAllFormat, "fmt", "", "Format output with comma-separated columns (timestamp,status,pwd,cmd)")
 	listAllCmd.Flags().StringVar(&listAllSession, "session", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
 	listAllCmd.Flags().BoolVar(&listAllCurrentSession, "current-session", false, "Filter by current session (auto-detect from environment)")
+	listAllCmd.Flags().BoolVar(&listAllPwd, "pwd", false, "Filter by current working directory")
 }
 
 func runListAll(cmd *cobra.Command, args []string) error {
@@ -72,8 +74,15 @@ func runListAll(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// List all commands (no limit)
-	commands, err := database.ListCommands(0, sourceApp, sourcePid)
+	var cwd string = ""
+	if listAllPwd {
+		cwd, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get current directory: %w", err)
+		}
+	}
+
+	commands, err := database.ListCommands(0, sourceApp, sourcePid, cwd)
 	if err != nil {
 		return fmt.Errorf("failed to list commands: %w", err)
 	}

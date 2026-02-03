@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 // TestScenario1_ListRecentCommands tests that list shows all commands
 // ordered by timestamp descending
 func TestScenario1_ListRecentCommands(t *testing.T) {
+	defer resetListFlags()
 	// Given: I have a database with commands
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -79,6 +81,7 @@ func TestScenario1_ListRecentCommands(t *testing.T) {
 
 // TestScenario2_ListWithLimitFlag tests that list respects the -n limit flag
 func TestScenario2_ListWithLimitFlag(t *testing.T) {
+	defer resetListFlags()
 	// Given: I have a database with 10 commands
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -138,6 +141,7 @@ func TestScenario2_ListWithLimitFlag(t *testing.T) {
 // TestScenario3_ListShowsCommandMetadataWithFmtFlag tests that list --fmt
 // shows requested columns in tab-separated format
 func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
+	defer resetListFlags()
 	// Given: I have a database with a command "git commit -m 'test'" at "/home/project" with exit status 0
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -192,6 +196,7 @@ func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
 
 // Scenario 17a: List command includes duration in seconds in format string
 func TestDurationScenario17a_ListCommandIncludesDurationInSeconds(t *testing.T) {
+	defer resetListFlags()
 	// Given: I have commands with durations
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -207,10 +212,10 @@ func TestDurationScenario17a_ListCommandIncludesDurationInSeconds(t *testing.T) 
 		expected   string
 	}{
 		{"sleep 2", 2028, "2s"},
-		{"sleep 2.7", 2528, "2s"},        // Rounds down
-		{"echo hello", 500, "0s"},        // Under 1 second
-		{"sleep 72", 72028, "1m12s"},     // 72 seconds
-		{"minsleep 72", 4320028, "1h12m0s"}, // 72 minutes
+		{"sleep 2.7", 2528, "2s"},             // Rounds down
+		{"echo hello", 500, "0s"},             // Under 1 second
+		{"sleep 72", 72028, "1m12s"},          // 72 seconds
+		{"minsleep 72", 4320028, "1h12m0s"},   // 72 minutes
 		{"hrsleep 28", 100800028, "1d4h0m0s"}, // 28 hours
 	}
 
@@ -252,6 +257,7 @@ func TestDurationScenario17a_ListCommandIncludesDurationInSeconds(t *testing.T) 
 
 // Scenario 17b: List command includes duration in milliseconds in format string
 func TestDurationScenario17b_ListCommandIncludesDurationInMilliseconds(t *testing.T) {
+	defer resetListFlags()
 	// Given: I have commands with durations
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
@@ -267,10 +273,10 @@ func TestDurationScenario17b_ListCommandIncludesDurationInMilliseconds(t *testin
 		expected   string
 	}{
 		{"sleep 2", 2028, "2s28ms"},
-		{"sleep 2.7", 2528, "2s528ms"},        // With milliseconds
-		{"echo hello", 500, "500ms"},          // Just milliseconds
-		{"sleep 72", 72028, "1m12s28ms"},      // 72 seconds + 28ms
-		{"minsleep 72", 4320028, "1h12m0s28ms"}, // 72 minutes + 28ms
+		{"sleep 2.7", 2528, "2s528ms"},            // With milliseconds
+		{"echo hello", 500, "500ms"},              // Just milliseconds
+		{"sleep 72", 72028, "1m12s28ms"},          // 72 seconds + 28ms
+		{"minsleep 72", 4320028, "1h12m0s28ms"},   // 72 minutes + 28ms
 		{"hrsleep 28", 100800028, "1d4h0m0s28ms"}, // 28 hours + 28ms
 	}
 
@@ -308,4 +314,79 @@ func TestDurationScenario17b_ListCommandIncludesDurationInMilliseconds(t *testin
 	}
 
 	rootCmd.SetArgs(nil)
+}
+
+func TestListWithCwd(t *testing.T) {
+	defer resetListFlags()
+	// Given: I have commands with durations
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	proj1 := filepath.Join(tempDir, "proj1")
+	proj2 := filepath.Join(tempDir, "proj2")
+	os.MkdirAll(proj1, 0755)
+	os.MkdirAll(proj2, 0755)
+
+	// Test cases from the spec
+	testCases := []struct {
+		command    string
+		workingDir string
+	}{
+		{"echo 1", proj1},
+		{"echo 2", proj1},
+		{"echo 3", proj2},
+		{"echo 4", proj2},
+		{"echo 5", proj2},
+		{"echo 6", proj1},
+	}
+
+	for _, tc := range testCases {
+		cmd := &models.Command{
+			CommandText: tc.command,
+			WorkingDir:  tc.workingDir,
+			ExitStatus:  0,
+			Timestamp:   time.Now().Unix(),
+			Duration:    int64Ptr(1),
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Change to proj1 directory
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+
+	err = os.Chdir(proj2)
+	require.NoError(t, err, "failed to change directory")
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"list", "--pwd", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	require.Equal(t, 3, len(lines), "should have correct number of lines")
+	assert.Equal(t, "echo 3\necho 4\necho 5\n", output, "should have correct output")
+
+	rootCmd.SetArgs(nil)
+}
+
+func resetListFlags() {
+	listLimit = 20
+	listFormat = ""
+	listToday = false
+	listYesterday = false
+	listThisWeek = false
+	listLastWeek = false
+	listSession = ""
+	listCurrentSession = false
+	listPwd = false
 }

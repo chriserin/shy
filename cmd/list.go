@@ -22,6 +22,7 @@ var (
 	listThisWeek       bool
 	listLastWeek       bool
 	listSession        string
+	listPwd            bool
 	listCurrentSession bool
 )
 
@@ -41,6 +42,7 @@ func init() {
 	listCmd.Flags().BoolVar(&listThisWeek, "this-week", false, "Show only commands from this week")
 	listCmd.Flags().BoolVar(&listLastWeek, "last-week", false, "Show only commands from last week")
 	listCmd.Flags().StringVar(&listSession, "session", "", "Filter by session (format: app:pid, e.g., zsh:12345)")
+	listCmd.Flags().BoolVar(&listPwd, "pwd", false, "Filter by current working directory")
 	listCmd.Flags().BoolVar(&listCurrentSession, "current-session", false, "Filter by current session (auto-detect from environment)")
 }
 
@@ -217,12 +219,20 @@ func runList(cmd *cobra.Command, args []string) error {
 		endTime = time.Date(lastSunday.Year(), lastSunday.Month(), lastSunday.Day(), 23, 59, 59, 0, lastSunday.Location()).Unix()
 	}
 
+	var cwd string = ""
+	if listPwd {
+		cwd, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to get current directory: %w", err)
+		}
+	}
+
 	// List commands
 	var commands []models.Command
 	if startTime > 0 || endTime > 0 {
-		commands, err = database.ListCommandsInRange(startTime, endTime, listLimit, sourceApp, sourcePid)
+		commands, err = database.ListCommandsInRange(startTime, endTime, listLimit, sourceApp, sourcePid, cwd)
 	} else {
-		commands, err = database.ListCommands(listLimit, sourceApp, sourcePid)
+		commands, err = database.ListCommands(listLimit, sourceApp, sourcePid, cwd)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to list commands: %w", err)

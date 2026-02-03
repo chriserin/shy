@@ -58,7 +58,7 @@ func BenchmarkLikeRecentWithFilters(b *testing.B) {
 	}
 }
 
-func OpenDB(b *testing.B, dbPath string) DatabaseInterface {
+func OpenDB(b *testing.B, dbPath string) *DB {
 	database, err := NewDatabaseReadOnly(dbPath)
 	if err != nil {
 		b.Fatalf("failed to open database: %v", err)
@@ -110,7 +110,7 @@ func BenchmarkListCommands(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					database := OpenDB(b, dbPath)
 					defer database.Close()
-					_, err := database.ListCommands(limit, "", 0)
+					_, err := database.ListCommands(limit, "", 0, "")
 					if err != nil {
 						b.Fatalf("failed to list commands: %v", err)
 					}

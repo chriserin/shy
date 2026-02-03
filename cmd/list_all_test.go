@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,5 +62,67 @@ func TestScenario6_5_ListAllCommands(t *testing.T) {
 	}
 
 	// Reset command for next test
+	rootCmd.SetArgs(nil)
+}
+
+func TestListAllWithCwd(t *testing.T) {
+	// Given: I have commands with durations
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "history.db")
+
+	database, err := db.New(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	proj1 := filepath.Join(tempDir, "proj1")
+	proj2 := filepath.Join(tempDir, "proj2")
+	os.MkdirAll(proj1, 0755)
+	os.MkdirAll(proj2, 0755)
+
+	// Test cases from the spec
+	testCases := []struct {
+		command    string
+		workingDir string
+	}{
+		{"echo 1", proj1},
+		{"echo 2", proj1},
+		{"echo 3", proj2},
+		{"echo 4", proj2},
+		{"echo 5", proj2},
+		{"echo 6", proj1},
+	}
+
+	for _, tc := range testCases {
+		cmd := &models.Command{
+			CommandText: tc.command,
+			WorkingDir:  tc.workingDir,
+			ExitStatus:  0,
+			Timestamp:   time.Now().Unix(),
+			Duration:    int64Ptr(1),
+		}
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Change to proj1 directory
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+
+	err = os.Chdir(proj2)
+	require.NoError(t, err, "failed to change directory")
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs([]string{"list-all", "--pwd", "--db", dbPath})
+
+	err = rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := buf.String()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	require.Equal(t, 3, len(lines), "should have correct number of lines")
+	assert.Equal(t, "echo 5\necho 4\necho 3\n", output, "should have correct output")
+
 	rootCmd.SetArgs(nil)
 }

@@ -948,7 +948,7 @@ func TestListCommandsInRange(t *testing.T) {
 		}
 
 		// When: ListCommandsInRange is called
-		results, err := database.ListCommandsInRange(1000, 6000, 0, "", 0)
+		results, err := database.ListCommandsInRange(1000, 6000, 0, "", 0, "")
 		require.NoError(t, err)
 
 		// Then: should return all commands including duplicates
@@ -980,7 +980,7 @@ func TestListCommandsInRange(t *testing.T) {
 		}
 
 		// When: ListCommandsInRange is called with limit 10
-		results, err := database.ListCommandsInRange(0, 0, 10, "", 0)
+		results, err := database.ListCommandsInRange(0, 0, 10, "", 0, "")
 		require.NoError(t, err)
 
 		// Then: should return all 10 commands including duplicates
@@ -1016,7 +1016,7 @@ func TestListCommandsInRange(t *testing.T) {
 		require.NoError(t, err)
 
 		// When: ListCommandsInRange is called with specific range
-		results, err := database.ListCommandsInRange(1000, 2000, 0, "", 0)
+		results, err := database.ListCommandsInRange(1000, 2000, 0, "", 0, "")
 		require.NoError(t, err)
 
 		// Then: should only return commands in range

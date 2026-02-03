@@ -564,8 +564,8 @@ func (db *DB) GetTableSchema() ([]map[string]any, error) {
 // When a limit is applied, it returns the N most recent commands, but still ordered oldest-to-newest
 // If limit is 0, all commands are returned
 // If sourceApp and sourcePid are provided, only active commands from that session are returned
-func (db *DB) ListCommands(limit int, sourceApp string, sourcePid int64) ([]models.Command, error) {
-	return db.ListCommandsInRange(0, 0, limit, sourceApp, sourcePid)
+func (db *DB) ListCommands(limit int, sourceApp string, sourcePid int64, cwd string) ([]models.Command, error) {
+	return db.ListCommandsInRange(0, 0, limit, sourceApp, sourcePid, cwd)
 }
 
 // ListCommandsInRange retrieves commands within a timestamp range, ordered by timestamp ascending
@@ -573,7 +573,7 @@ func (db *DB) ListCommands(limit int, sourceApp string, sourcePid int64) ([]mode
 // If endTime is 0, no upper bound is applied
 // If limit is 0, all matching commands are returned
 // If sourceApp and sourcePid are provided, only active commands from that session are returned
-func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp string, sourcePid int64) ([]models.Command, error) {
+func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp string, sourcePid int64, cwd string) ([]models.Command, error) {
 	var query string
 	var whereClauses []string
 
@@ -584,6 +584,10 @@ func (db *DB) ListCommandsInRange(startTime, endTime int64, limit int, sourceApp
 		whereClauses = append(whereClauses, fmt.Sprintf("c.timestamp >= %d", startTime))
 	} else if endTime > 0 {
 		whereClauses = append(whereClauses, fmt.Sprintf("c.timestamp <= %d", endTime))
+	}
+
+	if cwd != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("w.path = '%s'", cwd))
 	}
 
 	// Add session filter if provided
