@@ -5,7 +5,7 @@ A command-line tool for tracking shell command history in SQLite with rich metad
 ## Features
 
 - **Metadata**: start time, duration, working directory, git repo, git branch, session
-- **Integrations**: zsh, zvm, television, fzf, zsh-autosuggestion, claude
+- **Integrations**: zsh, zvm, television, fzf, zsh-autosuggestion, claude code
 - **Summarization**: Reports to help summarize a previous period's activity
 - **Opinionated Command Duplication Behaviour**
 - **Opinionated Context Scoping**
@@ -26,7 +26,7 @@ command is saved to the history file and when a command is
 read from the history file, but you have to choose between having access to a
 command from another session and having a session history that is linear and
 cohesive.  `shy` is opinionated about which use case should have access to
-which commands in a prioritized manner.
+which command scope in a prioritized manner.
 
 ## Duplicates
 
@@ -43,12 +43,13 @@ There is a tension between collection duplicates and not collecting duplicates.
 
 ### Compared to ZSH
 
-It is not possible in zsh to support all 3 use cases.  Duplicates in zsh are managed
-at the command time, not read time, so you have to choose one of the scenarios
-supported by the HIST_IGNORE_ALL_DUPS or HIST_IGNORE_DUPS options.
+It is not possible in zsh to support all 3 use cases.  Duplicates in zsh are
+managed at the command time - by not storing duplicates - not read time, so you
+have to choose one of the scenarios supported by the HIST_IGNORE_ALL_DUPS or
+HIST_IGNORE_DUPS options.
 
 In `shy`, all commands are stored, enabling the application to be intentional
-about when duplicates are presented or not presented according to each use case.
+about when duplicates are presented or not according to each use case.
 
 ## Integration
 
@@ -88,7 +89,7 @@ export ZSH_AUTOSUGGEST_STRATEGY=(shy_history)
 
 If you feel confident in `shy`'s ability to integrate into your system, you can then stop zsh history collection with:
 
-```
+```sh
 export HISTSIZE=1
 ```
 
@@ -100,14 +101,19 @@ Shy can automatically track your shell history by integrating with zsh. Add this
 eval "$(shy init zsh)"
 ```
 
+Additionally, bind ctrl-r to the shy shell history widget to search the shy history database.
+
+```sh
+bindkey '^R' shy-shell-history
+```
+
 
 ### FZF
 
-For a better history search experience with fzf:
+To use fzf as the fuzzy finder for your shy search history:
 
 ```sh
-# Bind ctrl-r for history search
-bindkey '^R' shy-fzf-history-widget
+bindkey '^R' shy-shell-history
 ```
 
 Place this after any fzf key bindings to ensure it overwrites other ctrl-r bindings.
@@ -138,7 +144,25 @@ will provide a preview window of the command that provides all meta-data plus
 the 5 commands run before and the 5 commands run after the command in that
 session.
 
-### Configuration
+### zsh-vim-mode (zvm)
+
+To utilize the `shy-shell-history` widget when using [zvm](https://github.com/jeffreytse/zsh-vi-mode), add an init function to the `zvm_after_init_commands`.
+
+```sh
+zvm_after_init_commands+=(_shy_bind_viins_ctrl_r)
+```
+
+### claude code
+
+Store the commands that claude code runs with it's Bash tool:
+
+```sh
+shy claude-init
+```
+
+This will create hook functions located in the ~/.claude/hooks/capture-to-shy.sh file and add an entry in the ~/.claude/settings.json file.
+
+## Configuration
 
 Control tracking behavior with environment variables:
 
