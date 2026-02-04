@@ -1113,3 +1113,83 @@ func TestGetRecentCommandsWithoutConsecutiveDuplicates_UnionWithDirectory(t *tes
 	assert.Equal(t, "dir 4", results[4].CommandText, "5th should be fourth dir command")
 	assert.Equal(t, "dir 3", results[5].CommandText, "6th should be fifth dir command")
 }
+
+// TestGetUniqueSourceApps tests retrieval of unique source app names
+func TestGetUniqueSourceApps(t *testing.T) {
+	t.Run("returns unique apps sorted alphabetically", func(t *testing.T) {
+		// Given: database with commands from different source apps
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "test.db")
+		database, err := NewForTesting(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert commands from different apps
+		apps := []string{"zsh", "bash", "zsh", "fish", "bash"}
+		for i, app := range apps {
+			sourceApp := app
+			sourcePid := int64(1000 + i)
+			sourceActive := true
+			cmd := &models.Command{
+				CommandText:  "test command",
+				WorkingDir:   "/tmp",
+				ExitStatus:   0,
+				Timestamp:    int64(1000 + i),
+				SourceApp:    &sourceApp,
+				SourcePid:    &sourcePid,
+				SourceActive: &sourceActive,
+			}
+			_, err := database.InsertCommand(cmd)
+			require.NoError(t, err)
+		}
+
+		// When: GetUniqueSourceApps is called
+		result, err := database.GetUniqueSourceApps()
+
+		// Then: should return unique apps sorted alphabetically
+		require.NoError(t, err)
+		assert.Equal(t, []string{"bash", "fish", "zsh"}, result)
+	})
+
+	t.Run("returns empty slice for empty database", func(t *testing.T) {
+		// Given: empty database
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "test.db")
+		database, err := NewForTesting(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// When: GetUniqueSourceApps is called
+		result, err := database.GetUniqueSourceApps()
+
+		// Then: should return empty slice
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns apps even without source info", func(t *testing.T) {
+		// Given: database with commands without source info
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, "test.db")
+		database, err := NewForTesting(dbPath)
+		require.NoError(t, err)
+		defer database.Close()
+
+		// Insert command without source info
+		cmd := &models.Command{
+			CommandText: "test command",
+			WorkingDir:  "/tmp",
+			ExitStatus:  0,
+			Timestamp:   1000,
+		}
+		_, err = database.InsertCommand(cmd)
+		require.NoError(t, err)
+
+		// When: GetUniqueSourceApps is called
+		result, err := database.GetUniqueSourceApps()
+
+		// Then: should return empty since no sources exist
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+}

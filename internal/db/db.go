@@ -1422,3 +1422,27 @@ func (db *DB) GetContextSummary(startTime, endTime int64) ([]summary.ContextSumm
 
 	return summaries, nil
 }
+
+// GetUniqueSourceApps returns unique source app names from the sources table
+func (db *DB) GetUniqueSourceApps() ([]string, error) {
+	rows, err := db.conn.Query("SELECT DISTINCT app FROM sources ORDER BY app")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query source apps: %w", err)
+	}
+	defer rows.Close()
+
+	var apps []string
+	for rows.Next() {
+		var app string
+		if err := rows.Scan(&app); err != nil {
+			return nil, fmt.Errorf("failed to scan source app: %w", err)
+		}
+		apps = append(apps, app)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating source apps: %w", err)
+	}
+
+	return apps, nil
+}
