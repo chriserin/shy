@@ -40,6 +40,7 @@ Full, integration, just go for it:
 
 ``` sh
 shy init-db # create the database
+shy fc -R $HISTFILE # read data into the database from your history file
 ```
 
 Somewhere in your dot files:
