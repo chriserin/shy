@@ -23,7 +23,7 @@ func TestScenario1_ListRecentCommands(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -86,7 +86,7 @@ func TestScenario2_ListWithLimitFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -146,7 +146,7 @@ func TestScenario3_ListShowsCommandMetadataWithFmtFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -205,7 +205,7 @@ func TestDurationScenario17a_ListCommandIncludesDurationInSeconds(t *testing.T) 
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -266,7 +266,7 @@ func TestDurationScenario17b_ListCommandIncludesDurationInMilliseconds(t *testin
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -326,7 +326,7 @@ func TestListWithCwd(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -402,7 +402,7 @@ func TestListWithSessionAppOnly(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -494,7 +494,7 @@ func TestListWithSessionAppAndPid(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 

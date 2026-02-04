@@ -36,7 +36,7 @@ func TestPushToNewDatabase(t *testing.T) {
 	assert.NoError(t, err, "database should be created")
 
 	// Verify we can open and use the new database
-	database, err := db.New(newDB)
+	database, err := db.NewForTesting(newDB)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -261,7 +261,7 @@ func TestPushCreatesNewDatabase(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify it's a valid database
-	database, err := db.New(newDB)
+	database, err := db.NewForTesting(newDB)
 	require.NoError(t, err)
 	defer database.Close()
 }
@@ -279,7 +279,7 @@ func TestPushToSameDatabaseTwice(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add a command to the database
-	database, err := db.New(db1)
+	database, err := db.NewForTesting(db1)
 	require.NoError(t, err)
 	cmd := &models.Command{
 		CommandText: "echo 'first context'",
@@ -300,7 +300,7 @@ func TestPushToSameDatabaseTwice(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify command still exists
-	database, err = db.New(db1)
+	database, err = db.NewForTesting(db1)
 	require.NoError(t, err)
 	defer database.Close()
 

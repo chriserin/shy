@@ -29,7 +29,7 @@ func TestSummary_Yesterday(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -108,7 +108,7 @@ func TestSummary_SpecificDate(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -172,7 +172,7 @@ func TestSummary_EmptyDay(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -201,7 +201,7 @@ func TestSummary_MultipleBranches(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -267,7 +267,7 @@ func TestSummary_MixedGitAndNonGit(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -334,7 +334,7 @@ func TestSummary_AllTimePeriods(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -406,7 +406,7 @@ func TestSummary_InvalidDate(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 

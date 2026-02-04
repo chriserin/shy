@@ -7,8 +7,8 @@ func NewDatabase(dbPath string) (*DB, error) {
 	return New(dbPath)
 }
 
-// NewDatabaseReadOnly opens an existing database in read-only mode (skips table creation).
+// NewDatabaseReadOnly opens an existing database without schema validation.
 // Use this for benchmarks and read-only operations on existing databases.
 func NewDatabaseReadOnly(dbPath string) (*DB, error) {
-	return NewWithOptions(dbPath, Options{ReadOnly: true})
+	return NewWithOptions(dbPath, Options{SkipSchemaCheck: true})
 }

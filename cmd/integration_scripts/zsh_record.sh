@@ -16,6 +16,9 @@
 # Uninstall:
 #   Remove the eval line from your ~/.zshrc and restart your shell
 
+# Initialize database schema (idempotent - safe to run on every shell start)
+shy init-db ${SHY_DB_PATH:+--db "$SHY_DB_PATH"} 2>/dev/null
+
 # Export session PID for internal filtering (-I flag)
 export SHY_SESSION_PID=$$
 

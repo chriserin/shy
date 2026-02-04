@@ -135,6 +135,13 @@ func fileExists(path string) bool {
 func simulateCommand(t *testing.T, dbPath, command string, exitStatus int, workingDir string) {
 	t.Helper()
 
+	// Initialize database first (as the real integration does via shy init-db)
+	if dbPath != "" {
+		initDB, err := db.NewForTesting(dbPath)
+		require.NoError(t, err, "failed to initialize database")
+		initDB.Close()
+	}
+
 	// Get the absolute path to the shy binary
 	shyBinary, err := filepath.Abs("./shy")
 	if err != nil || !fileExists(shyBinary) {
@@ -235,7 +242,7 @@ func TestScenario2_IntegrationScriptCapturesCommandText(t *testing.T) {
 	simulateCommand(t, dbPath, "echo hello", 0, tempDir)
 
 	// Then: shy should store the command text "echo hello"
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to open database")
 	defer database.Close()
 
@@ -272,7 +279,7 @@ func TestScenario3_IntegrationScriptCapturesExitStatus(t *testing.T) {
 	simulateCommand(t, dbPath, "false", 1, tempDir)
 
 	// Then: shy should store the exit status 1
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -298,7 +305,7 @@ func TestScenario4_IntegrationScriptCapturesSuccessfulCommands(t *testing.T) {
 	simulateCommand(t, dbPath, "true", 0, tempDir)
 
 	// Then: shy should store the exit status 0
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -346,7 +353,7 @@ func TestScenario18_IntegrationHandlesErrorsGracefully(t *testing.T) {
 
 	// Most importantly: the database should not have the bad command
 	if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		if err == nil {
 			defer database.Close()
 			count, _ := database.CountCommands()

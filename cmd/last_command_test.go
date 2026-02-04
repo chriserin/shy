@@ -19,7 +19,7 @@ func TestScenario1_GetLastCommand(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -79,7 +79,7 @@ func TestScenario2_LastCommandWithNoHistory(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -106,7 +106,7 @@ func TestScenario3_LastCommandWithOffset(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -186,7 +186,7 @@ func TestScenario4_LastCommandWithSessionFilter(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -295,7 +295,7 @@ func TestScenario5_LastCommandWithSessionAutoDetect(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -377,7 +377,7 @@ func TestScenario6_LastCommandSkipsConsecutiveDuplicates(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -462,7 +462,7 @@ func TestScenario7_LastCommandWithNoSessionCommands(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -521,7 +521,7 @@ func TestScenario8_LastCommandFallbackToFullHistory(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -575,7 +575,7 @@ func TestLastCommandWithSessionAppOnly(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -669,7 +669,7 @@ func TestLastCommandWithSessionAppAndPid(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -740,7 +740,7 @@ func TestScenario9_LastCommandUnionWithDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 

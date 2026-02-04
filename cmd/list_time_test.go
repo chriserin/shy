@@ -18,7 +18,7 @@ func TestScenario7_ListWithFlagToday(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -76,7 +76,7 @@ func TestScenario8_ListWithFlagYesterday(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -131,7 +131,7 @@ func TestScenario9_ListWithFlagThisWeek(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -194,7 +194,7 @@ func TestScenario10_ListWithFlagLastWeek(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 

@@ -23,7 +23,7 @@ func TestPatternScenario1_FilterCommandsWithSimpleWildcardPrefixMatch(t *testing
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -88,7 +88,7 @@ func TestPatternScenario2_FilterCommandsWithWildcardSuffixMatch(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -139,7 +139,7 @@ func TestPatternScenario3_FilterCommandsWithWildcardInMiddle(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -188,7 +188,7 @@ func TestPatternScenario4_FilterCommandsWithSingleCharacterWildcard(t *testing.T
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -239,7 +239,7 @@ func TestPatternScenario5_FilterCommandsWithMultipleWildcards(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -288,7 +288,7 @@ func TestPatternScenario6_PatternFilterWithNoMatches(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -332,7 +332,7 @@ func TestPatternScenario7_PatternFilterWithRange(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -386,7 +386,7 @@ func TestPatternScenario9_PatternFilterWithSQLSpecialCharacters(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -438,7 +438,7 @@ func TestPatternScenario10_PatternFilterCombinedWithOtherFlags(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -521,7 +521,7 @@ func TestInternalScenario11_ShowOnlyInternalCommandsFromCurrentSession(t *testin
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -592,7 +592,7 @@ func TestInternalScenario12_InternalFilterShowsNoCommandsFromClosedSessions(t *t
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -663,7 +663,7 @@ func TestInternalScenario13_InternalFilterWithRange(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -737,7 +737,7 @@ func TestInternalScenario14_InternalFilterCombinedWithPatternFilter(t *testing.T
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -809,7 +809,7 @@ func TestInternalScenario15_InternalFilterWithDifferentShellSources(t *testing.T
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -880,7 +880,7 @@ func TestInternalScenario16_InternalFilterWhenSessionIsClosed(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -963,7 +963,7 @@ func TestLocalScenario17_LocalFilterBehavesIdenticallyToNoFilter(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1038,7 +1038,7 @@ func TestLocalScenario18_LocalFilterWithRangeProducesSameResults(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1095,7 +1095,7 @@ func TestSubstitutionNoSubstitutionAsPartOfRange(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1125,7 +1125,7 @@ func TestSubstitutionNoSubstitutionAfterRange(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1158,7 +1158,7 @@ func TestSubstitutionScenario19_SimpleStringSubstitution(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1207,7 +1207,7 @@ func TestSubstitutionScenario20_MultipleSubstitutions(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1253,7 +1253,7 @@ func TestSubstitutionScenario22_DoesNotModifyDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1303,7 +1303,7 @@ func TestSubstitutionScenario25_AllOccurrencesReplaced(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1339,7 +1339,7 @@ func TestSubstitutionScenario26_EmptySubstitutionRemovesText(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1375,7 +1375,7 @@ func TestSubstitutionScenario30_MultipleSubstitutionsWithOverlapping(t *testing.
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1415,7 +1415,7 @@ func TestFileOp_WriteToFile(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "export.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1488,7 +1488,7 @@ func TestFileOp_WriteExtendedFormat(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "export.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1544,7 +1544,7 @@ func TestFileOp_WriteWithoutFile_NoOp(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1570,7 +1570,7 @@ func TestFileOp_WriteCreatesParentDirs(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "nested", "deep", "export.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1610,7 +1610,7 @@ func TestFileOp_AppendToExistingFile(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "existing.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1664,7 +1664,7 @@ func TestFileOp_AppendToNewFile(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "new_append.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1701,7 +1701,7 @@ func TestFileOp_ReadSimpleFormat(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	inputFile := filepath.Join(tempDir, "import.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1737,7 +1737,7 @@ func TestFileOp_ReadExtendedFormat(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	inputFile := filepath.Join(tempDir, "import.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1781,7 +1781,7 @@ func TestFileOp_ReadMixedFormat(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	inputFile := filepath.Join(tempDir, "mixed.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1819,7 +1819,7 @@ func TestFileOp_ReadSkipsBlankLinesAndComments(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	inputFile := filepath.Join(tempDir, "with_blanks.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1855,7 +1855,7 @@ func TestFileOp_ReadNonExistentFile_Error(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	inputFile := filepath.Join(tempDir, "does_not_exist.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1877,7 +1877,7 @@ func TestFileOp_WriteWithPatternFilter(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "filtered.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1924,7 +1924,7 @@ func TestFileOp_WriteWithInternalFilter(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	outputFile := filepath.Join(tempDir, "session.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1990,7 +1990,7 @@ func TestFileOp_MutuallyExclusiveFlags(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 	testFile := filepath.Join(tempDir, "test.txt")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -2058,7 +2058,7 @@ func TestFc_QuickExecAndEditorMutuallyExclusive(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 

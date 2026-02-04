@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -16,6 +15,10 @@ import (
 
 const (
 	defaultDBPath = "~/.local/share/shy/history.db"
+
+	// SchemaVersion is the current database schema version
+	// Increment this when making schema changes
+	SchemaVersion = 1
 
 	CreateWorkingDirsTableSQL = `
 		CREATE TABLE IF NOT EXISTS working_dirs (
@@ -43,7 +46,7 @@ const (
 		);
 	`
 
-	CreateTableSQL = `
+	CreateCommandsTableSQL = `
 		CREATE TABLE IF NOT EXISTS commands (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			timestamp INTEGER NOT NULL,
@@ -90,9 +93,9 @@ type DB struct {
 
 // Options configures database connection behavior
 type Options struct {
-	// ReadOnly opens the database without creating tables.
-	// Use this for existing databases to avoid write locks.
-	ReadOnly bool
+	// SkipSchemaCheck opens the database without verifying schema exists.
+	// Use this for init-db command which creates the schema.
+	SkipSchemaCheck bool
 }
 
 // New creates a new database connection and initializes the schema
@@ -134,59 +137,31 @@ func NewWithOptions(dbPath string, opts Options) (*DB, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Create tables unless ReadOnly mode
-	if !opts.ReadOnly {
-		// Create lookup tables first (commands table has foreign keys to them)
-		if _, err := conn.Exec(CreateWorkingDirsTableSQL); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to create working_dirs table: %w", err)
-		}
-		if _, err := conn.Exec(CreateGitContextsTableSQL); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to create git_contexts table: %w", err)
-		}
-		if _, err := conn.Exec(CreateSourcesTableSQL); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to create sources table: %w", err)
-		}
-		if _, err := conn.Exec(CreateTableSQL); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to create commands table: %w", err)
-		}
-		if _, err := conn.Exec(CreateIndexesSQL); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("failed to create indexes: %w", err)
-		}
-	}
-
-	// Enable WAL mode for better concurrency
-	// Retry on database locked errors since concurrent connections may race to enable WAL
-	var walErr error
-	for i := 0; i < 5; i++ {
-		_, walErr = conn.Exec("PRAGMA journal_mode=WAL")
-		if walErr == nil {
-			break
-		}
-		// Check if it's a database locked error
-		if strings.Contains(walErr.Error(), "database is locked") {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		// Other errors are not retryable
-		break
-	}
-	if walErr != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to enable WAL mode: %w", walErr)
-	}
-
-	// Set busy timeout for handling concurrent writes
+	// Set busy timeout first, before any other operations that might need write locks
 	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
-	// Run migrations
+	// Check schema version unless SkipSchemaCheck (used by init-db)
+	if !opts.SkipSchemaCheck {
+		var version int
+		if err := conn.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to check schema version: %w", err)
+		}
+		if version == 0 {
+			conn.Close()
+			return nil, fmt.Errorf("database not initialized, run: shy init-db")
+		}
+	}
+
+	// Enable WAL mode for better concurrency
+	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
 	db := &DB{
 		conn: conn,
 		path: dbPath,
@@ -203,6 +178,61 @@ func (db *DB) Close() error {
 // Path returns the database file path
 func (db *DB) Path() string {
 	return db.path
+}
+
+// NewForTesting creates a new database with schema initialized.
+// This is a convenience function for tests.
+func NewForTesting(dbPath string) (*DB, error) {
+	db, err := NewWithOptions(dbPath, Options{SkipSchemaCheck: true})
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := db.InitSchema(); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return db, nil
+}
+
+// InitSchema creates the database schema and sets the schema version.
+// This should only be called by the init-db command.
+// Returns true if schema was created, false if it already existed.
+func (db *DB) InitSchema() (bool, error) {
+	// Check if schema already exists
+	var version int
+	if err := db.conn.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return false, fmt.Errorf("failed to check schema version: %w", err)
+	}
+	if version > 0 {
+		// Schema already initialized
+		return false, nil
+	}
+
+	// Create lookup tables first (commands table has foreign keys to them)
+	if _, err := db.conn.Exec(CreateWorkingDirsTableSQL); err != nil {
+		return false, fmt.Errorf("failed to create working_dirs table: %w", err)
+	}
+	if _, err := db.conn.Exec(CreateGitContextsTableSQL); err != nil {
+		return false, fmt.Errorf("failed to create git_contexts table: %w", err)
+	}
+	if _, err := db.conn.Exec(CreateSourcesTableSQL); err != nil {
+		return false, fmt.Errorf("failed to create sources table: %w", err)
+	}
+	if _, err := db.conn.Exec(CreateCommandsTableSQL); err != nil {
+		return false, fmt.Errorf("failed to create commands table: %w", err)
+	}
+	if _, err := db.conn.Exec(CreateIndexesSQL); err != nil {
+		return false, fmt.Errorf("failed to create indexes: %w", err)
+	}
+
+	// Set schema version
+	if _, err := db.conn.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion)); err != nil {
+		return false, fmt.Errorf("failed to set schema version: %w", err)
+	}
+
+	return true, nil
 }
 
 // getOrCreateWorkingDir returns the ID for a working directory, creating it if needed

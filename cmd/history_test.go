@@ -21,7 +21,7 @@ func TestScenario1_DisplayLast16CommandsWithEventNumbers(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -76,7 +76,7 @@ func TestScenario2_DisplayFromSpecificEventToMostRecent(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -122,7 +122,7 @@ func TestScenario3_DisplayRangeOfCommandsByEventNumber(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -168,7 +168,7 @@ func TestScenario4_DisplayLastNCommandsUsingNegativeOffset(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -212,7 +212,7 @@ func TestScenario5_DisplayFromStringMatchToMostRecent(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -264,7 +264,7 @@ func TestScenario6_DisplayFromStringMatchToSpecificEvent(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -313,7 +313,7 @@ func TestScenario7_DisplayBetweenTwoStringMatches(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -370,7 +370,7 @@ func TestScenario8_EventNumbersArePersistentAndUseRowID(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 
 	for i := 1; i <= 10; i++ {
@@ -386,7 +386,7 @@ func TestScenario8_EventNumbersArePersistentAndUseRowID(t *testing.T) {
 	database.Close()
 
 	// When: I insert a new command
-	database, err = db.New(dbPath)
+	database, err = db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -414,7 +414,7 @@ func TestScenario9_SuppressEventNumbersWithNFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -460,7 +460,7 @@ func TestScenario10_ReverseChronologicalOrderWithRFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -506,7 +506,7 @@ func TestScenario11_EmptyHistoryDisplaysNothing(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -532,7 +532,7 @@ func TestScenario12_RangeExceedsAvailableHistory(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -572,7 +572,7 @@ func TestScenario13_SingleEventNumberShowsFromEventToMostRecent(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -614,7 +614,7 @@ func TestScenario14_StringNotFoundOutputsErrorMessage(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -649,7 +649,7 @@ func TestScenario15_CombineNegativeOffsetWithReverseFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -697,7 +697,7 @@ func TestScenario16_DisplayTimestampsWithDFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -748,7 +748,7 @@ func TestScenario17_DisplayTimestampsISO8601(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -786,7 +786,7 @@ func TestScenario18_DisplayTimestampsUSFormat(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -824,7 +824,7 @@ func TestScenario19_DisplayTimestampsEuropeanFormat(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -862,7 +862,7 @@ func TestScenario20_DisplayTimestampsCustomFormat(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -900,7 +900,7 @@ func TestScenario21_DisplayDuration(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -939,7 +939,7 @@ func TestScenario22_CombineTimestampAndDuration(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -984,7 +984,7 @@ func TestDurationScenario9_DisplayDurationWithDFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1031,7 +1031,7 @@ func TestDurationScenario11_DisplayDurationInHumanReadableFormat(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1092,7 +1092,7 @@ func TestDurationScenario12_DisplayDurationAlongsideTimestamps(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1138,7 +1138,7 @@ func TestDurationScenario13_CommandsWithoutDurationShow0000(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1192,7 +1192,7 @@ func TestHistory_PatternMatchingFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1245,7 +1245,7 @@ func TestHistory_InternalFlag(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1306,7 +1306,7 @@ func TestHistoryReversedRange(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1359,7 +1359,7 @@ func TestHistoryForwardRange(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -1412,7 +1412,7 @@ func TestHistoryReversedRangeNegative(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 

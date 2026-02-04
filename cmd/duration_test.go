@@ -20,7 +20,7 @@ func TestDurationScenario1_CaptureDurationForSuccessfulCommand(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -52,7 +52,7 @@ func TestDurationScenario2_CaptureDurationForFailedCommand(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -85,7 +85,7 @@ func TestDurationScenario3_CaptureDurationForVeryShortCommands(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -116,7 +116,7 @@ func TestDurationScenario4_CaptureDurationForLongRunningCommands(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -147,7 +147,7 @@ func TestDurationScenario5_DurationIsNullForCommandsWithoutTimingData(t *testing
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -181,6 +181,11 @@ func TestDurationScenario6_ShyInsertCommandWithDurationParameter(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
+	// Initialize database first
+	initDB, err := db.NewForTesting(dbPath)
+	require.NoError(t, err)
+	initDB.Close()
+
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
 	rootCmd.SetArgs([]string{
@@ -193,11 +198,11 @@ func TestDurationScenario6_ShyInsertCommandWithDurationParameter(t *testing.T) {
 	})
 
 	// When: I run shy insert with --duration flag
-	err := rootCmd.Execute()
+	err = rootCmd.Execute()
 	require.NoError(t, err)
 
 	// Then: the command should be inserted with the duration
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -218,6 +223,11 @@ func TestDurationScenario7_ShyInsertWithoutDurationParameter(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
+	// Initialize database first
+	initDB, err := db.NewForTesting(dbPath)
+	require.NoError(t, err)
+	initDB.Close()
+
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
 	rootCmd.SetArgs([]string{
@@ -229,11 +239,11 @@ func TestDurationScenario7_ShyInsertWithoutDurationParameter(t *testing.T) {
 	})
 
 	// When: I run shy insert without --duration flag
-	err := rootCmd.Execute()
+	err = rootCmd.Execute()
 	require.NoError(t, err)
 
 	// Then: the command should be inserted with null duration
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -254,7 +264,7 @@ func TestDurationScenario8_DatabaseMigrationAddsDurationColumn(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "history.db")
 
 	// Create database without duration column (using raw SQL to simulate old schema)
-	database1, err := db.New(dbPath)
+	database1, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 
 	// Insert a command (this will have duration column from the current schema)
@@ -269,7 +279,7 @@ func TestDurationScenario8_DatabaseMigrationAddsDurationColumn(t *testing.T) {
 	database1.Close()
 
 	// When: shy runs with duration support (opening the database again)
-	database2, err := db.New(dbPath)
+	database2, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database2.Close()
 

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -20,12 +19,8 @@ All filtering is done interactively within fzf.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
 
-		// Open database in read-only mode to avoid lock contention
-		database, err := db.NewWithOptions(dbPath, db.Options{ReadOnly: true})
+		database, err := db.New(dbPath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
 			return fmt.Errorf("failed to open database: %w", err)
 		}
 		defer database.Close()

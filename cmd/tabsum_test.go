@@ -25,7 +25,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: commands executed on 2026-01-14 in multiple contexts
 		tempDir := t.TempDir()
 		testDbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(testDbPath)
+		database, err := db.NewForTesting(testDbPath)
 		require.NoError(t, err)
 
 		// shy:yesterdays-summary - 8h 12m duration
@@ -78,7 +78,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: commands on 2026-01-10
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -100,7 +100,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: commands executed today
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -135,7 +135,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: database with no commands on 2026-01-13
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -151,7 +151,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: commands in non-git directory
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -171,7 +171,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: commands in both git and non-git directories
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -195,7 +195,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: three contexts with different durations
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -227,7 +227,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: contexts with different duration lengths
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -256,7 +256,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: only one command in a context
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -274,7 +274,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: multiple branches in same working directory
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -301,7 +301,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: commands executed yesterday
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -326,7 +326,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: different command counts in different contexts
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -372,7 +372,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: contexts with equal duration but different command counts
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -399,7 +399,7 @@ func TestTabsumCommand(t *testing.T) {
 		// Given: contexts with equal duration and command count
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 

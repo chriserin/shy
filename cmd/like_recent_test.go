@@ -28,7 +28,7 @@ func TestScenario4_GetMostRecentCommandStartingWithPrefix(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -76,7 +76,7 @@ func TestScenario5_LikeRecentWithNoMatches(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -122,7 +122,7 @@ func TestScenario6_LikeRecentIsCaseSensitive(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -169,7 +169,7 @@ func TestScenario7_LikeRecentIgnoresShyCommands(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -228,7 +228,7 @@ func TestLikeRecentWithIncludeShy(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -276,7 +276,7 @@ func TestLikeRecentWithPwd(t *testing.T) {
 	os.MkdirAll(proj1, 0755)
 	os.MkdirAll(proj2, 0755)
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -327,7 +327,7 @@ func TestLikeRecentWithSession(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -383,7 +383,7 @@ func TestLikeRecentWithExclude(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 	defer resetLikeRecentFlags()
@@ -432,7 +432,7 @@ func TestLikeRecentWithMultipleFilters(t *testing.T) {
 	os.MkdirAll(proj1, 0755)
 	os.MkdirAll(proj2, 0755)
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 	defer resetLikeRecentFlags()
@@ -495,7 +495,7 @@ func TestLikeRecentWithSpecialCharacters(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 	defer resetLikeRecentFlags()
@@ -539,7 +539,7 @@ func TestLikeRecentWithEmptyDatabase(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	database.Close()
 	defer resetLikeRecentFlags()
@@ -563,7 +563,7 @@ func TestLikeRecentWithLimitZero(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 	defer resetLikeRecentFlags()

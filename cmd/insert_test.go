@@ -66,7 +66,7 @@ func TestScenario10_ExplicitGitContextOverridesAutoDetection(t *testing.T) {
 	setupGitRepo(t, repoDir, "https://github.com/user/myproject.git", "main")
 
 	// When: I insert with explicit git context that differs from auto-detection
-	database, err := db.New(dbPath_val)
+	database, err := db.NewForTesting(dbPath_val)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -95,7 +95,7 @@ func TestScenario11_InsertCommandWithTimestampOverride(t *testing.T) {
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath_val := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath_val)
+	database, err := db.NewForTesting(dbPath_val)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -120,7 +120,7 @@ func TestScenario12_InsertFailsWithMissingRequiredParameters(t *testing.T) {
 	dbPath_val := filepath.Join(tempDir, "history.db")
 
 	// Create database first
-	database, err := db.New(dbPath_val)
+	database, err := db.NewForTesting(dbPath_val)
 	require.NoError(t, err, "failed to create database")
 	database.Close()
 
@@ -156,7 +156,7 @@ func TestScenario14_DatabaseHandlesConcurrentInserts(t *testing.T) {
 
 	// Create database and table first to avoid concurrent table creation
 	{
-		database, err := db.New(dbPath_val)
+		database, err := db.NewForTesting(dbPath_val)
 		require.NoError(t, err, "failed to create database")
 		database.Close()
 	}
@@ -172,7 +172,7 @@ func TestScenario14_DatabaseHandlesConcurrentInserts(t *testing.T) {
 			defer wg.Done()
 
 			// Each goroutine uses its own database connection
-			database, err := db.New(dbPath_val)
+			database, err := db.NewForTesting(dbPath_val)
 			if err != nil {
 				errors[index] = err
 				return
@@ -200,7 +200,7 @@ func TestScenario14_DatabaseHandlesConcurrentInserts(t *testing.T) {
 	}
 
 	// And: both records should be in the database
-	database, err := db.New(dbPath_val)
+	database, err := db.NewForTesting(dbPath_val)
 	require.NoError(t, err, "failed to open database")
 	defer database.Close()
 
@@ -223,7 +223,7 @@ func TestScenario31_DatabaseCapturesSessionSourceOnInsert(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -264,6 +264,11 @@ func TestInsertCommandWithSourceTracking(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
+	// Initialize database first
+	initDB, err := db.NewForTesting(dbPath)
+	require.NoError(t, err)
+	initDB.Close()
+
 	// Run insert command with source tracking flags
 	rootCmd.SetArgs([]string{
 		"insert",
@@ -275,11 +280,11 @@ func TestInsertCommandWithSourceTracking(t *testing.T) {
 		"--db", dbPath,
 	})
 
-	err := rootCmd.Execute()
+	err = rootCmd.Execute()
 	require.NoError(t, err)
 
 	// Verify the command was inserted with source tracking
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -302,7 +307,7 @@ func TestScenario33_BashSessionTrackingWorksIndependently(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
 
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -388,7 +393,7 @@ func TestInsertCommandWithLeadingSpace(t *testing.T) {
 		require.NoError(t, err, "insert should succeed even with leading space")
 
 		// And: the database should be empty (command was not inserted)
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -404,6 +409,11 @@ func TestInsertCommandWithLeadingSpace(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
 
+		// Initialize database first
+		initDB, err := db.NewForTesting(dbPath)
+		require.NoError(t, err)
+		initDB.Close()
+
 		// When: I insert a command without a leading space
 		rootCmd.SetArgs([]string{
 			"insert",
@@ -413,11 +423,11 @@ func TestInsertCommandWithLeadingSpace(t *testing.T) {
 			"--db", dbPath,
 		})
 
-		err := rootCmd.Execute()
+		err = rootCmd.Execute()
 		require.NoError(t, err)
 
 		// Then: the command should be inserted
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -450,7 +460,7 @@ func TestInsertCommandWithLeadingSpace(t *testing.T) {
 		require.NoError(t, err, "insert should succeed")
 
 		// Then: the database should be empty
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -466,6 +476,11 @@ func TestInsertCommandWithLeadingSpace(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
 
+		// Initialize database first
+		initDB, err := db.NewForTesting(dbPath)
+		require.NoError(t, err)
+		initDB.Close()
+
 		// When: I insert a command with trailing space (but no leading space)
 		rootCmd.SetArgs([]string{
 			"insert",
@@ -475,11 +490,11 @@ func TestInsertCommandWithLeadingSpace(t *testing.T) {
 			"--db", dbPath,
 		})
 
-		err := rootCmd.Execute()
+		err = rootCmd.Execute()
 		require.NoError(t, err)
 
 		// Then: the command should be inserted (trailing space doesn't prevent insertion)
-		database, err := db.New(dbPath)
+		database, err := db.NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 

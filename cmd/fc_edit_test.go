@@ -74,7 +74,7 @@ func TestScenario_EditAndExecuteSingleCommand(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -121,7 +121,7 @@ func TestScenario_QuickExecuteWithoutEditing(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -156,7 +156,7 @@ func TestScenario_QuickExecuteWithMultipleSubstitutions(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -191,7 +191,7 @@ func TestScenario_CannotCombineSWithE(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -213,7 +213,7 @@ func TestScenario_InvalidRange(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -253,7 +253,7 @@ func TestScenario_EditWithSingleSubstitution(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -318,7 +318,7 @@ func TestScenario_NoArgsEditsLastCommand(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -381,7 +381,7 @@ func TestScenario_EditSingleEventByID(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -444,7 +444,7 @@ func TestScenario_EditSingleEventByString(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -507,7 +507,7 @@ func TestScenario_EditorExitsWithError(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -565,7 +565,7 @@ func TestScenario_EditSingleEventByNegativeNumber(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
@@ -628,7 +628,7 @@ func TestScenario_EditRangeWithNegativeNumbers(t *testing.T) {
 	// Setup database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := db.New(dbPath)
+	database, err := db.NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 

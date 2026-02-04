@@ -23,7 +23,7 @@ func TestScenario1_DatabaseInitializationOnFirstInsert(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "database should not exist yet")
 
 	// When: I run "shy insert --command 'ls -la' --dir '/home/user/projects' --status 0"
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -79,7 +79,7 @@ func TestScenario2_InsertSimpleCommandWithoutGitContext(t *testing.T) {
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -118,7 +118,7 @@ func TestScenario3_InsertCommandWithGitContext(t *testing.T) {
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -153,7 +153,7 @@ func TestScenario4_InsertCommandWithNonZeroExitStatus(t *testing.T) {
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -179,7 +179,7 @@ func TestScenario5_InsertMultipleCommandsSequentially(t *testing.T) {
 	// Given: the shy database exists and has 0 command records
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -235,7 +235,7 @@ func TestScenario6_InsertCommandWithSpecialCharacters(t *testing.T) {
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -259,7 +259,7 @@ func TestScenario7_InsertVeryLongCommand(t *testing.T) {
 	// Given: the shy database exists
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -287,7 +287,7 @@ func TestGetCommandsByDateRange(t *testing.T) {
 	// Given: the shy database exists with commands at different timestamps
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -351,7 +351,7 @@ func TestGetCommandsByDateRange_EmptyResult(t *testing.T) {
 	// Given: the shy database exists with no commands
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -370,7 +370,7 @@ func TestGetCommandsByDateRange_BoundaryConditions(t *testing.T) {
 	// Given: the shy database exists with commands at boundary times
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "history.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err, "failed to create database")
 	defer database.Close()
 
@@ -408,7 +408,7 @@ func TestGetContextSummary(t *testing.T) {
 		// Given: database with commands in multiple contexts
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -465,7 +465,7 @@ func TestGetContextSummary(t *testing.T) {
 		// Given: database with commands in non-git directory
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -498,7 +498,7 @@ func TestGetContextSummary(t *testing.T) {
 		// Given: database with no commands in date range
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -516,7 +516,7 @@ func TestGetContextSummary(t *testing.T) {
 		// Given: database with multiple branches in same working directory
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -565,7 +565,7 @@ func TestGetContextSummary(t *testing.T) {
 		// Given: database with contexts having equal duration but different command counts
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -630,7 +630,7 @@ func TestGetCommandsByRange(t *testing.T) {
 		// Given: database with duplicate commands
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -682,7 +682,7 @@ func TestGetCommandsByRange(t *testing.T) {
 	t.Run("handles empty range", func(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -697,7 +697,7 @@ func TestGetCommandsByRange(t *testing.T) {
 	t.Run("handles range with no duplicates", func(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -723,7 +723,7 @@ func TestGetCommandsByRangeWithPattern(t *testing.T) {
 		// Given: database with duplicate commands
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -770,7 +770,7 @@ func TestGetCommandsByRangeWithPattern(t *testing.T) {
 	t.Run("handles pattern with no matches", func(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -793,7 +793,7 @@ func TestGetCommandsByRangeInternal(t *testing.T) {
 		// Given: database with commands from multiple sessions
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -837,7 +837,7 @@ func TestGetCommandsByRangeInternal(t *testing.T) {
 	t.Run("respects source_active flag", func(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -873,7 +873,7 @@ func TestGetCommandsByRangeWithPatternInternal(t *testing.T) {
 		// Given: database with commands from multiple sessions
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -918,7 +918,7 @@ func TestListCommandsInRange(t *testing.T) {
 		// Given: database with duplicate commands at different times
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -962,7 +962,7 @@ func TestListCommandsInRange(t *testing.T) {
 		// Given: database with many duplicate commands
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -990,7 +990,7 @@ func TestListCommandsInRange(t *testing.T) {
 	t.Run("handles timestamp boundaries", func(t *testing.T) {
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
-		database, err := New(dbPath)
+		database, err := NewForTesting(dbPath)
 		require.NoError(t, err)
 		defer database.Close()
 
@@ -1026,7 +1026,7 @@ func TestGetRecentCommandsWithoutConsecutiveDuplicates_UnionWithDirectory(t *tes
 	// Given: database with commands from different sessions and directories
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
-	database, err := New(dbPath)
+	database, err := NewForTesting(dbPath)
 	require.NoError(t, err)
 	defer database.Close()
 
