@@ -1,15 +1,15 @@
-# shy - Shell History Tracker
+# shy
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/chriserin/shy/main/LICENSE)
 [![Tests](https://github.com/chriserin/shy/actions/workflows/test.yml/badge.svg)](https://github.com/chriserin/shy/actions/workflows/test.yml)
 
-A command-line tool for tracking shell command history in SQLite with rich metadata and opinionated behaviour.
+An opinionated, performant, and metadata rich command history tool.
 
 - [Features](#features)
-- [Scopes](#scopes)
-- [Duplicates](#duplicates)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Scopes](#scopes)
+- [Duplicates](#duplicates)
 - [Integration](#integration)
   - [Progressive Integration](#progressive-integration)
   - [ZSH](#zsh)
@@ -29,6 +29,35 @@ A command-line tool for tracking shell command history in SQLite with rich metad
 - **Summarization**: Reports to help summarize a previous period's activity
 - **Opinionated Command Duplication Behaviour**
 - **Opinionated Context Scoping**
+
+## Installation
+
+Install from the [releases page](https://github.com/chriserin/shy/releases) or install with mise `mise install github:chriserin/shy`.
+
+## QUICK START
+
+Full, integration, just go for it:
+
+``` sh
+shy init-db # create the database
+```
+
+Somewhere in your dot files:
+
+```sh
+eval "$(shy init)"
+bindkey '^R' shy-shell-history # if you use fzf or native history search
+export ZSH_AUTOSUGGEST_STRATEGY=(shy_history) # if you use autosuggest
+zvm_after_init_commands+=(_shy_bind_viins) # if you use zvm
+zvm_after_init_commands+=(_shy_bind_viins_ctrl_r) # if you use zvm + fzf or native search
+export HISTSIZE=1 # fully minimize the zsh history system
+```
+
+If you just want to collect commands in parallel with your current zsh setup:
+
+```sh
+eval "$(shy init --record)" # anywhere in your dotfiles
+```
 
 ## Scopes
 
@@ -70,35 +99,6 @@ HIST_IGNORE_DUPS options.
 
 In `shy`, all commands are stored, enabling the application to be intentional
 about when duplicates are presented or not according to each use case.
-
-## Installation
-
-Install from the [releases page](https://github.com/chriserin/shy/releases) or install with mise `mise install github:chriserin/shy`.
-
-## QUICK START
-
-Full, integration, just go for it:
-
-``` sh
-shy init-db # create the database
-```
-
-Somewhere in your dot files:
-
-```sh
-eval "$(shy init)"
-bindkey '^R' shy-shell-history # if you use fzf or native history search
-export ZSH_AUTOSUGGEST_STRATEGY=(shy_history) # if you use autosuggest
-zvm_after_init_commands+=(_shy_bind_viins) # if you use zvm
-zvm_after_init_commands+=(_shy_bind_viins_ctrl_r) # if you use zvm + fzf or native search
-export HISTSIZE=1 # fully minimize the zsh history system
-```
-
-If you just want to collect commands in parallel with your current zsh setup:
-
-```sh
-eval "$(shy init --record)" # anywhere in your dotfiles
-```
 
 ## Integration
 
