@@ -1,300 +1,174 @@
-Feature: Yesterday's Work Summary - Phase 1
+Feature: Interactive Summary - Phase 1: Core Navigation
 
-  As a developer
-  I want to see a summary of yesterday's shell commands
-  So that I can quickly review my work and prepare for standups
+  The summary TUI launches with yesterday's contexts and supports
+  basic navigation: selecting contexts and moving between days.
 
   Background:
-    Given a shy database exists
-    And the current date is 2026-01-15
+    Given the database contains commands from the following days:
+      | date       | context                  | command_count |
+      | 2026-02-03 | ~/projects/shy:main      | 15            |
+      | 2026-02-03 | ~/projects/other:feature | 8             |
+      | 2026-02-04 | ~/projects/shy:main      | 42            |
+      | 2026-02-04 | ~/projects/shy:bugfix    | 12            |
+      | 2026-02-04 | ~/downloads              | 5             |
+    And today is 2026-02-05
 
-  # Basic Functionality
+  Scenario: Launch summary with yesterday's contexts
+    When I run "shy summary"
+    Then I see the header "Work Summary - 2026-02-04 (Yesterday)"
+    And I see the following contexts:
+      | context                | commands    |
+      | ~/projects/shy:main    | 42 commands |
+      | ~/projects/shy:bugfix  | 12 commands |
+      | ~/downloads            | 5 commands  |
+    And the first context is selected
 
-  Scenario: Display yesterday's commands with --yesterday flag
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text                      |
-      | 08:30:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git status                        |
-      | 09:15:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go build -o shy .                 |
-      | 14:20:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go test ./...                     |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "Yesterday's Work Summary - 2026-01-14"
-    And the output should contain "/home/user/projects/shy (github.com/chris/shy)"
-    And the output should contain "Branch: main"
-    And the output should contain "Morning (8:30am - 9:15am) - 2 commands"
-    And the output should contain "08:30:00  git status"
-    And the output should contain "09:15:00  go build -o shy ."
-    And the output should contain "Afternoon (2:20pm - 2:20pm) - 1 commands"
-    And the output should contain "14:20:00  go test ./..."
+  Scenario: Navigate down through contexts
+    Given I am viewing the summary for 2026-02-04
+    And "~/projects/shy:main" is selected
+    When I press "j"
+    Then "~/projects/shy:bugfix" is selected
+    When I press "j"
+    Then "~/downloads" is selected
 
-  Scenario: Display summary for specific date
-    Given the following commands were executed on 2026-01-10:
-      | timestamp  | working_dir             | git_repo              | git_branch | command_text    |
-      | 10:00:00   | /home/user/projects/app | github.com/user/app   | feature    | npm install     |
-      | 10:30:00   | /home/user/projects/app | github.com/user/app   | feature    | npm test        |
-    When I run "shy summary --date 2026-01-10 --all-commands"
-    Then the output should contain "Work Summary - 2026-01-10"
-    And the output should contain "/home/user/projects/app (github.com/user/app)"
-    And the output should contain "Branch: feature"
-    And the output should contain "Morning (10:00am - 10:30am) - 2 commands"
-    And the output should contain "10:00:00  npm install"
-    And the output should contain "10:30:00  npm test"
+  Scenario: Navigate up through contexts
+    Given I am viewing the summary for 2026-02-04
+    And "~/downloads" is selected
+    When I press "k"
+    Then "~/projects/shy:bugfix" is selected
 
-  Scenario: Display today's summary
-    Given the following commands were executed on 2026-01-15:
-      | timestamp  | working_dir             | git_repo              | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/app | github.com/user/app   | main       | git pull        |
-    When I run "shy summary --date today --all-commands"
-    Then the output should contain "Work Summary - 2026-01-15"
-    And the output should contain "09:00:00  git pull"
+  Scenario: Selection stops at boundaries
+    Given I am viewing the summary for 2026-02-04
+    And "~/downloads" is selected
+    When I press "j"
+    Then "~/downloads" is still selected
 
-  # Time Period Bucketing
+  Scenario: Navigate to previous day
+    Given I am viewing the summary for 2026-02-04
+    When I press "h"
+    Then I see the header "Work Summary - 2026-02-03"
+    And I see the following contexts:
+      | context                  | commands    |
+      | ~/projects/shy:main      | 15 commands |
+      | ~/projects/other:feature | 8 commands  |
 
-  Scenario: Commands distributed across all time periods
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text              |
-      | 02:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git commit -m "late night" |
-      | 08:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git status                |
-      | 13:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go test ./...             |
-      | 19:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git push                  |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "Night (2:00am - 2:00am) - 1 commands"
-    And the output should contain "02:00:00  git commit -m \"late night\""
-    And the output should contain "Morning (8:00am - 8:00am) - 1 commands"
-    And the output should contain "08:00:00  git status"
-    And the output should contain "Afternoon (1:00pm - 1:00pm) - 1 commands"
-    And the output should contain "13:00:00  go test ./..."
-    And the output should contain "Evening (7:00pm - 7:00pm) - 1 commands"
-    And the output should contain "19:00:00  git push"
+  Scenario: Navigate to next day
+    Given I am viewing the summary for 2026-02-03
+    When I press "l"
+    Then I see the header "Work Summary - 2026-02-04 (Yesterday)"
 
-  Scenario: Time period boundaries
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 05:59:59   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "night"    |
-      | 06:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "morning"  |
-      | 11:59:59   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "still morning" |
-      | 12:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "afternoon" |
-      | 17:59:59   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "still afternoon" |
-      | 18:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "evening"  |
-      | 23:59:59   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "still evening" |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "Night (5:59am - 5:59am) - 1 commands"
-    And the output should contain "05:59:59  echo \"night\""
-    And the output should contain "Morning (6:00am - 11:59am) - 2 commands"
-    And the output should contain "06:00:00  echo \"morning\""
-    And the output should contain "11:59:59  echo \"still morning\""
-    And the output should contain "Afternoon (12:00pm - 5:59pm) - 2 commands"
-    And the output should contain "12:00:00  echo \"afternoon\""
-    And the output should contain "17:59:59  echo \"still afternoon\""
-    And the output should contain "Evening (6:00pm - 11:59pm) - 2 commands"
-    And the output should contain "18:00:00  echo \"evening\""
-    And the output should contain "23:59:59  echo \"still evening\""
+  Scenario: Navigate to today with no commands
+    Given I am viewing the summary for 2026-02-04
+    When I press "l"
+    Then I see the header "Work Summary - 2026-02-05 (Today)"
+    And I see "No commands found"
 
-  # Multiple Contexts
+  Scenario: Cannot navigate past today
+    Given I am viewing the summary for 2026-02-05 (Today)
+    When I press "l"
+    Then I see the header "Work Summary - 2026-02-05 (Today)"
 
-  Scenario: Multiple repositories
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir             | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy    | main       | go build        |
-      | 10:00:00   | /home/user/projects/app | github.com/user/app     | feature    | npm install     |
-      | 11:00:00   | /home/user/projects/shy | github.com/chris/shy    | main       | go test         |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "/home/user/projects/app (github.com/user/app)"
-    And the output should contain "/home/user/projects/shy (github.com/chris/shy)"
-    And the output should contain "10:00:00  npm install"
-    And the output should contain "09:00:00  go build"
-    And the output should contain "11:00:00  go test"
+  Scenario: Jump to today
+    Given I am viewing the summary for 2026-02-03
+    When I press "t"
+    Then I see the header "Work Summary - 2026-02-05 (Today)"
 
-  Scenario: Multiple branches in same repository
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text                      |
-      | 08:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git checkout main                 |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go test ./...                     |
-      | 10:00:00   | /home/user/projects/shy | github.com/chris/shy   | feature-a  | git checkout -b feature-a         |
-      | 11:00:00   | /home/user/projects/shy | github.com/chris/shy   | feature-a  | vim cmd/new.go                    |
-      | 14:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git checkout main                 |
-      | 15:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | git merge feature-a               |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "/home/user/projects/shy (github.com/chris/shy)"
-    And the output should contain "Branch: feature-a"
-    And the output should contain "Branch: main"
-    And the branch "feature-a" section should contain "10:00:00  git checkout -b feature-a"
-    And the branch "feature-a" section should contain "11:00:00  vim cmd/new.go"
-    And the branch "main" section should contain "08:00:00  git checkout main"
-    And the branch "main" section should contain "09:00:00  go test ./..."
-    And the branch "main" section should contain "14:00:00  git checkout main"
-    And the branch "main" section should contain "15:00:00  git merge feature-a"
+  Scenario: Jump to yesterday
+    Given I am viewing the summary for 2026-02-03
+    When I press "y"
+    Then I see the header "Work Summary - 2026-02-04 (Yesterday)"
 
-  Scenario: Mixed git and non-git directories
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go build        |
-      | 10:00:00   | /home/user/downloads    | null                    | null       | wget file.zip   |
-      | 11:00:00   | /home/user/downloads    | null                    | null       | unzip file.zip  |
-      | 12:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go test         |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "/home/user/projects/shy (github.com/chris/shy)"
-    And the output should contain "Branch: main"
-    And the output should contain "/home/user/downloads"
-    And the output should contain "No git repository"
-    And the non-git section should contain "10:00:00  wget file.zip"
-    And the non-git section should contain "11:00:00  unzip file.zip"
+  Scenario: Selection resets when changing days
+    Given I am viewing the summary for 2026-02-04
+    And "~/downloads" is selected
+    When I press "h"
+    Then the first context is selected
 
-  # Edge Cases
+  Scenario: Quit the application
+    Given I am viewing the summary
+    When I press "q"
+    Then the application exits
 
-  Scenario: Empty day - no commands
-    Given no commands were executed on 2026-01-14
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "No commands found for 2026-01-14"
-    And the exit code should be 0
+  Scenario: Quit with Ctrl+C
+    Given I am viewing the summary
+    When I press "Ctrl+C"
+    Then the application exits
 
-  Scenario: Single command
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go build        |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "Morning (9:00am - 9:00am) - 1 commands"
-    And the output should contain "09:00:00  go build"
+  Scenario: Arrow keys work for navigation
+    Given I am viewing the summary for 2026-02-04
+    And the first context is selected
+    When I press "↓"
+    Then "~/projects/shy:bugfix" is selected
+    When I press "↑"
+    Then "~/projects/shy:main" is selected
 
-  Scenario: Commands at midnight boundary
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text       |
-      | 23:59:59   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "last second" |
-    And the following commands were executed on 2026-01-15:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text        |
-      | 00:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "first second" |
-    When I run "shy summary --date 2026-01-14 --all-commands"
-    Then the output should contain "23:59:59  echo \"last second\""
-    And the output should not contain "00:00:00  echo \"first second\""
-    When I run "shy summary --date 2026-01-15 --all-commands"
-    Then the output should contain "00:00:00  echo \"first second\""
-    And the output should not contain "23:59:59  echo \"last second\""
+  Scenario: Viewport scrolls to keep selection visible
+    Given I am viewing the summary for a day with 20 contexts
+    And the terminal height shows 10 contexts
+    And the first context is selected
+    When I press "j" 12 times
+    Then the selected context is visible in the viewport
 
-  Scenario: Commands with null git branch
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | null       | git init        |
-      | 10:00:00   | /home/user/projects/shy | github.com/chris/shy   | null       | touch README.md |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain "/home/user/projects/shy (github.com/chris/shy)"
-    And the output should contain "No branch"
-    And the output should contain "09:00:00  git init"
-    And the output should contain "10:00:00  touch README.md"
+  Scenario: Header shows focused indicator when app has focus
+    When I run "shy summary"
+    Then the header contains "●"
+    And the header does not contain "○"
 
-  Scenario: Very long command text
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text                                                      |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | curl -X POST https://api.example.com/v1/endpoint -H "Authorization: Bearer token" -d '{"key": "value", "data": [1, 2, 3, 4, 5]}' |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output should contain the full command text
-    And the command should not be truncated
+  Scenario: Header shows blurred indicator when app loses focus
+    Given I am viewing the summary
+    When the app loses focus
+    Then the header contains "○"
+    And the header does not contain "●"
 
-  # Summary Statistics
+  Scenario: Header restores focused indicator when app regains focus
+    Given I am viewing the summary
+    And the app has lost focus
+    When the app regains focus
+    Then the header contains "●"
 
-  Scenario: Summary statistics with single context
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go build        |
-      | 10:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go test         |
-      | 11:00:00   | /home/user/projects/shy | github.com/chris/shy   | feature    | vim new.go      |
-    When I run "shy summary --yesterday --all-commands"
-    Then the summary statistics should show:
-      | metric                | value |
-      | Total commands        | 3     |
-      | Unique contexts       | 1     |
-      | Branches worked on    | 2     |
+  Scenario: Contexts are ordered by command count descending
+    Given the database contains commands from yesterday:
+      | context                  | command_count |
+      | ~/projects/shy:main      | 5             |
+      | ~/projects/other:feature | 20            |
+      | ~/downloads              | 12            |
+    When I run "shy summary"
+    Then I see the following contexts in order:
+      | context                  | commands    |
+      | ~/projects/other:feature | 20 commands |
+      | ~/downloads              | 12 commands |
+      | ~/projects/shy:main      | 5 commands  |
 
-  Scenario: Summary statistics with multiple contexts
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir             | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy    | main       | go build        |
-      | 10:00:00   | /home/user/projects/app | github.com/user/app     | feature    | npm install     |
-      | 11:00:00   | /home/user/downloads    | null                    | null       | wget file       |
-    When I run "shy summary --yesterday --all-commands"
-    Then the summary statistics should show:
-      | metric                | value                         |
-      | Total commands        | 3                             |
-      | Unique contexts       | 3 (2 repos, 1 non-repo dir)   |
-      | Branches worked on    | 2                             |
+  Scenario: Long context name is truncated with ellipsis
+    Given the database contains commands from yesterday:
+      | context                                                          | command_count |
+      | ~/projects/very/deeply/nested/directory/structure/my-project:main | 10            |
+    When I run "shy summary"
+    Then the context is displayed truncated with "…" to fit the terminal width
 
-  # Output Format
+  Scenario: Command counts are right-aligned
+    Given the database contains commands from yesterday:
+      | context                  | command_count |
+      | ~/projects/shy:main      | 142           |
+      | ~/projects/other:feature | 8             |
+      | ~/downloads              | 42            |
+    When I run "shy summary"
+    Then the word "commands" is aligned across all context rows
 
-  Scenario: Verify hierarchical indentation
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go build        |
-    When I run "shy summary --yesterday --all-commands"
-    Then the output hierarchy should be:
-      """
-      Yesterday's Work Summary - 2026-01-14
-      ========================================
+  Scenario: Header includes day of the week
+    Given today is 2026-02-05 (Thursday)
+    When I run "shy summary"
+    Then I see the header "Work Summary ● Wednesday 2026-02-04 (Yesterday)"
 
-      /home/user/projects/shy (github.com/chris/shy)
-        Branch: main
-          Morning (9:00am - 9:00am) - 1 commands
-            09:00:00  go build
-      """
+  Scenario: Header includes day of the week for non-relative dates
+    Given today is 2026-02-05
+    And I am viewing the summary for 2026-02-01
+    Then I see the header "Work Summary ● Sunday 2026-02-01"
 
-  Scenario: Contexts sorted alphabetically
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir             | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/zzz-project  | github.com/user/zzz     | main       | make            |
-      | 10:00:00   | /home/user/aaa-project  | github.com/user/aaa     | main       | make            |
-      | 11:00:00   | /home/user/mmm-project  | github.com/user/mmm     | main       | make            |
-    When I run "shy summary --yesterday --all-commands"
-    Then the contexts should appear in order:
-      | /home/user/aaa-project |
-      | /home/user/mmm-project |
-      | /home/user/zzz-project |
-
-  Scenario: Branches sorted alphabetically within context
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | zeta       | echo "zeta"     |
-      | 10:00:00   | /home/user/projects/shy | github.com/chris/shy   | alpha      | echo "alpha"    |
-      | 11:00:00   | /home/user/projects/shy | github.com/chris/shy   | beta       | echo "beta"     |
-    When I run "shy summary --yesterday --all-commands"
-    Then the branches should appear in order:
-      | alpha |
-      | beta  |
-      | zeta  |
-
-  Scenario: Time periods shown chronologically
-    Given the following commands were executed on 2026-01-14:
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 19:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "evening"  |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "morning"  |
-      | 03:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "night"    |
-      | 14:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | echo "afternoon"|
-    When I run "shy summary --yesterday --all-commands"
-    Then the time periods should appear in order:
-      | Night      |
-      | Morning    |
-      | Afternoon  |
-      | Evening    |
-
-  # Date Parsing
-
-  Scenario: Invalid date format
-    When I run "shy summary --date invalid-date --all-commands"
-    Then the command should fail with error "invalid date format"
-    And the exit code should be 1
-
-  Scenario: Future date with no commands
-    When I run "shy summary --date 2026-12-31 --all-commands"
-    Then the output should contain "No commands found for 2026-12-31"
-    And the exit code should be 0
-
-  # Database Integration
-
-  Scenario: Custom database path
-    Given a custom database exists at "/tmp/custom-shy.db"
-    And the following commands were executed on 2026-01-14 in "/tmp/custom-shy.db":
-      | timestamp  | working_dir           | git_repo                | git_branch | command_text    |
-      | 09:00:00   | /home/user/projects/shy | github.com/chris/shy   | main       | go build        |
-    When I run "shy summary --db /tmp/custom-shy.db --yesterday --all-commands"
-    Then the output should contain "09:00:00  go build"
-
-  Scenario: Database file does not exist
-    When I run "shy summary --db /nonexistent/path.db --yesterday --all-commands"
-    Then the command should fail with error about database not found
-    And the exit code should be 1
+  Scenario: Home directory displays as full path
+    Given the database contains commands from yesterday:
+      | context     | command_count |
+      | /home/chris | 3             |
+    When I run "shy summary"
+    Then I see the context "/home/chris"
+    And I do not see the context "~"
