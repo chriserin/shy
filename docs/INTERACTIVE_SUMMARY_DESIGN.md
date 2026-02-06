@@ -216,7 +216,6 @@ In Command Detail View, the selected command stays centered in the session conte
 | `m`       | Toggle multi-run commands only        |
 | `a`       | Toggle all commands                   |
 | `/`       | Open filter input                     |
-| `Space`   | Expand/collapse selected context      |
 
 ### Context Detail View Navigation
 
@@ -230,8 +229,6 @@ In Command Detail View, the selected command stays centered in the session conte
 | `l`       | Next time period (day/week/month)     |
 | `H`       | Previous context (same time period)   |
 | `L`       | Next context (same time period)       |
-| `[`       | Jump to previous bucket               |
-| `]`       | Jump to next bucket                   |
 | `/`       | Filter commands in context            |
 
 ### Command Detail View Navigation
@@ -288,15 +285,6 @@ Three mutually exclusive display modes (only one active at a time):
 
 Visual indicator shows active mode in status bar.
 
-### Context Expansion
-
-In Summary View, contexts are collapsed by default (showing just context name and command count). Use `Enter` to view commands in a context for the full detail view, or use `Space` to expand inline.
-
-Expansion states:
-
-- **Collapsed** (default): Just the context header with total command count
-- **Expanded**: Header + bucket previews with first few commands per bucket + "more" indicator
-
 ## Data Model
 
 ### State
@@ -336,7 +324,6 @@ type Model struct {
 type ContextData struct {
     Key      summary.ContextKey
     Branches map[summary.BranchKey][]models.Command
-    Expanded bool
 }
 
 type View int
@@ -430,7 +417,6 @@ Launches the interactive TUI starting at yesterday. All navigation (date, time p
 ### Phase 3: Display Modes
 
 - All/Unique/Multi command toggles
-- Context expansion/collapse
 - Bucket-level navigation
 
 ### Phase 4: Advanced Features

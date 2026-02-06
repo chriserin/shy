@@ -19,6 +19,15 @@ const (
 	ContextDetailView
 )
 
+// DisplayMode controls which commands are shown based on frequency
+type DisplayMode int
+
+const (
+	AllMode    DisplayMode = iota
+	UniqueMode
+	MultiMode
+)
+
 // DetailBucket represents a time bucket with its label and commands
 type DetailBucket struct {
 	Label    string
@@ -52,6 +61,10 @@ type Model struct {
 	detailContextKey     summary.ContextKey
 	detailContextBranch  summary.BranchKey
 	pendingDetailReentry bool
+
+	// Display mode
+	displayMode       DisplayMode
+	detailFrequencies map[string]int // command text → count across entire context
 
 	// Selection
 	selectedIdx int
@@ -255,6 +268,18 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.currentDate = m.now().AddDate(0, 0, -1)
 		m.selectedIdx = 0
 		return m, m.loadContexts
+
+	case "u":
+		m.displayMode = UniqueMode
+		return m, nil
+
+	case "m":
+		m.displayMode = MultiMode
+		return m, nil
+
+	case "a":
+		m.displayMode = AllMode
+		return m, nil
 	}
 
 	return m, nil
@@ -326,6 +351,21 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.selectedIdx = 0
 		m.viewState = SummaryView
 		return m, m.loadContexts
+
+	case "u":
+		m.displayMode = UniqueMode
+		m.enterDetailView()
+		return m, nil
+
+	case "m":
+		m.displayMode = MultiMode
+		m.enterDetailView()
+		return m, nil
+
+	case "a":
+		m.displayMode = AllMode
+		m.enterDetailView()
+		return m, nil
 	}
 
 	return m, nil
@@ -337,8 +377,12 @@ func (m *Model) enterDetailView() {
 	m.detailContextKey = ctx.Key
 	m.detailContextBranch = ctx.Branch
 
-	// Bucket commands by hour
-	bucketMap := summary.BucketBy(ctx.Commands, summary.Hourly)
+	// Compute frequencies across entire context, then filter
+	m.detailFrequencies = commandFrequencies(ctx.Commands)
+	filtered := filterByMode(ctx.Commands, m.displayMode)
+
+	// Bucket filtered commands by hour
+	bucketMap := summary.BucketBy(filtered, summary.Hourly)
 	orderedIDs := summary.GetOrderedBuckets(bucketMap)
 
 	// Build detail buckets and flat command list
@@ -459,4 +503,40 @@ func (m *Model) DetailCmdIdx() int {
 
 func (m *Model) DetailScrollOffset() int {
 	return m.detailScrollOffset
+}
+
+func (m *Model) DisplayMode() DisplayMode {
+	return m.displayMode
+}
+
+// commandFrequencies counts occurrences of each command text
+func commandFrequencies(commands []models.Command) map[string]int {
+	freq := make(map[string]int)
+	for _, cmd := range commands {
+		freq[cmd.CommandText]++
+	}
+	return freq
+}
+
+// filterByMode returns commands matching the mode
+func filterByMode(commands []models.Command, mode DisplayMode) []models.Command {
+	if mode == AllMode {
+		return commands
+	}
+	freq := commandFrequencies(commands)
+	var result []models.Command
+	for _, cmd := range commands {
+		count := freq[cmd.CommandText]
+		if mode == UniqueMode && count == 1 {
+			result = append(result, cmd)
+		} else if mode == MultiMode && count > 1 {
+			result = append(result, cmd)
+		}
+	}
+	return result
+}
+
+// filteredCommandCount returns the count of commands matching the mode
+func filteredCommandCount(commands []models.Command, mode DisplayMode) int {
+	return len(filterByMode(commands, mode))
 }

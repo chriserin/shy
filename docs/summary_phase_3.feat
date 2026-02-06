@@ -1,0 +1,172 @@
+Feature: Interactive Summary - Phase 3: Display Modes & Bucket Navigation
+
+  Display modes let the user filter commands by frequency: all commands
+  (default), unique commands (executed exactly once), or multi-run commands
+  (executed more than once).
+
+  Command frequency is counted across the entire context (all buckets),
+  not per-bucket.
+
+  Background:
+    Given the database contains commands from the following days:
+      | date       | time  | context              | command              |
+      | 2026-02-04 | 08:15 | ~/projects/shy:main  | go build -o shy .    |
+      | 2026-02-04 | 08:22 | ~/projects/shy:main  | ./shy summary        |
+      | 2026-02-04 | 08:30 | ~/projects/shy:main  | go test ./... -v     |
+      | 2026-02-04 | 09:00 | ~/projects/shy:main  | go build -o shy .    |
+      | 2026-02-04 | 09:05 | ~/projects/shy:main  | git commit -m "feat" |
+      | 2026-02-04 | 09:15 | ~/projects/shy:main  | go build -o shy .    |
+      | 2026-02-04 | 09:30 | ~/projects/shy:main  | go test ./... -v     |
+      | 2026-02-04 | 14:20 | ~/projects/shy:main  | go test ./cmd -v     |
+      | 2026-02-04 | 08:00 | ~/downloads          | curl -O example.com  |
+      | 2026-02-04 | 08:10 | ~/downloads          | tar xzf archive.gz   |
+    And today is 2026-02-05
+    #
+    # ~/projects/shy:main command frequency (counted across context):
+    #   "go build -o shy ."   — 3 times (multi-run)
+    #   "go test ./... -v"    — 2 times (multi-run)
+    #   "./shy summary"       — 1 time  (unique)
+    #   "git commit -m "feat" — 1 time  (unique)
+    #   "go test ./cmd -v"    — 1 time  (unique)
+    #
+    # ~/downloads:
+    #   "curl -O example.com" — 1 time  (unique)
+    #   "tar xzf archive.gz"  — 1 time  (unique)
+
+  # --- Display Modes in Summary View ---
+
+  Scenario: Default mode "all" shows total command counts
+    Given I am viewing the summary for 2026-02-04
+    Then "~/projects/shy:main" shows "8 commands"
+    And "~/downloads" shows "2 commands"
+
+  Scenario: Unique mode shows count of commands executed exactly once
+    Given I am viewing the summary for 2026-02-04
+    When I press "u"
+    Then "~/projects/shy:main" shows "3 commands"
+    And "~/downloads" shows "2 commands"
+
+  Scenario: Multi mode shows count of multi-run command instances
+    Given I am viewing the summary for 2026-02-04
+    When I press "m"
+    Then "~/projects/shy:main" shows "5 commands"
+    And "~/downloads" shows "0 commands"
+
+  Scenario: All mode returns to total counts
+    Given I am viewing the summary for 2026-02-04
+    And unique mode is active
+    When I press "a"
+    Then "~/projects/shy:main" shows "8 commands"
+    And "~/downloads" shows "2 commands"
+
+  # --- Display Mode Switching ---
+
+  Scenario: Pressing "u" while already in unique mode stays in unique mode
+    Given I am viewing the summary for 2026-02-04
+    When I press "u"
+    Then unique mode is active
+    When I press "u"
+    Then unique mode is still active
+
+  Scenario: Switching from one mode to another
+    Given I am viewing the summary for 2026-02-04
+    When I press "u"
+    Then unique mode is active
+    When I press "m"
+    Then multi mode is active
+    And "~/projects/shy:main" shows "5 commands"
+
+  Scenario: Only "a" returns to all mode
+    Given I am viewing the summary for 2026-02-04
+    When I press "m"
+    Then multi mode is active
+    When I press "a"
+    Then all mode is active
+    And "~/projects/shy:main" shows "8 commands"
+
+  Scenario: Mode persists when entering and leaving detail view
+    Given I am viewing the summary for 2026-02-04
+    When I press "u"
+    And I press "Enter" on "~/projects/shy:main"
+    Then I see the Context Detail View
+    And unique mode is still active
+    When I press "Esc"
+    Then I see the Summary View
+    And unique mode is still active
+    And "~/projects/shy:main" shows "3 commands"
+
+  Scenario: Mode persists across date navigation
+    Given I am viewing the summary for 2026-02-04
+    When I press "u"
+    And I press "h" to go to 2026-02-03
+    Then unique mode is still active
+
+  # --- Display Modes in Context Detail View ---
+
+  Scenario: Unique mode filters commands in detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "u"
+    Then I see the following commands grouped by time bucket:
+      | bucket | commands             |
+      | 8am    | ./shy summary        |
+      | 9am    | git commit -m "feat" |
+      | 2pm    | go test ./cmd -v     |
+    And the 8am bucket does not contain "go build"
+    And the 8am bucket does not contain "go test ./..."
+
+  Scenario: Multi mode filters to multi-run commands in detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "m"
+    Then I see the following commands grouped by time bucket:
+      | bucket | commands                              |
+      | 8am    | go build -o shy ., go test ./... -v   |
+      | 9am    | go build -o shy ., go build -o shy ., go test ./... -v |
+    And I do not see the 2pm bucket
+
+  Scenario: Multi mode shows repeat count next to commands
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "m"
+    Then "go build -o shy ." shows "⟳ 3"
+    And "go test ./... -v" shows "⟳ 2"
+
+  Scenario: Buckets with no matching commands are hidden
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "m"
+    Then I do not see the 2pm bucket
+    And the 8am and 9am buckets are visible
+
+  Scenario: All mode shows every command in detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And multi mode is active
+    When I press "a"
+    Then I see all 8 commands across 3 buckets
+    And the 8am, 9am, and 2pm buckets are visible
+
+  Scenario: Changing mode resets selection to first visible command
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And I have navigated to the 5th command
+    When I press "u"
+    Then the first visible command is selected
+
+  Scenario: Detail view for context with no multi-run commands
+    Given I am viewing the Context Detail View for "~/downloads"
+    When I press "m"
+    Then I see "No commands found"
+    And the status bar does not show "[j/k] Select"
+
+  # --- Status Bar ---
+
+  Scenario: Status bar shows display mode keys in summary view
+    Given I am viewing the summary for 2026-02-04
+    Then the status bar shows "[u] Uniq"
+    And the status bar shows "[m] Multi"
+
+  Scenario: Status bar shows active mode indicator
+    Given I am viewing the summary for 2026-02-04
+    When I press "u"
+    Then the status bar indicates unique mode is active
+
+  Scenario: Status bar shows display mode keys in detail view
+    Given I am viewing the Context Detail View
+    Then the status bar shows "[u] Uniq"
+    And the status bar shows "[m] Multi"

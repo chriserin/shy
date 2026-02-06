@@ -1,0 +1,248 @@
+Feature: Interactive Summary - Phase 2: View Commands
+
+  The Context Detail View shows all commands within a selected context,
+  grouped by hourly time buckets. Users can navigate commands, switch
+  between contexts, and return to the summary view.
+
+  Background:
+    Given the database contains commands from the following days:
+      | date       | time  | context                  | command              |
+      | 2026-02-04 | 08:15 | ~/projects/shy:main      | go build -o shy .    |
+      | 2026-02-04 | 08:22 | ~/projects/shy:main      | ./shy summary        |
+      | 2026-02-04 | 08:30 | ~/projects/shy:main      | go test ./... -v     |
+      | 2026-02-04 | 09:00 | ~/projects/shy:main      | git commit -m "feat" |
+      | 2026-02-04 | 09:05 | ~/projects/shy:main      | go build -o shy .    |
+      | 2026-02-04 | 09:30 | ~/projects/shy:main      | git push             |
+      | 2026-02-04 | 14:20 | ~/projects/shy:main      | shy summary          |
+      | 2026-02-04 | 14:25 | ~/projects/shy:main      | go test ./cmd -v     |
+      | 2026-02-04 | 08:00 | ~/projects/shy:bugfix    | git checkout bugfix  |
+      | 2026-02-04 | 08:10 | ~/projects/shy:bugfix    | go test ./... -v     |
+      | 2026-02-04 | 08:45 | ~/projects/shy:bugfix    | git diff             |
+      | 2026-02-04 | 10:00 | ~/downloads              | curl -O example.com  |
+      | 2026-02-04 | 10:05 | ~/downloads              | tar xzf archive.gz   |
+    And today is 2026-02-05
+
+  # --- Entering Context Detail View ---
+
+  Scenario: View commands for selected context
+    Given I am viewing the summary for 2026-02-04
+    And "~/projects/shy:main" is selected
+    When I press "Enter"
+    Then I see the Context Detail View
+    And the header shows "~/projects/shy:main ● Wednesday 2026-02-04 (Yesterday)"
+    And I see the following commands grouped by time bucket:
+      | bucket | commands                               |
+      | 8am    | go build -o shy ., ./shy summary, go test ./... -v |
+      | 9am    | git commit -m "feat", go build -o shy ., git push  |
+      | 2pm    | shy summary, go test ./cmd -v                      |
+
+  Scenario: Context detail header has consistent layout with summary view
+    Given I am viewing the summary for 2026-02-04
+    And "~/projects/shy:main" is selected
+    When I press "Enter"
+    Then the header shows the context name in place of "Work Summary"
+    And the header shows the focus dot "●"
+    And the header shows "Wednesday 2026-02-04 (Yesterday)" after the dot
+
+  Scenario: Context detail header shows focus indicator
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    Then the header contains "●"
+    When the app loses focus
+    Then the header contains "○"
+    And the header does not contain "●"
+
+  Scenario: Command count is not shown in context detail view
+    Given I am viewing the summary for 2026-02-04
+    And "~/projects/shy:main" is selected
+    When I press "Enter"
+    Then I do not see "commands" in the view
+
+  # --- Command Navigation ---
+
+  Scenario: First command is selected when entering context detail
+    Given I am viewing the summary for 2026-02-04
+    And "~/projects/shy:main" is selected
+    When I press "Enter"
+    Then the first command "go build -o shy ." is selected
+
+  Scenario: Navigate down through commands
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And "go build -o shy ." is selected
+    When I press "j"
+    Then "./shy summary" is selected
+    When I press "j"
+    Then "go test ./... -v" is selected
+    When I press "j"
+    Then "git commit -m \"feat\"" is selected
+
+  Scenario: Navigate up through commands
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And "git commit -m \"feat\"" is selected
+    When I press "k"
+    Then "go test ./... -v" is selected
+
+  Scenario: Selection skips bucket headers
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And "go test ./... -v" is the last command in the 8am bucket
+    When I press "j"
+    Then "git commit -m \"feat\"" is selected
+    And the selection skips the "9am" bucket header
+
+  Scenario: Selection stops at first command
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And "go build -o shy ." is selected
+    When I press "k"
+    Then "go build -o shy ." is still selected
+
+  Scenario: Selection stops at last command
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And "go test ./cmd -v" is selected
+    When I press "j"
+    Then "go test ./cmd -v" is still selected
+
+  Scenario: Arrow keys work in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And "go build -o shy ." is selected
+    When I press "↓"
+    Then "./shy summary" is selected
+    When I press "↑"
+    Then "go build -o shy ." is selected
+
+  # --- Command Timestamps ---
+
+  Scenario: Commands show minute-only timestamps within buckets
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    Then I see the following in the 8am bucket:
+      | timestamp | command           |
+      | :15       | go build -o shy . |
+      | :22       | ./shy summary     |
+      | :30       | go test ./... -v  |
+
+  # --- Back Navigation ---
+
+  Scenario: Return to summary view with Esc
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "Esc"
+    Then I see the Summary View
+    And "~/projects/shy:main" is selected
+
+  Scenario: Selection is preserved when returning to summary view
+    Given I am viewing the summary for 2026-02-04
+    And "~/projects/shy:bugfix" is selected
+    When I press "Enter"
+    Then I see the Context Detail View for "~/projects/shy:bugfix"
+    When I press "Esc"
+    Then I see the Summary View
+    And "~/projects/shy:bugfix" is selected
+
+  # --- Context Switching ---
+
+  Scenario: Switch to next context with L
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "L"
+    Then I see the Context Detail View for "~/projects/shy:bugfix"
+    And the first command is selected
+
+  Scenario: Switch to previous context with H
+    Given I am viewing the Context Detail View for "~/projects/shy:bugfix"
+    When I press "H"
+    Then I see the Context Detail View for "~/projects/shy:main"
+    And the first command is selected
+
+  Scenario: Context switching stops at first context
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "H"
+    Then I am still viewing "~/projects/shy:main"
+
+  Scenario: Context switching stops at last context
+    Given I am viewing the Context Detail View for "~/downloads"
+    When I press "L"
+    Then I am still viewing "~/downloads"
+
+  Scenario: Context switching follows summary view ordering
+    Given the contexts in the summary are ordered:
+      | context               |
+      | ~/projects/shy:main   |
+      | ~/projects/shy:bugfix |
+      | ~/downloads           |
+    And I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "L"
+    Then I see the Context Detail View for "~/projects/shy:bugfix"
+    When I press "L"
+    Then I see the Context Detail View for "~/downloads"
+
+  # --- Time Navigation in Context Detail View ---
+
+  Scenario: Navigate to previous day in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04
+    When I press "h"
+    Then I see the Context Detail View for "~/projects/shy:main" on 2026-02-03
+
+  Scenario: Navigate to next day in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-03
+    When I press "l"
+    Then I see the Context Detail View for "~/projects/shy:main" on 2026-02-04
+
+  Scenario: Navigate to next day with empty context
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04
+    And "~/projects/shy:main" has no commands on 2026-02-05
+    When I press "l"
+    Then I see the Context Detail View for "~/projects/shy:main" on 2026-02-05
+    And I see "No commands found"
+    And the header shows "~/projects/shy:main"
+
+  Scenario: Cannot navigate past today in context detail view
+    Given I am viewing the Context Detail View on 2026-02-05 (Today)
+    When I press "l"
+    Then the date remains 2026-02-05
+
+  Scenario: Jump to today from context detail view
+    Given I am viewing the Context Detail View on 2026-02-03
+    When I press "t"
+    Then I see the Summary View for 2026-02-05 (Today)
+
+  Scenario: Jump to yesterday from context detail view
+    Given I am viewing the Context Detail View on 2026-02-03
+    When I press "y"
+    Then I see the Summary View for 2026-02-04 (Yesterday)
+
+  # --- Quit from Context Detail View ---
+
+  Scenario: Quit from context detail view
+    Given I am viewing the Context Detail View
+    When I press "q"
+    Then the application exits
+
+  # --- Empty State ---
+
+  Scenario: Context detail view shows empty state when no commands match
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    And a filter is active that matches no commands
+    Then I see "No commands found"
+    And the status bar does not show "[j/k] Select"
+    And the status bar shows "[Esc] Back"
+    And the status bar shows "[h/l] Time"
+    And the status bar shows "[H/L] Context"
+
+  # --- Viewport Scrolling ---
+
+  Scenario: Detail view with many commands fits within window
+    Given I am viewing the Context Detail View for a context with 30 commands
+    And the window height is 15 lines
+    Then the header is visible
+    And the status bar is visible
+    And only a subset of commands are shown in the view
+
+  Scenario: Scrolling keeps selected command visible
+    Given I am viewing the Context Detail View for a context with 30 commands
+    And the window height is 15 lines
+    When I press "j" enough times to pass the visible area
+    Then the selected command is visible in the view
+    And the header is visible
+    And the status bar is visible
+
+  # --- Status Bar ---
+
+  Scenario: Status bar shows context detail key hints
+    Given I am viewing the Context Detail View
+    Then the status bar shows "[j/k] Select  [Esc] Back  [h/l] Time  [H/L] Context"

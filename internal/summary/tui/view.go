@@ -67,8 +67,9 @@ func (m *Model) renderSummaryView() string {
 		// Calculate the max count width for alignment
 		maxCount := 0
 		for _, ctx := range m.contexts {
-			if ctx.CommandCount > maxCount {
-				maxCount = ctx.CommandCount
+			c := filteredCommandCount(ctx.Commands, m.displayMode)
+			if c > maxCount {
+				maxCount = c
 			}
 		}
 		countWidth := countColumnWidth(maxCount)
@@ -203,6 +204,12 @@ func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {
 		cmdText = parts[0] + " ↵"
 	}
 
+	if m.displayMode == MultiMode {
+		if count, ok := m.detailFrequencies[cmd.CommandText]; ok && count > 1 {
+			cmdText = cmdText + fmt.Sprintf("  ⟳ %d", count)
+		}
+	}
+
 	line := prefix + "  " + minute + "  " + cmdText
 
 	if selected {
@@ -255,8 +262,9 @@ func (m *Model) renderContextItem(ctx ContextItem, selected bool, width int, cou
 	name := formatContextName(ctx.Key, ctx.Branch)
 
 	// Format command count
-	countText := fmt.Sprintf("%d commands", ctx.CommandCount)
-	if ctx.CommandCount == 1 {
+	count := filteredCommandCount(ctx.Commands, m.displayMode)
+	countText := fmt.Sprintf("%d commands", count)
+	if count == 1 {
 		countText = "1 command "
 	}
 
@@ -329,12 +337,24 @@ func formatDir(path string) string {
 	return summary.TildePath(path)
 }
 
+func (m *Model) modeHint() string {
+	switch m.displayMode {
+	case UniqueMode:
+		return "[u] *Uniq*  [m] Multi  [a] All"
+	case MultiMode:
+		return "[u] Uniq  [m] *Multi*  [a] All"
+	default:
+		return "[u] Uniq  [m] Multi"
+	}
+}
+
 func (m *Model) renderStatusBar() string {
+	hint := m.modeHint()
 	if m.viewState == ContextDetailView {
 		if len(m.detailCommands) == 0 {
-			return statusBarStyle.Render("[Esc] Back  [h/l] Time  [H/L] Context")
+			return statusBarStyle.Render("[Esc] Back  [h/l] Time  [H/L] Context  " + hint)
 		}
-		return statusBarStyle.Render("[j/k] Select  [Esc] Back  [h/l] Time  [H/L] Context")
+		return statusBarStyle.Render("[j/k] Select  [Esc] Back  [h/l] Time  [H/L] Context  " + hint)
 	}
-	return statusBarStyle.Render("[j/k] Select  [Enter] View commands  [h/l] Time  [t] Today  [y] Yesterday  [q] Quit")
+	return statusBarStyle.Render("[j/k] Select  [Enter] View commands  [h/l] Time  [t] Today  [y] Yesterday  [q] Quit  " + hint)
 }
