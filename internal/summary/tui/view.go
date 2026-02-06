@@ -59,8 +59,10 @@ func (m *Model) renderSummaryView() string {
 	b.WriteString("\n\n")
 
 	// Context list
+	contentLines := 0
 	if len(m.contexts) == 0 {
 		b.WriteString(margin + "No commands found\n")
+		contentLines = 1
 	} else {
 		// Calculate the max count width for alignment
 		maxCount := 0
@@ -74,6 +76,18 @@ func (m *Model) renderSummaryView() string {
 		for i, ctx := range m.contexts {
 			b.WriteString(margin + m.renderContextItem(ctx, i == m.selectedIdx, contentWidth, countWidth))
 			b.WriteString("\n")
+		}
+		contentLines = len(m.contexts)
+	}
+
+	// Pad to push footer to bottom
+	// Fixed lines: header(1) + ===(1) + blank(1) + content + blank(1) + ---(1) + statusbar(1) = 6 + content
+	if m.height > 0 {
+		avail := m.height - 6
+		if avail > contentLines {
+			for i := 0; i < avail-contentLines; i++ {
+				b.WriteString("\n")
+			}
 		}
 	}
 
@@ -106,8 +120,10 @@ func (m *Model) renderDetailView() string {
 	b.WriteString(margin + separatorStyle.Render(strings.Repeat("=", contentWidth)))
 	b.WriteString("\n")
 
+	contentLines := 0
 	if len(m.detailCommands) == 0 {
 		b.WriteString("\n" + margin + "No commands found\n")
+		contentLines = 2 // blank + "No commands found"
 	} else {
 		// Build all body lines
 		var bodyLines []string
@@ -149,6 +165,18 @@ func (m *Model) renderDetailView() string {
 		for _, line := range bodyLines {
 			b.WriteString(line)
 			b.WriteString("\n")
+		}
+		contentLines = len(bodyLines)
+	}
+
+	// Pad to push footer to bottom
+	// Fixed lines: header(1) + ===(1) + content + blank(1) + ---(1) + statusbar(1) = 5 + content
+	if m.height > 0 {
+		avail := m.height - 5
+		if avail > contentLines {
+			for i := 0; i < avail-contentLines; i++ {
+				b.WriteString("\n")
+			}
 		}
 	}
 
