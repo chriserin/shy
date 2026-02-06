@@ -10,23 +10,34 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chris/shy/internal/summary"
+	"github.com/chris/shy/pkg/models"
 )
 
 // Styles
 var (
-	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
-	focusDotStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
-	blurDotStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	selectedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	normalStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	countStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	separatorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	statusBarStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	headerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
+	focusDotStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
+	blurDotStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	selectedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	normalStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	countStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	separatorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	statusBarStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	bucketLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
 )
 
 const marginX = 2
 
 func (m *Model) renderView() string {
+	switch m.viewState {
+	case ContextDetailView:
+		return m.renderDetailView()
+	default:
+		return m.renderSummaryView()
+	}
+}
+
+func (m *Model) renderSummaryView() string {
 	var b strings.Builder
 
 	width := m.width
@@ -75,10 +86,112 @@ func (m *Model) renderView() string {
 	return b.String()
 }
 
+func (m *Model) renderDetailView() string {
+	var b strings.Builder
+
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+
+	contentWidth := width - 2*marginX
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+	margin := strings.Repeat(" ", marginX)
+
+	// Header (fixed)
+	b.WriteString(margin + m.renderHeader())
+	b.WriteString("\n")
+	b.WriteString(margin + separatorStyle.Render(strings.Repeat("=", contentWidth)))
+	b.WriteString("\n")
+
+	if len(m.detailCommands) == 0 {
+		b.WriteString("\n" + margin + "No commands found\n")
+	} else {
+		// Build all body lines
+		var bodyLines []string
+		cmdIdx := 0
+		for _, bucket := range m.detailBuckets {
+			// Blank line before bucket
+			bodyLines = append(bodyLines, "")
+			// Bucket header
+			label := bucketLabelStyle.Render(bucket.Label)
+			dashWidth := contentWidth - 2 - ansi.StringWidth(bucket.Label) - 1
+			if dashWidth < 2 {
+				dashWidth = 2
+			}
+			bodyLines = append(bodyLines, margin+"  "+label+" "+separatorStyle.Render(strings.Repeat("─", dashWidth)))
+			// Commands
+			for _, cmd := range bucket.Commands {
+				bodyLines = append(bodyLines, margin+m.renderDetailCommand(cmd, cmdIdx == m.detailCmdIdx))
+				cmdIdx++
+			}
+		}
+
+		// Apply viewport scrolling if height is set
+		if m.height > 0 {
+			avail := m.height - 5 // header(1) + ===(1) + blank(1) + ---footer(1) + statusbar(1)
+			if avail < 1 {
+				avail = 1
+			}
+			start := m.detailScrollOffset
+			if start > len(bodyLines) {
+				start = len(bodyLines)
+			}
+			end := start + avail
+			if end > len(bodyLines) {
+				end = len(bodyLines)
+			}
+			bodyLines = bodyLines[start:end]
+		}
+
+		for _, line := range bodyLines {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+
+	// Footer (fixed)
+	b.WriteString("\n")
+	b.WriteString(margin + separatorStyle.Render(strings.Repeat("─", contentWidth)))
+	b.WriteString("\n")
+	b.WriteString(margin + m.renderStatusBar())
+
+	return b.String()
+}
+
+func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {
+	prefix := "  "
+	if selected {
+		prefix = "▶ "
+	}
+
+	t := time.Unix(cmd.Timestamp, 0)
+	minute := t.Format(":04")
+
+	cmdText := cmd.CommandText
+	if parts := strings.SplitN(cmdText, "\n", 2); len(parts) > 1 {
+		cmdText = parts[0] + " ↵"
+	}
+
+	line := prefix + "  " + minute + "  " + cmdText
+
+	if selected {
+		return selectedStyle.Render(line)
+	}
+	return normalStyle.Render(line)
+}
+
 func (m *Model) renderHeader() string {
 	dot := focusDotStyle.Render("●")
 	if !m.focused {
 		dot = blurDotStyle.Render("○")
+	}
+
+	title := "Work Summary"
+	if m.viewState == ContextDetailView {
+		title = formatContextName(m.detailContextKey, m.detailContextBranch)
 	}
 
 	dateStr := m.currentDate.Format("2006-01-02")
@@ -86,9 +199,9 @@ func (m *Model) renderHeader() string {
 	relativeStr := m.relativeDateString()
 
 	if relativeStr != "" {
-		return headerStyle.Render("Work Summary") + " " + dot + " " + headerStyle.Render(fmt.Sprintf("%s %s (%s)", dayName, dateStr, relativeStr))
+		return headerStyle.Render(title) + " " + dot + " " + headerStyle.Render(fmt.Sprintf("%s %s (%s)", dayName, dateStr, relativeStr))
 	}
-	return headerStyle.Render("Work Summary") + " " + dot + " " + headerStyle.Render(fmt.Sprintf("%s %s", dayName, dateStr))
+	return headerStyle.Render(title) + " " + dot + " " + headerStyle.Render(fmt.Sprintf("%s %s", dayName, dateStr))
 }
 
 func (m *Model) relativeDateString() string {
@@ -189,5 +302,11 @@ func formatDir(path string) string {
 }
 
 func (m *Model) renderStatusBar() string {
-	return statusBarStyle.Render("[j/k] Select  [Enter] Drill in  [h/l] Time  [t] Today  [y] Yesterday  [q] Quit")
+	if m.viewState == ContextDetailView {
+		if len(m.detailCommands) == 0 {
+			return statusBarStyle.Render("[Esc] Back  [h/l] Time  [H/L] Context")
+		}
+		return statusBarStyle.Render("[j/k] Select  [Esc] Back  [h/l] Time  [H/L] Context")
+	}
+	return statusBarStyle.Render("[j/k] Select  [Enter] View commands  [h/l] Time  [t] Today  [y] Yesterday  [q] Quit")
 }

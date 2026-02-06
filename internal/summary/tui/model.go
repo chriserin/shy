@@ -1,19 +1,36 @@
 package tui
 
 import (
+	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/chris/shy/internal/db"
 	"github.com/chris/shy/internal/summary"
+	"github.com/chris/shy/pkg/models"
 )
+
+// ViewState represents which view is currently displayed
+type ViewState int
+
+const (
+	SummaryView ViewState = iota
+	ContextDetailView
+)
+
+// DetailBucket represents a time bucket with its label and commands
+type DetailBucket struct {
+	Label    string
+	Commands []models.Command
+}
 
 // ContextItem represents a context with its command count
 type ContextItem struct {
 	Key          summary.ContextKey
 	Branch       summary.BranchKey
 	CommandCount int
+	Commands     []models.Command
 }
 
 // Model represents the TUI state
@@ -25,6 +42,16 @@ type Model struct {
 	// Data
 	contexts    []ContextItem
 	currentDate time.Time
+
+	// View state
+	viewState            ViewState
+	detailBuckets        []DetailBucket
+	detailCommands       []models.Command
+	detailCmdIdx         int
+	detailScrollOffset   int
+	detailContextKey     summary.ContextKey
+	detailContextBranch  summary.BranchKey
+	pendingDetailReentry bool
 
 	// Selection
 	selectedIdx int
@@ -100,6 +127,7 @@ func (m *Model) loadContexts() tea.Msg {
 				Key:          ctxKey,
 				Branch:       branchKey,
 				CommandCount: len(cmds),
+				Commands:     cmds,
 			})
 		}
 	}
@@ -140,6 +168,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case contextsLoadedMsg:
 		m.contexts = msg.contexts
 		m.selectedIdx = 0
+		if m.pendingDetailReentry {
+			m.pendingDetailReentry = false
+			found := false
+			for i, ctx := range m.contexts {
+				if ctx.Key == m.detailContextKey && ctx.Branch == m.detailContextBranch {
+					m.selectedIdx = i
+					m.enterDetailView()
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Context not on this day — show empty detail view
+				m.viewState = ContextDetailView
+				m.detailBuckets = nil
+				m.detailCommands = nil
+				m.detailCmdIdx = 0
+				m.detailScrollOffset = 0
+			}
+		}
 		return m, nil
 
 	case errMsg:
@@ -151,6 +199,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch m.viewState {
+	case ContextDetailView:
+		return m.handleDetailKey(msg)
+	default:
+		return m.handleSummaryKey(msg)
+	}
+}
+
+func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -167,14 +224,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "enter":
+		if len(m.contexts) > 0 {
+			m.enterDetailView()
+		}
+		return m, nil
+
 	case "h":
-		// Previous day
 		m.currentDate = m.currentDate.AddDate(0, 0, -1)
 		m.selectedIdx = 0
 		return m, m.loadContexts
 
 	case "l":
-		// Next day (but not past today)
 		now := m.now()
 		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 		currentStart := time.Date(m.currentDate.Year(), m.currentDate.Month(), m.currentDate.Day(), 0, 0, 0, 0, time.Local)
@@ -186,19 +247,167 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, m.loadContexts
 
 	case "t":
-		// Jump to today
 		m.currentDate = m.now()
 		m.selectedIdx = 0
 		return m, m.loadContexts
 
 	case "y":
-		// Jump to yesterday
 		m.currentDate = m.now().AddDate(0, 0, -1)
 		m.selectedIdx = 0
 		return m, m.loadContexts
 	}
 
 	return m, nil
+}
+
+func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+
+	case "j", "down":
+		if m.detailCmdIdx < len(m.detailCommands)-1 {
+			m.detailCmdIdx++
+			m.ensureDetailCmdVisible()
+		}
+		return m, nil
+
+	case "k", "up":
+		if m.detailCmdIdx > 0 {
+			m.detailCmdIdx--
+			m.ensureDetailCmdVisible()
+		}
+		return m, nil
+
+	case "esc", "-":
+		m.viewState = SummaryView
+		return m, nil
+
+	case "H":
+		// Switch to previous context
+		if m.selectedIdx > 0 {
+			m.selectedIdx--
+			m.enterDetailView()
+		}
+		return m, nil
+
+	case "L":
+		// Switch to next context
+		if m.selectedIdx < len(m.contexts)-1 {
+			m.selectedIdx++
+			m.enterDetailView()
+		}
+		return m, nil
+
+	case "h":
+		m.currentDate = m.currentDate.AddDate(0, 0, -1)
+		m.pendingDetailReentry = true
+		return m, m.loadContexts
+
+	case "l":
+		now := m.now()
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+		currentStart := time.Date(m.currentDate.Year(), m.currentDate.Month(), m.currentDate.Day(), 0, 0, 0, 0, time.Local)
+		if !currentStart.Before(todayStart) {
+			return m, nil
+		}
+		m.currentDate = m.currentDate.AddDate(0, 0, 1)
+		m.pendingDetailReentry = true
+		return m, m.loadContexts
+
+	case "t":
+		m.currentDate = m.now()
+		m.selectedIdx = 0
+		m.viewState = SummaryView
+		return m, m.loadContexts
+
+	case "y":
+		m.currentDate = m.now().AddDate(0, 0, -1)
+		m.selectedIdx = 0
+		m.viewState = SummaryView
+		return m, m.loadContexts
+	}
+
+	return m, nil
+}
+
+func (m *Model) enterDetailView() {
+	ctx := m.contexts[m.selectedIdx]
+
+	m.detailContextKey = ctx.Key
+	m.detailContextBranch = ctx.Branch
+
+	// Bucket commands by hour
+	bucketMap := summary.BucketBy(ctx.Commands, summary.Hourly)
+	orderedIDs := summary.GetOrderedBuckets(bucketMap)
+
+	// Build detail buckets and flat command list
+	var buckets []DetailBucket
+	var flatCommands []models.Command
+
+	for _, id := range orderedIDs {
+		bucket := bucketMap[id]
+		label := summary.FormatHour(id)
+
+		// Sort commands within bucket by timestamp
+		cmds := make([]models.Command, len(bucket.Commands))
+		copy(cmds, bucket.Commands)
+		sort.Slice(cmds, func(i, j int) bool {
+			return cmds[i].Timestamp < cmds[j].Timestamp
+		})
+
+		buckets = append(buckets, DetailBucket{
+			Label:    label,
+			Commands: cmds,
+		})
+		flatCommands = append(flatCommands, cmds...)
+	}
+
+	m.viewState = ContextDetailView
+	m.detailBuckets = buckets
+	m.detailCommands = flatCommands
+	m.detailCmdIdx = 0
+	m.detailScrollOffset = 0
+}
+
+// detailCmdBodyLine returns the body-line index and bucket-start line of the
+// currently selected command. bucketStart points to the blank line before the
+// bucket header, so scrolling to it reveals the full bucket context.
+func (m *Model) detailCmdBodyLine() (cmdLine int, bucketStart int) {
+	line := 0
+	cmdSeen := 0
+	for _, bucket := range m.detailBuckets {
+		bStart := line
+		line++ // blank before bucket
+		line++ // bucket header
+		for range bucket.Commands {
+			if cmdSeen == m.detailCmdIdx {
+				return line, bStart
+			}
+			line++
+			cmdSeen++
+		}
+	}
+	return line, 0
+}
+
+// ensureDetailCmdVisible adjusts detailScrollOffset to keep selected command in view
+func (m *Model) ensureDetailCmdVisible() {
+	if m.height == 0 || len(m.detailCommands) == 0 {
+		return
+	}
+	avail := m.height - 5
+	if avail < 1 {
+		avail = 1
+	}
+	cmdLine, bucketStart := m.detailCmdBodyLine()
+	if cmdLine < m.detailScrollOffset {
+		// Scroll up: show the bucket header context above the command
+		m.detailScrollOffset = bucketStart
+	}
+	if cmdLine >= m.detailScrollOffset+avail {
+		m.detailScrollOffset = cmdLine - avail + 1
+	}
 }
 
 // View implements tea.Model
@@ -230,4 +439,24 @@ func (m *Model) CurrentDate() time.Time {
 
 func (m *Model) Focused() bool {
 	return m.focused
+}
+
+func (m *Model) ViewState() ViewState {
+	return m.viewState
+}
+
+func (m *Model) DetailBuckets() []DetailBucket {
+	return m.detailBuckets
+}
+
+func (m *Model) DetailCommands() []models.Command {
+	return m.detailCommands
+}
+
+func (m *Model) DetailCmdIdx() int {
+	return m.detailCmdIdx
+}
+
+func (m *Model) DetailScrollOffset() int {
+	return m.detailScrollOffset
 }

@@ -21,10 +21,16 @@ Retain the core visual elements of the current `shy summary`:
 
 ### Focus Indicator
 
-The header includes a dot after "Work Summary" to indicate focus state:
+The header includes a focus dot across all views to indicate focus state. The dot appears after the title element (view name or context name), before the date:
 
-- **Focused**: Solid dot `●` in the accent color (bright-magenta) — `Work Summary ● 2026-02-04 (Yesterday)`
-- **Blurred**: Outline dot `○` in dim color — `Work Summary ○ 2026-02-04 (Yesterday)`
+- **Focused**: Solid dot `●` in the accent color (bright-magenta)
+- **Blurred**: Outline dot `○` in dim color
+
+Examples:
+- Summary View: `Work Summary ● Wednesday 2026-02-04 (Yesterday)`
+- Context Detail View: `~/projects/shy:main ● Wednesday 2026-02-04 (Yesterday)`
+
+The date always appears in the same position (after the dot) regardless of which view is active.
 
 ## Views
 
@@ -41,7 +47,7 @@ Work Summary - 2026-02-04 (Yesterday)                      [Day] Week Month
   ~/downloads                                                   5 commands
 
 ────────────────────────────────────────────────────────────────────────────────
-[j/k] Select  [Enter] Drill in  [h/l] Time  [u] Uniq  [m] Multi  [a] All  [?] Help
+[j/k] Select  [Enter] View commands  [h/l] Time  [u] Uniq  [m] Multi  [a] All  [?] Help
 ```
 
 **Elements:**
@@ -54,10 +60,10 @@ Work Summary - 2026-02-04 (Yesterday)                      [Day] Week Month
 
 ### 2. Context Detail View
 
-Drilled-in view showing all commands within a single context. The command count is no longer shown since you're viewing the actual commands.
+Expanded view showing all commands within a single context. The command count is no longer shown since you're viewing the actual commands.
 
 ```
-~/projects/shy:main                                    2026-02-04 (Yesterday)
+~/projects/shy:main ● Wednesday 2026-02-04 (Yesterday)
 ================================================================================
 
   8am ─────────────────────────────────────────────────────────────────────────
@@ -84,18 +90,34 @@ Drilled-in view showing all commands within a single context. The command count 
 
 **Elements:**
 
-- Context header (directory:branch) with date
+- Header with context name, focus dot, and date in consistent position
 - All time buckets for this context
 - Command selection indicator (on commands only, not bucket headers)
 - Individual command list within each bucket
 - Filter indicator when active
+
+#### Context Detail View (Empty State)
+
+When a filter is active and no commands match, or if the context has no commands for the current time period:
+
+```
+~/projects/shy:main ● Wednesday 2026-02-04 (Yesterday)
+================================================================================
+
+  No commands found
+
+────────────────────────────────────────────────────────────────────────────────
+[Esc] Back  [h/l] Time  [H/L] Context  [/] Filter  [?] Help
+```
+
+The `[j/k] Select` hint is omitted since there is nothing to select. Navigation keys remain available so the user can change the date, switch contexts, or adjust the filter.
 
 #### Context Detail View (Week Period)
 
 When "Week" is the selected period, buckets are days instead of hours:
 
 ```
-~/projects/shy:main                                   Week of 2026-02-03
+~/projects/shy:main ● Week of 2026-02-03
 ================================================================================
 
   Mon Feb 3 ──────────────────────────────────────────────────────────────────
@@ -182,7 +204,7 @@ In Command Detail View, the selected command stays centered in the session conte
 | --------- | ------------------------------------- |
 | `j` / `↓` | Move selection down                   |
 | `k` / `↑` | Move selection up                     |
-| `Enter`   | Drill into selected context           |
+| `Enter`   | View commands in selected context     |
 | `h`       | Previous time period (day/week/month) |
 | `l`       | Next time period (day/week/month)     |
 | `t`       | Go to today                           |
@@ -251,7 +273,7 @@ Filter: go test█
 
 The filter always filters commands. In Summary View, the command counts update to show only matching commands (contexts with no matches show "0 commands"). In Context Detail View, only matching commands are shown.
 
-Filter persists when drilling in/out. Clear with empty filter.
+Filter persists when navigating between views. Clear with empty filter.
 
 ### Display Modes
 
@@ -268,7 +290,7 @@ Visual indicator shows active mode in status bar.
 
 ### Context Expansion
 
-In Summary View, contexts are collapsed by default (showing just context name and command count). Use `Enter` to drill into a context for the full detail view, or use `Space` to expand inline.
+In Summary View, contexts are collapsed by default (showing just context name and command count). Use `Enter` to view commands in a context for the full detail view, or use `Space` to expand inline.
 
 Expansion states:
 
@@ -345,8 +367,8 @@ const (
 ```go
 // Navigation
 type NavigateMsg struct { Direction Direction }
-type DrillInMsg struct {}
-type DrillOutMsg struct {}
+type ViewCommandsMsg struct {}
+type BackToSummaryMsg struct {}
 type SelectDateMsg struct { Date time.Time }
 type ChangePeriodMsg struct { Period Period }
 
@@ -398,7 +420,7 @@ Launches the interactive TUI starting at yesterday. All navigation (date, time p
 - Date navigation (prev/next day)
 - Context selection
 
-### Phase 2: Drill-down
+### Phase 2: View Commands
 
 - Context Detail View
 - Command navigation within context
