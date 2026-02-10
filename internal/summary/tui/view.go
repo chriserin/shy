@@ -27,6 +27,9 @@ var (
 	barAccentStyle = lipgloss.NewStyle().Background(lipgloss.Color("5")).Foreground(lipgloss.Color("15")).Bold(true)
 	barDimStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("8"))
 
+	// Hint key style (no background, for empty-state navigation hints)
+	hintKeyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
+
 	// Command detail styles (matching tv preview palette)
 	detailLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // bright-blue
 	detailErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // bright-red
@@ -125,8 +128,11 @@ func (m *Model) renderDetailView() string {
 
 	contentLines := 0
 	if len(m.detailCommands) == 0 {
-		b.WriteString("\n" + margin + "No commands found\n")
-		contentLines = 2 // blank + "No commands found"
+		emptyLines := m.renderEmptyDetailState(margin)
+		for _, line := range emptyLines {
+			b.WriteString(line + "\n")
+		}
+		contentLines = len(emptyLines)
 	} else {
 		// Build all body lines
 		var bodyLines []string
@@ -187,6 +193,153 @@ func (m *Model) renderDetailView() string {
 	b.WriteString(m.renderFooterBar())
 
 	return b.String()
+}
+
+// styledSegment is a piece of text with its visual width, used for word wrapping.
+type styledSegment struct {
+	text  string // rendered (may contain ANSI codes)
+	width int    // visual width
+}
+
+// emptyDetailMessageLines builds styled "No commands found in ..." lines,
+// wrapping at contentWidth. Data values are bold.
+func (m *Model) emptyDetailMessageLines(contentWidth int) []string {
+	bold := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	dim := normalStyle // white (not bold) for prose
+
+	name := formatContextName(m.detailContextKey, m.detailContextBranch)
+	date := periodDateLabel(m.currentDate, m.period, m.now)
+
+	segments := []styledSegment{
+		{dim.Render("No commands found in "), ansi.StringWidth("No commands found in ")},
+		{bold.Render(name), ansi.StringWidth(name)},
+		{dim.Render(" on "), ansi.StringWidth(" on ")},
+		{bold.Render(date), ansi.StringWidth(date)},
+	}
+	if m.filterText != "" {
+		q := fmt.Sprintf("%q", m.filterText)
+		segments = append(segments,
+			styledSegment{dim.Render(" matching "), ansi.StringWidth(" matching ")},
+			styledSegment{bold.Render(q), ansi.StringWidth(q)},
+		)
+	}
+	if m.displayMode == UniqueMode {
+		segments = append(segments,
+			styledSegment{dim.Render(" (unique)"), ansi.StringWidth(" (unique)")},
+		)
+	}
+
+	// Wrap segments into lines
+	var lines []string
+	var cur strings.Builder
+	curWidth := 0
+	for _, seg := range segments {
+		if curWidth > 0 && curWidth+seg.width > contentWidth {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			curWidth = 0
+		}
+		cur.WriteString(seg.text)
+		curWidth += seg.width
+	}
+	if cur.Len() > 0 {
+		lines = append(lines, cur.String())
+	}
+	return lines
+}
+
+// renderEmptyDetailState builds the lines for an empty detail view with
+// navigation hints showing adjacent contexts (H/L) and periods (h/l).
+func (m *Model) renderEmptyDetailState(margin string) []string {
+	var lines []string
+
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+	contentWidth := width - 2*marginX
+
+	lines = append(lines, "")
+	for _, msgLine := range m.emptyDetailMessageLines(contentWidth) {
+		lines = append(lines, margin+msgLine)
+	}
+	lines = append(lines, "")
+
+	// H/L: context hints — in orphaned state these target last/first context
+	orphaned := m.detailContextOrphaned()
+
+	// H: previous context (or last context when orphaned)
+	if orphaned && len(m.contexts) > 0 {
+		ctx := m.contexts[len(m.contexts)-1]
+		name := formatContextName(ctx.Key, ctx.Branch)
+		count := filteredCommandCount(ctx.Commands, m.displayMode, m.filterText)
+		lines = append(lines, margin+formatHintLine("H", name, count, contentWidth))
+	} else if !orphaned && m.selectedIdx > 0 {
+		prev := m.contexts[m.selectedIdx-1]
+		name := formatContextName(prev.Key, prev.Branch)
+		count := filteredCommandCount(prev.Commands, m.displayMode, m.filterText)
+		lines = append(lines, margin+formatHintLine("H", name, count, contentWidth))
+	} else {
+		lines = append(lines, margin+formatHintLineDisabled("H", contentWidth))
+	}
+
+	// L: next context (or first context when orphaned)
+	if orphaned && len(m.contexts) > 0 {
+		ctx := m.contexts[0]
+		name := formatContextName(ctx.Key, ctx.Branch)
+		count := filteredCommandCount(ctx.Commands, m.displayMode, m.filterText)
+		lines = append(lines, margin+formatHintLine("L", name, count, contentWidth))
+	} else if !orphaned && m.selectedIdx < len(m.contexts)-1 {
+		next := m.contexts[m.selectedIdx+1]
+		name := formatContextName(next.Key, next.Branch)
+		count := filteredCommandCount(next.Commands, m.displayMode, m.filterText)
+		lines = append(lines, margin+formatHintLine("L", name, count, contentWidth))
+	} else {
+		lines = append(lines, margin+formatHintLineDisabled("L", contentWidth))
+	}
+
+	// h: previous period
+	if m.emptyPrevPeriod != nil {
+		lines = append(lines, margin+formatHintLine("h", m.emptyPrevPeriod.dateLabel, m.emptyPrevPeriod.count, contentWidth))
+	} else {
+		lines = append(lines, margin+formatHintLineDisabled("h", contentWidth))
+	}
+
+	// l: next period
+	if m.emptyNextPeriod != nil {
+		lines = append(lines, margin+formatHintLine("l", m.emptyNextPeriod.dateLabel, m.emptyNextPeriod.count, contentWidth))
+	} else {
+		lines = append(lines, margin+formatHintLineDisabled("l", contentWidth))
+	}
+
+	return lines
+}
+
+// formatHintLine renders a navigation hint: key in accent (no bg), label in normal, count in dim.
+func formatHintLine(key, label string, count int, width int) string {
+	countText := fmt.Sprintf("%d commands", count)
+	if count == 1 {
+		countText = "1 command"
+	}
+
+	keyPart := hintKeyStyle.Render(" " + key + " ")
+	labelPart := "  " + label
+
+	// Compute padding to right-align count
+	keyWidth := ansi.StringWidth(keyPart)
+	labelWidth := ansi.StringWidth(labelPart)
+	countWidth := len(countText)
+	padding := width - keyWidth - labelWidth - countWidth
+	if padding < 1 {
+		padding = 1
+	}
+
+	return keyPart + normalStyle.Render(labelPart) + strings.Repeat(" ", padding) + countStyle.Render(countText)
+}
+
+// formatHintLineDisabled renders a dim hint line when the navigation option is unavailable.
+func formatHintLineDisabled(key string, width int) string {
+	return countStyle.Render(" " + key + " ")
 }
 
 func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {

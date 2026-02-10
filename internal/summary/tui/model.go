@@ -39,6 +39,15 @@ const (
 	MonthPeriod
 )
 
+// periodPeekData holds a label and command count for an adjacent period
+type periodPeekData struct {
+	dateLabel string
+	count     int
+}
+
+func (p *periodPeekData) DateLabel() string { return p.dateLabel }
+func (p *periodPeekData) Count() int        { return p.count }
+
 // DetailBucket represents a time bucket with its label and commands
 type DetailBucket struct {
 	Label    string
@@ -72,6 +81,10 @@ type Model struct {
 	detailContextKey     summary.ContextKey
 	detailContextBranch  summary.BranchKey
 	pendingDetailReentry bool
+
+	// Empty state peek data (adjacent period hints)
+	emptyPrevPeriod *periodPeekData
+	emptyNextPeriod *periodPeekData
 
 	// Command detail view
 	cmdDetailAll      []models.Command // full session context: [before..., target, after...]
@@ -175,11 +188,11 @@ func (m *Model) loadContexts() tea.Msg {
 	return contextsLoadedMsg{contexts: items}
 }
 
-// dateRange returns the start and end timestamps for the current period
-func (m *Model) dateRange() (int64, int64) {
-	year, month, day := m.currentDate.Date()
+// dateRangeForPeriod returns the start and end timestamps for the given date and period.
+func dateRangeForPeriod(date time.Time, period Period) (int64, int64) {
+	year, month, day := date.Date()
 
-	switch m.period {
+	switch period {
 	case WeekPeriod:
 		// Monday 00:00 → next Monday 00:00
 		d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
@@ -200,6 +213,23 @@ func (m *Model) dateRange() (int64, int64) {
 		startOfDay := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
 		endOfDay := startOfDay.AddDate(0, 0, 1)
 		return startOfDay.Unix(), endOfDay.Unix()
+	}
+}
+
+// dateRange returns the start and end timestamps for the current period
+func (m *Model) dateRange() (int64, int64) {
+	return dateRangeForPeriod(m.currentDate, m.period)
+}
+
+// adjacentDate returns the date shifted by one period in the given direction (-1 or +1).
+func adjacentDate(date time.Time, period Period, direction int) time.Time {
+	switch period {
+	case WeekPeriod:
+		return date.AddDate(0, 0, 7*direction)
+	case MonthPeriod:
+		return date.AddDate(0, direction, 0)
+	default:
+		return date.AddDate(0, 0, direction)
 	}
 }
 
@@ -375,9 +405,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i, ctx := range m.contexts {
 				if ctx.Key == m.detailContextKey && ctx.Branch == m.detailContextBranch {
 					m.selectedIdx = i
-					m.enterDetailView()
-					found = true
-					break
+					return m, m.enterDetailView()
 				}
 			}
 			if !found {
@@ -387,6 +415,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.detailCommands = nil
 				m.detailCmdIdx = 0
 				m.detailScrollOffset = 0
+				m.emptyPrevPeriod = nil
+				m.emptyNextPeriod = nil
+				return m, m.loadEmptyStatePeeks()
 			}
 		}
 		return m, nil
@@ -406,6 +437,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewState = CommandDetailView
 		return m, nil
 
+	case emptyStatePeeksMsg:
+		m.emptyPrevPeriod = msg.prev
+		m.emptyNextPeriod = msg.next
+		return m, nil
+
 	case errMsg:
 		// TODO: handle error display
 		return m, nil
@@ -423,7 +459,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	if msg.String() == "esc" && m.filterText != "" {
 		m.filterText = ""
 		if m.viewState == ContextDetailView {
-			m.enterDetailView()
+			return m, m.refreshDetailView()
 		}
 		return m, nil
 	}
@@ -457,7 +493,7 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 	case "enter":
 		if len(m.contexts) > 0 {
-			m.enterDetailView()
+			return m, m.enterDetailView()
 		}
 		return m, nil
 
@@ -549,17 +585,27 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 	case "H":
 		// Switch to previous context
-		if m.selectedIdx > 0 {
+		if m.detailContextOrphaned() {
+			if len(m.contexts) > 0 {
+				m.selectedIdx = len(m.contexts) - 1
+				return m, m.enterDetailView()
+			}
+		} else if m.selectedIdx > 0 {
 			m.selectedIdx--
-			m.enterDetailView()
+			return m, m.enterDetailView()
 		}
 		return m, nil
 
 	case "L":
 		// Switch to next context
-		if m.selectedIdx < len(m.contexts)-1 {
+		if m.detailContextOrphaned() {
+			if len(m.contexts) > 0 {
+				m.selectedIdx = 0
+				return m, m.enterDetailView()
+			}
+		} else if m.selectedIdx < len(m.contexts)-1 {
 			m.selectedIdx++
-			m.enterDetailView()
+			return m, m.enterDetailView()
 		}
 		return m, nil
 
@@ -592,13 +638,11 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 	case "u":
 		m.displayMode = UniqueMode
-		m.enterDetailView()
-		return m, nil
+		return m, m.refreshDetailView()
 
 	case "a":
 		m.displayMode = AllMode
-		m.enterDetailView()
-		return m, nil
+		return m, m.refreshDetailView()
 
 	case "/":
 		m.filterActive = true
@@ -675,7 +719,7 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.filterActive = false
 		// If in detail view, re-enter to apply filter
 		if m.viewState == ContextDetailView {
-			m.enterDetailView()
+			return m, m.refreshDetailView()
 		}
 		return m, nil
 
@@ -684,7 +728,7 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.filterText = m.filterPrevText
 		// If in detail view, re-enter to restore filter
 		if m.viewState == ContextDetailView {
-			m.enterDetailView()
+			return m, m.refreshDetailView()
 		}
 		return m, nil
 
@@ -698,14 +742,14 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.filterText = string(runes[:len(runes)-1])
 		// Live update in detail view
 		if m.viewState == ContextDetailView {
-			m.enterDetailView()
+			return m, m.refreshDetailView()
 		}
 		return m, nil
 
 	case tea.KeySpace:
 		m.filterText += " "
 		if m.viewState == ContextDetailView {
-			m.enterDetailView()
+			return m, m.refreshDetailView()
 		}
 		return m, nil
 
@@ -713,7 +757,7 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.filterText += string(msg.Runes)
 		// Live update in detail view
 		if m.viewState == ContextDetailView {
-			m.enterDetailView()
+			return m, m.refreshDetailView()
 		}
 		return m, nil
 	}
@@ -721,7 +765,45 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) enterDetailView() {
+// detailContextOrphaned returns true when the detail view's context is not
+// present in the current contexts list (e.g. after navigating to a period
+// where the context has no commands).
+func (m *Model) detailContextOrphaned() bool {
+	if m.selectedIdx >= len(m.contexts) {
+		return true
+	}
+	ctx := m.contexts[m.selectedIdx]
+	return ctx.Key != m.detailContextKey || ctx.Branch != m.detailContextBranch
+}
+
+// refreshDetailView re-applies filters to the current detail context without
+// switching to a different context. Used by filter handlers and ESC.
+func (m *Model) refreshDetailView() tea.Cmd {
+	if m.detailContextOrphaned() {
+		m.emptyPrevPeriod = nil
+		m.emptyNextPeriod = nil
+		m.detailBuckets = nil
+		m.detailCommands = nil
+		m.detailCmdIdx = 0
+		m.detailScrollOffset = 0
+		return m.loadEmptyStatePeeks()
+	}
+	return m.enterDetailView()
+}
+
+func (m *Model) enterDetailView() tea.Cmd {
+	m.emptyPrevPeriod = nil
+	m.emptyNextPeriod = nil
+
+	if len(m.contexts) == 0 || m.selectedIdx >= len(m.contexts) {
+		m.viewState = ContextDetailView
+		m.detailBuckets = nil
+		m.detailCommands = nil
+		m.detailCmdIdx = 0
+		m.detailScrollOffset = 0
+		return m.loadEmptyStatePeeks()
+	}
+
 	ctx := m.contexts[m.selectedIdx]
 
 	m.detailContextKey = ctx.Key
@@ -794,6 +876,95 @@ func (m *Model) enterDetailView() {
 	m.detailCommands = flatCommands
 	m.detailCmdIdx = 0
 	m.detailScrollOffset = 0
+
+	if len(flatCommands) == 0 {
+		return m.loadEmptyStatePeeks()
+	}
+	return nil
+}
+
+// loadEmptyStatePeeks returns an async command that queries adjacent periods
+// for the current context and returns peek data (date label + command count).
+func (m *Model) loadEmptyStatePeeks() tea.Cmd {
+	dbPath := m.dbPath
+	ctxKey := m.detailContextKey
+	ctxBranch := m.detailContextBranch
+	curDate := m.currentDate
+	period := m.period
+	mode := m.displayMode
+	filter := m.filterText
+	nowFn := m.now
+	isCurrentPeriod := m.isCurrentPeriod()
+
+	return func() tea.Msg {
+		database, err := db.New(dbPath)
+		if err != nil {
+			return emptyStatePeeksMsg{}
+		}
+		defer database.Close()
+
+		peekPeriod := func(date time.Time) *periodPeekData {
+			start, end := dateRangeForPeriod(date, period)
+			commands, err := database.GetCommandsByDateRange(start, end, nil)
+			if err != nil {
+				return nil
+			}
+			grouped := summary.GroupByContext(commands)
+			if branches, ok := grouped.Contexts[ctxKey]; ok {
+				if cmds, ok := branches[ctxBranch]; ok {
+					count := filteredCommandCount(cmds, mode, filter)
+					return &periodPeekData{
+						dateLabel: periodDateLabel(date, period, nowFn),
+						count:     count,
+					}
+				}
+			}
+			return &periodPeekData{
+				dateLabel: periodDateLabel(date, period, nowFn),
+				count:     0,
+			}
+		}
+
+		prevDate := adjacentDate(curDate, period, -1)
+		prev := peekPeriod(prevDate)
+
+		var next *periodPeekData
+		if !isCurrentPeriod {
+			nextDate := adjacentDate(curDate, period, 1)
+			next = peekPeriod(nextDate)
+		}
+
+		return emptyStatePeeksMsg{prev: prev, next: next}
+	}
+}
+
+// periodDateLabel formats a date label for a period, similar to dateDisplayString
+// but without trailing spaces or indicators.
+func periodDateLabel(date time.Time, period Period, nowFn func() time.Time) string {
+	currentYear := nowFn().Year()
+
+	switch period {
+	case WeekPeriod:
+		year, month, day := date.Date()
+		d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+		weekday := d.Weekday()
+		if weekday == time.Sunday {
+			weekday = 7
+		}
+		monday := d.AddDate(0, 0, -int(weekday-time.Monday))
+		if monday.Year() == currentYear {
+			return fmt.Sprintf("Week of %s", monday.Format("Jan 2"))
+		}
+		return fmt.Sprintf("Week of %s", monday.Format("Jan 2, 2006"))
+	case MonthPeriod:
+		return date.Format("January 2006")
+	default:
+		dayName := date.Format("Mon")
+		if date.Year() == currentYear {
+			return fmt.Sprintf("%s %s", dayName, date.Format("Jan 2"))
+		}
+		return fmt.Sprintf("%s %s", dayName, date.Format("Jan 2, 2006"))
+	}
 }
 
 // detailCmdBodyLine returns the body-line index and bucket-start line of the
@@ -854,6 +1025,11 @@ type commandContextLoadedMsg struct {
 	before []models.Command
 	target *models.Command
 	after  []models.Command
+}
+
+type emptyStatePeeksMsg struct {
+	prev *periodPeekData
+	next *periodPeekData
 }
 
 // Getters for testing
@@ -941,6 +1117,14 @@ func (m *Model) FilterText() string {
 
 func (m *Model) FilterActive() bool {
 	return m.filterActive
+}
+
+func (m *Model) EmptyPrevPeriod() *periodPeekData {
+	return m.emptyPrevPeriod
+}
+
+func (m *Model) EmptyNextPeriod() *periodPeekData {
+	return m.emptyNextPeriod
 }
 
 // filterBySubstring returns commands where CommandText contains the filter string

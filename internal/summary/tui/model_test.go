@@ -1678,7 +1678,7 @@ func TestDetailNavigateNextDayEmptyContext(t *testing.T) {
 	assert.Equal(t, today.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 
 	view := model.View()
-	assert.Contains(t, view, "No commands found")
+	assert.Contains(t, view, "No commands found in")
 	assert.Contains(t, view, ctxName)
 }
 
@@ -3051,4 +3051,291 @@ func TestFilterPersistsWhenSwitchingPeriods(t *testing.T) {
 	// Switch to month
 	pressBracketRight(model)
 	assert.Equal(t, "git", model.FilterText())
+}
+
+// === Empty State Navigation Hints Tests ===
+
+// TestEmptyDetailShowsContextHints tests H/L context hints in empty detail view.
+// This is synchronous and needs no DB peek.
+func TestEmptyDetailShowsContextHints(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	// Three contexts: shy:main (most commands), shy:bugfix, downloads
+	// "go build" is duplicated in shy:main so UniqueMode filters it to 0.
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 10, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 10, 0, "git status", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("bugfix")),
+		makeCommandWithText(yesterday, 11, 0, "ls -la", "/home/user/downloads", nil, nil),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Context 0 = shy:main (3 commands), then bugfix (1), downloads (1)
+	assert.Equal(t, 3, len(model.Contexts()))
+
+	// Enter detail for first context (shy:main)
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 3, len(model.DetailCommands()))
+
+	// Switch to UniqueMode — "go build" appears 3 times, so 0 unique commands remain
+	pressKey(model, 'u')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 0, len(model.DetailCommands()))
+
+	// The view should show all four hint keys (H, L, h, l)
+	view := model.View()
+	assert.Contains(t, view, "H")
+	assert.Contains(t, view, "L")
+	assert.Contains(t, view, "h")
+	assert.Contains(t, view, "l")
+
+	// L hint should show the next context's count
+	assert.Contains(t, view, "command")
+}
+
+// TestEmptyDetailShowsPeriodHints tests h/l period hints when detail is empty
+// due to filter. This requires DB peek to resolve adjacent periods.
+func TestEmptyDetailShowsPeriodHints(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+	dayBefore := yesterday.AddDate(0, 0, -1)
+
+	// Commands on two different days for the same context
+	commands := []models.Command{
+		makeCommandWithText(dayBefore, 9, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(dayBefore, 10, 0, "go test", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(dayBefore, 11, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 0, "git status", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter detail for the context
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 1, len(model.DetailCommands()))
+
+	// Apply a filter that matches nothing on yesterday but matches on dayBefore
+	pressSlash(model)
+	typeString(model, "go build")
+	pressEnter(model)
+
+	assert.Equal(t, 0, len(model.DetailCommands()))
+
+	// Period peek data should be loaded
+	assert.NotNil(t, model.EmptyPrevPeriod(), "should have prev period peek data")
+	assert.Equal(t, 2, model.EmptyPrevPeriod().Count(), "dayBefore has 2 'go build' commands (unique filtered out from 3, but mode is All)")
+
+	// View should show the h hint with the date label
+	view := model.View()
+	assert.Contains(t, view, "h")
+	assert.Contains(t, view, "2 commands")
+}
+
+// TestEmptyDetailNoForwardPeekAtCurrentPeriod tests that 'l' hint is not shown
+// when we are at the current period.
+func TestEmptyDetailNoForwardPeekAtCurrentPeriod(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+
+	// Only commands today in a single context
+	commands := []models.Command{
+		makeCommandWithText(today, 9, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(today, 9, 5, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Navigate to today
+	pressKey(model, 't')
+	pressEnter(model)
+
+	// Switch to UniqueMode — "go build" is duplicated, so 0 commands
+	pressKey(model, 'u')
+	assert.Equal(t, 0, len(model.DetailCommands()))
+
+	// Should not have a next period peek (we're at current period)
+	assert.Nil(t, model.EmptyNextPeriod(), "should not peek forward from current period")
+}
+
+// TestEmptyDetailOrphanedContextLGoesToFirst tests that L navigates to the
+// first available context when the current context is not in the period's list.
+func TestEmptyDetailOrphanedContextLGoesToFirst(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+	dayBefore := yesterday.AddDate(0, 0, -1)
+
+	// shy:main exists only on dayBefore, downloads exists on both days
+	commands := []models.Command{
+		makeCommandWithText(dayBefore, 9, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(dayBefore, 10, 0, "ls -la", "/home/user/downloads", nil, nil),
+		makeCommandWithText(yesterday, 11, 0, "cat file.txt", "/home/user/downloads", nil, nil),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Navigate to dayBefore (h twice from yesterday)
+	pressKey(model, 'h')
+	assert.Equal(t, 2, len(model.Contexts()))
+
+	// Enter shy:main (should be at index 0 — it has 1 command, same as downloads)
+	// Find shy:main's index
+	var mainIdx int
+	for i, ctx := range model.Contexts() {
+		if ctx.Branch == "main" {
+			mainIdx = i
+			break
+		}
+	}
+	// Navigate to shy:main and enter detail
+	for i := 0; i < mainIdx; i++ {
+		pressKey(model, 'j')
+	}
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 1, len(model.DetailCommands()))
+
+	// Navigate forward to yesterday — shy:main doesn't exist there
+	pressKey(model, 'l')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 0, len(model.DetailCommands()), "orphaned context has no commands")
+
+	// The empty state should show the L hint with downloads context name
+	view := model.View()
+	assert.Contains(t, view, "downloads", "L hint should show first available context name")
+
+	// Press L — should jump to the first available context (downloads)
+	pressShiftKey(model, 'L')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 0, model.SelectedIdx(), "L should select first context")
+	assert.True(t, len(model.DetailCommands()) > 0, "should have commands after L")
+}
+
+// TestEmptyDetailOrphanedContextHGoesToLast tests that H navigates to the
+// last available context when the current context is not in the period's list.
+func TestEmptyDetailOrphanedContextHGoesToLast(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+	dayBefore := yesterday.AddDate(0, 0, -1)
+
+	// shy:main exists only on dayBefore; downloads and projects exist on yesterday
+	commands := []models.Command{
+		makeCommandWithText(dayBefore, 9, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 10, 0, "ls -la", "/home/user/downloads", nil, nil),
+		makeCommandWithText(yesterday, 11, 0, "cat file.txt", "/home/user/projects/other", nil, nil),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Navigate to dayBefore
+	pressKey(model, 'h')
+
+	// Enter shy:main
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Navigate forward to yesterday — shy:main doesn't exist there
+	pressKey(model, 'l')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 0, len(model.DetailCommands()))
+
+	// The empty state should show the H hint with the last context's name
+	lastCtx := model.Contexts()[len(model.Contexts())-1]
+	lastName := formatContextName(lastCtx.Key, lastCtx.Branch)
+	view := model.View()
+	assert.Contains(t, view, lastName, "H hint should show last available context name")
+
+	// Press H — should jump to the last available context
+	pressShiftKey(model, 'H')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, len(model.Contexts())-1, model.SelectedIdx(), "H should select last context")
+	assert.True(t, len(model.DetailCommands()) > 0, "should have commands after H")
+}
+
+// TestEmptyDetailFilterDoesNotNavigate tests that typing in the filter bar
+// on the empty detail screen does not trigger navigation keys like 't'.
+func TestEmptyDetailFilterDoesNotNavigate(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	// One context with duplicate commands so UniqueMode empties it
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "go test", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "go test", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 10, "go test", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Switch to UniqueMode — all commands are duplicated, so 0 remain
+	pressKey(model, 'u')
+	assert.Equal(t, 0, len(model.DetailCommands()))
+
+	// Open filter and type "t" — should add to filter, not navigate
+	pressSlash(model)
+	assert.True(t, model.FilterActive())
+
+	typeString(model, "t")
+	assert.Equal(t, "t", model.FilterText(), "filter should contain 't'")
+	assert.Equal(t, ContextDetailView, model.ViewState(), "should stay in detail view")
+	assert.True(t, model.FilterActive(), "filter should still be active")
+}
+
+// TestEmptyDetailFilterOrphanedDoesNotSwitchContext tests that typing in the
+// filter bar on an orphaned empty detail screen does not switch to a different context.
+func TestEmptyDetailFilterOrphanedDoesNotSwitchContext(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+	dayBefore := yesterday.AddDate(0, 0, -1)
+
+	// shy:main exists only on dayBefore, downloads exists on yesterday
+	commands := []models.Command{
+		makeCommandWithText(dayBefore, 9, 0, "go build", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 10, 0, "ls -la", "/home/user/downloads", nil, nil),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Navigate to dayBefore
+	pressKey(model, 'h')
+
+	// Enter shy:main
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 1, len(model.DetailCommands()))
+
+	// Navigate forward to yesterday — shy:main doesn't exist there (orphaned)
+	pressKey(model, 'l')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 0, len(model.DetailCommands()))
+
+	// Remember the context key before filtering
+	headerBefore := model.View()
+	assert.Contains(t, headerBefore, "shy", "header should still show the orphaned context")
+
+	// Open filter and type "t" — should NOT switch to downloads
+	pressSlash(model)
+	assert.True(t, model.FilterActive())
+
+	typeString(model, "ls")
+	assert.Equal(t, "ls", model.FilterText())
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// The header should still reference the orphaned context
+	headerAfter := model.View()
+	assert.Contains(t, headerAfter, "shy:main", "header should still show orphaned context after filtering")
+	assert.Equal(t, 0, len(model.DetailCommands()), "should still show empty commands")
 }
