@@ -328,26 +328,22 @@ func (m *Model) renderFooterBar() string {
 		return content + barStyle.Render(strings.Repeat(" ", pad))
 	}
 
-	// Left: mode indicator (not shown in command detail view)
+	// Left: mode indicator (not shown in command detail view) + filter indicator
 	var left string
 	if m.viewState != CommandDetailView {
 		left = barAccentStyle.Render(" " + m.activeModeName() + " ")
 	}
-
-	// Right: filter text indicator
-	var right string
 	if m.filterText != "" {
-		right = barStyle.Render(" /" + m.filterText + " ")
+		left += barStyle.Render(" /" + m.filterText + " ")
 	}
 
 	leftWidth := ansi.StringWidth(left)
-	rightWidth := ansi.StringWidth(right)
-	padding := width - leftWidth - rightWidth
+	padding := width - leftWidth
 	if padding < 0 {
 		padding = 0
 	}
 
-	return left + barStyle.Render(strings.Repeat(" ", padding)) + right
+	return left + barStyle.Render(strings.Repeat(" ", padding))
 }
 
 func (m *Model) activeModeName() string {
