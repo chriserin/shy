@@ -981,8 +981,8 @@ func TestDetailCommandTimestamps(t *testing.T) {
 	assert.Contains(t, view, ":30")
 }
 
-// TestDetailReturnToSummaryWithEsc tests returning to summary view
-func TestDetailReturnToSummaryWithEsc(t *testing.T) {
+// TestDetailReturnToSummaryWithDash tests returning to summary view with '-'
+func TestDetailReturnToSummaryWithDash(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
 	yesterday := today.AddDate(0, 0, -1)
 
@@ -995,7 +995,7 @@ func TestDetailReturnToSummaryWithEsc(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	pressEsc(model)
+	pressKey(model, '-')
 	assert.Equal(t, SummaryView, model.ViewState())
 
 	view := model.View()
@@ -1024,7 +1024,7 @@ func TestDetailSelectionPreservedOnReturn(t *testing.T) {
 	view := model.View()
 	assert.Contains(t, view, "bugfix")
 
-	pressEsc(model)
+	pressKey(model, '-')
 	assert.Equal(t, SummaryView, model.ViewState())
 	assert.Equal(t, 1, model.SelectedIdx())
 	ctx = model.Contexts()[model.SelectedIdx()]
@@ -1545,7 +1545,7 @@ func TestModePersistsEnterLeaveDetail(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 	assert.Equal(t, UniqueMode, model.DisplayMode())
 
-	pressEsc(model)
+	pressKey(model, '-')
 	assert.Equal(t, SummaryView, model.ViewState())
 	assert.Equal(t, UniqueMode, model.DisplayMode())
 	view := model.View()
@@ -2046,32 +2046,6 @@ func TestCmdDetailNavigateAllCommands(t *testing.T) {
 	assert.Contains(t, view, allTexts[len(allTexts)-1])
 }
 
-// TestCmdDetailReturnWithEsc tests returning to context detail with Esc
-func TestCmdDetailReturnWithEsc(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase4aCommands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	// Enter context detail
-	pressEnter(model)
-	assert.Equal(t, ContextDetailView, model.ViewState())
-
-	// Navigate to second command
-	pressKey(model, 'j')
-	selectedCmd := model.DetailCommands()[model.DetailCmdIdx()]
-
-	// Enter command detail
-	target := selectedCmd
-	enterCommandDetailDirect(model, &target, nil, nil)
-	assert.Equal(t, CommandDetailView, model.ViewState())
-
-	// Press Esc to return
-	pressEsc(model)
-	assert.Equal(t, ContextDetailView, model.ViewState())
-}
-
 // TestCmdDetailReturnWithDash tests returning to context detail with '-'
 func TestCmdDetailReturnWithDash(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
@@ -2522,7 +2496,7 @@ func TestFilterPersistsAcrossViews(t *testing.T) {
 	assert.Equal(t, 3, len(model.DetailCommands()))
 
 	// Return
-	pressEsc(model)
+	pressKey(model, '-')
 	assert.Equal(t, "build", model.FilterText())
 }
 

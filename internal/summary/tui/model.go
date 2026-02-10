@@ -419,6 +419,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m.handleFilterKey(msg)
 	}
 
+	// ESC clears filter when one is active (in any view)
+	if msg.String() == "esc" && m.filterText != "" {
+		m.filterText = ""
+		if m.viewState == ContextDetailView {
+			m.enterDetailView()
+		}
+		return m, nil
+	}
+
 	switch m.viewState {
 	case CommandDetailView:
 		return m.handleCommandDetailKey(msg)
@@ -534,7 +543,7 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "esc", "-":
+	case "-":
 		m.viewState = SummaryView
 		return m, nil
 
@@ -638,7 +647,7 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "esc", "-":
+	case "-":
 		// Return to ContextDetailView, restore selection to viewed command
 		m.viewState = ContextDetailView
 		if m.cmdDetailIdx < len(m.cmdDetailAll) {

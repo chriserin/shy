@@ -27,6 +27,7 @@ The header includes a focus dot across all views to indicate focus state. The do
 - **Blurred**: Outline dot `○` in dim color
 
 Examples:
+
 - Summary View: `Work Summary ● Wednesday 2026-02-04 (Yesterday)`
 - Context Detail View: `~/projects/shy:main ● Wednesday 2026-02-04 (Yesterday)`
 
@@ -427,10 +428,7 @@ Launches the interactive TUI starting at yesterday. All navigation (date, time p
 
 ### Phase 5: Actions & Polish
 
-- Command execution (with confirmation)
 - Help overlay
-- Responsive layout
-- Error handling
 
 ## Dependencies
 
