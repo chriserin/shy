@@ -20,6 +20,7 @@ const (
 	SummaryView ViewState = iota
 	ContextDetailView
 	CommandDetailView
+	HelpView
 )
 
 // DisplayMode controls which commands are shown based on frequency
@@ -73,7 +74,8 @@ type Model struct {
 	currentDate time.Time
 
 	// View state
-	viewState            ViewState
+	viewState        ViewState
+	helpPreviousView ViewState
 	detailBuckets        []DetailBucket
 	detailCommands       []models.Command
 	detailCmdIdx         int
@@ -465,6 +467,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	}
 
 	switch m.viewState {
+	case HelpView:
+		return m.handleHelpKey(msg)
 	case CommandDetailView:
 		return m.handleCommandDetailKey(msg)
 	case ContextDetailView:
@@ -547,6 +551,11 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			m.selectedIdx = 0
 			return m, m.loadContexts
 		}
+		return m, nil
+
+	case "?":
+		m.helpPreviousView = m.viewState
+		m.viewState = HelpView
 		return m, nil
 	}
 
@@ -662,6 +671,11 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			return m, m.loadContexts
 		}
 		return m, nil
+
+	case "?":
+		m.helpPreviousView = m.viewState
+		m.viewState = HelpView
+		return m, nil
 	}
 
 	return m, nil
@@ -705,8 +719,24 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case "?":
+		m.helpPreviousView = m.viewState
+		m.viewState = HelpView
+		return m, nil
 	}
 
+	return m, nil
+}
+
+func (m *Model) handleHelpKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "?", "esc":
+		m.viewState = m.helpPreviousView
+		return m, nil
+	}
 	return m, nil
 }
 
@@ -1125,6 +1155,10 @@ func (m *Model) EmptyPrevPeriod() *periodPeekData {
 
 func (m *Model) EmptyNextPeriod() *periodPeekData {
 	return m.emptyNextPeriod
+}
+
+func (m *Model) HelpPreviousView() ViewState {
+	return m.helpPreviousView
 }
 
 // filterBySubstring returns commands where CommandText contains the filter string

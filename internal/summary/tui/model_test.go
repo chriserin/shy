@@ -3339,3 +3339,121 @@ func TestEmptyDetailFilterOrphanedDoesNotSwitchContext(t *testing.T) {
 	assert.Contains(t, headerAfter, "shy:main", "header should still show orphaned context after filtering")
 	assert.Equal(t, 0, len(model.DetailCommands()), "should still show empty commands")
 }
+
+// TestHelpViewFromSummary tests pressing ? in SummaryView enters HelpView and ? returns
+func TestHelpViewFromSummary(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, []models.Command{
+		makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	})
+	model := initModel(t, dbPath, today)
+
+	assert.Equal(t, SummaryView, model.ViewState())
+
+	// Press ? to enter help
+	pressKey(model, '?')
+	assert.Equal(t, HelpView, model.ViewState())
+	assert.Equal(t, SummaryView, model.HelpPreviousView())
+
+	// Press ? again to return
+	pressKey(model, '?')
+	assert.Equal(t, SummaryView, model.ViewState())
+}
+
+// TestHelpViewFromContextDetail tests pressing ? in ContextDetailView
+func TestHelpViewFromContextDetail(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, []models.Command{
+		makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	})
+	model := initModel(t, dbPath, today)
+
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	pressKey(model, '?')
+	assert.Equal(t, HelpView, model.ViewState())
+	assert.Equal(t, ContextDetailView, model.HelpPreviousView())
+
+	// Esc returns to previous view
+	pressEsc(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+}
+
+// TestHelpViewFromCommandDetail tests pressing ? in CommandDetailView
+func TestHelpViewFromCommandDetail(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := phase2Commands(yesterday)
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	// Enter context detail, then command detail
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	pressEnter(model)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	pressKey(model, '?')
+	assert.Equal(t, HelpView, model.ViewState())
+	assert.Equal(t, CommandDetailView, model.HelpPreviousView())
+
+	pressKey(model, '?')
+	assert.Equal(t, CommandDetailView, model.ViewState())
+}
+
+// TestHelpViewEscReturns tests esc in HelpView returns to previous view
+func TestHelpViewEscReturns(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, []models.Command{
+		makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	})
+	model := initModel(t, dbPath, today)
+
+	pressKey(model, '?')
+	assert.Equal(t, HelpView, model.ViewState())
+
+	pressEsc(model)
+	assert.Equal(t, SummaryView, model.ViewState())
+}
+
+// TestHelpViewRendersBindings tests that help view renders keybindings for source view
+func TestHelpViewRendersBindings(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, []models.Command{
+		makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	})
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	// Help from summary view
+	pressKey(model, '?')
+	view := model.View()
+	assert.Contains(t, view, "Help")
+	assert.Contains(t, view, "Navigate down")
+	assert.Contains(t, view, "Open context")
+	assert.Contains(t, view, "Quit")
+	// Should NOT contain context detail bindings
+	assert.NotContains(t, view, "Back to summary")
+
+	// Return and go to detail view
+	pressKey(model, '?')
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	pressKey(model, '?')
+	view = model.View()
+	assert.Contains(t, view, "View command detail")
+	assert.Contains(t, view, "Back to summary")
+	assert.Contains(t, view, "Previous context")
+}

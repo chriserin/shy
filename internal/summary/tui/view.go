@@ -40,6 +40,8 @@ const marginX = 2
 
 func (m *Model) renderView() string {
 	switch m.viewState {
+	case HelpView:
+		return m.renderHelpView()
 	case CommandDetailView:
 		return m.renderCommandDetailView()
 	case ContextDetailView:
@@ -47,6 +49,151 @@ func (m *Model) renderView() string {
 	default:
 		return m.renderSummaryView()
 	}
+}
+
+// helpBinding represents a single keybinding entry for the help view.
+type helpBinding struct {
+	key  string
+	desc string
+}
+
+func summaryBindings() []helpBinding {
+	return []helpBinding{
+		{"j", "Navigate down"},
+		{"k", "Navigate up"},
+		{"enter", "Open context"},
+		{"h", "Previous period"},
+		{"l", "Next period"},
+		{"t", "Today"},
+		{"y", "Yesterday"},
+		{"u", "Unique mode"},
+		{"a", "All mode"},
+		{"/", "Filter"},
+		{"]", "Cycle period up"},
+		{"[", "Cycle period down"},
+		{"?", "Help"},
+		{"q", "Quit"},
+	}
+}
+
+func contextDetailBindings() []helpBinding {
+	return []helpBinding{
+		{"j", "Navigate down"},
+		{"k", "Navigate up"},
+		{"enter", "View command detail"},
+		{"-", "Back to summary"},
+		{"H", "Previous context"},
+		{"L", "Next context"},
+		{"h", "Previous period"},
+		{"l", "Next period"},
+		{"t", "Today"},
+		{"y", "Yesterday"},
+		{"u", "Unique mode"},
+		{"a", "All mode"},
+		{"/", "Filter"},
+		{"]", "Cycle period up"},
+		{"[", "Cycle period down"},
+		{"?", "Help"},
+		{"q", "Quit"},
+	}
+}
+
+func commandDetailBindings() []helpBinding {
+	return []helpBinding{
+		{"j", "Navigate down"},
+		{"k", "Navigate up"},
+		{"-", "Back to context"},
+		{"?", "Help"},
+		{"q", "Quit"},
+	}
+}
+
+func (m *Model) renderHelpView() string {
+	var b strings.Builder
+
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+
+	margin := strings.Repeat(" ", marginX)
+
+	// Render header bar for the previous view (so user retains context)
+	b.WriteString(m.renderHelpHeaderBar())
+	b.WriteString("\n")
+
+	// Select bindings for the source view
+	var bindings []helpBinding
+	switch m.helpPreviousView {
+	case ContextDetailView:
+		bindings = contextDetailBindings()
+	case CommandDetailView:
+		bindings = commandDetailBindings()
+	default:
+		bindings = summaryBindings()
+	}
+
+	// Find max key width for alignment
+	maxKeyWidth := 0
+	for _, bind := range bindings {
+		if len(bind.key) > maxKeyWidth {
+			maxKeyWidth = len(bind.key)
+		}
+	}
+
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+
+	b.WriteString("\n")
+	b.WriteString(margin + titleStyle.Render("  Help") + "\n")
+	b.WriteString("\n")
+
+	contentLines := 3 // blank + title + blank
+	for _, bind := range bindings {
+		pad := maxKeyWidth - len(bind.key) + 2
+		line := margin + "  " + hintKeyStyle.Render(bind.key) + strings.Repeat(" ", pad) + normalStyle.Render(bind.desc)
+		b.WriteString(line + "\n")
+		contentLines++
+	}
+
+	// Pad to push footer to bottom
+	if m.height > 0 {
+		avail := m.height - 2 // headerBar(1) + footerBar(1)
+		if avail > contentLines {
+			for i := 0; i < avail-contentLines; i++ {
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	// Footer bar
+	b.WriteString(m.renderHelpFooterBar())
+
+	return b.String()
+}
+
+func (m *Model) renderHelpHeaderBar() string {
+	// Reuse the same header content as the source view
+	// Temporarily swap viewState to render the correct header
+	saved := m.viewState
+	m.viewState = m.helpPreviousView
+	header := m.renderHeaderBar()
+	m.viewState = saved
+	return header
+}
+
+func (m *Model) renderHelpFooterBar() string {
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+
+	content := barStyle.Render(" Press ") + barBoldStyle.Render("?") + barStyle.Render(" or ") + barBoldStyle.Render("esc") + barStyle.Render(" to close")
+	contentWidth := ansi.StringWidth(content)
+	pad := width - contentWidth
+	if pad < 0 {
+		pad = 0
+	}
+	return content + barStyle.Render(strings.Repeat(" ", pad))
 }
 
 func (m *Model) renderSummaryView() string {
