@@ -279,9 +279,9 @@ func (m *Model) dateDisplayString() string {
 	default:
 		dateStr := m.formatShortDate(m.currentDate, currentYear)
 		dayName := m.currentDate.Format("Monday")
-		relativeStr := m.relativeDateString()
-		if relativeStr != "" {
-			return fmt.Sprintf("%s %s (%s) ", dayName, dateStr, relativeStr)
+		indicator := m.relativeDateIndicator()
+		if indicator != "" {
+			return fmt.Sprintf("%s %s %s ", indicator, dayName, dateStr)
 		}
 		return fmt.Sprintf("%s %s ", dayName, dateStr)
 	}
@@ -295,7 +295,8 @@ func (m *Model) formatShortDate(t time.Time, currentYear int) string {
 	return t.Format("Jan 2, 2006")
 }
 
-func (m *Model) relativeDateString() string {
+// relativeDateIndicator returns a unicode marker for today/yesterday, empty otherwise.
+func (m *Model) relativeDateIndicator() string {
 	if m.period != DayPeriod {
 		return ""
 	}
@@ -309,9 +310,9 @@ func (m *Model) relativeDateString() string {
 
 	switch days {
 	case 0:
-		return "Today"
+		return "★"
 	case 1:
-		return "Yesterday"
+		return "◆"
 	default:
 		return ""
 	}
@@ -462,11 +463,7 @@ func (m *Model) renderCommandDetailView() string {
 		b.WriteString("\n")
 		// Metadata fields (label in blue, value in white — matching tv preview)
 		b.WriteString(margin + "  " + renderDetailField("Command:", singleLine(cmd.CommandText), normalStyle) + "\n")
-		b.WriteString(margin + "  " + renderDetailField("Exit Status:", renderExitStatus(cmd.ExitStatus), lipgloss.NewStyle()) + "\n")
-		t := time.Unix(cmd.Timestamp, 0)
-		b.WriteString(margin + "  " + renderDetailField("Timestamp:", t.Format("2006-01-02 15:04"), normalStyle) + "\n")
 		b.WriteString(margin + "  " + renderDetailField("Working Dir:", formatDir(cmd.WorkingDir), normalStyle) + "\n")
-		b.WriteString(margin + "  " + renderDetailField("Duration:", formatDurationHuman(cmd.Duration), normalStyle) + "\n")
 
 		if cmd.GitRepo != nil {
 			b.WriteString(margin + "  " + renderDetailField("Git Repo:", *cmd.GitRepo, detailGitStyle) + "\n")
@@ -485,6 +482,11 @@ func (m *Model) renderCommandDetailView() string {
 		} else {
 			b.WriteString(margin + "  " + renderDetailField("Session:", "-", normalStyle) + "\n")
 		}
+
+		t := time.Unix(cmd.Timestamp, 0)
+		b.WriteString(margin + "  " + renderDetailField("Timestamp:", t.Format("2006-01-02 15:04"), normalStyle) + "\n")
+		b.WriteString(margin + "  " + renderDetailField("Duration:", formatDurationHuman(cmd.Duration), normalStyle) + "\n")
+		b.WriteString(margin + "  " + renderDetailField("Exit Status:", renderExitStatus(cmd.ExitStatus), lipgloss.NewStyle()) + "\n")
 
 		// Separator
 		b.WriteString("\n")

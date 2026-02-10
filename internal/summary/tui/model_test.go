@@ -103,7 +103,7 @@ func TestLaunchWithYesterdaysContexts(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "Yesterday")
+	assert.Contains(t, view, "◆")
 	assert.Contains(t, view, "projects/shy")
 	assert.Contains(t, view, "main")
 	assert.Contains(t, view, "bugfix")
@@ -232,7 +232,7 @@ func TestNavigateToNextDay(t *testing.T) {
 	assert.Equal(t, yesterday.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "Yesterday")
+	assert.Contains(t, view, "◆")
 }
 
 // TestNavigateToTodayWithNoCommands tests the scenario:
@@ -252,7 +252,7 @@ func TestNavigateToTodayWithNoCommands(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 5")
-	assert.Contains(t, view, "Today")
+	assert.Contains(t, view, "★")
 	assert.Contains(t, view, "No commands found")
 }
 
@@ -295,7 +295,7 @@ func TestJumpToToday(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 5")
-	assert.Contains(t, view, "Today")
+	assert.Contains(t, view, "★")
 }
 
 // TestJumpToYesterday tests the scenario:
@@ -318,7 +318,7 @@ func TestJumpToYesterday(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "Yesterday")
+	assert.Contains(t, view, "◆")
 }
 
 // TestSelectionResetsWhenChangingDays tests the scenario:
@@ -613,7 +613,7 @@ func TestHeaderIncludesDayOfWeek(t *testing.T) {
 	view := model.View()
 	assert.Contains(t, view, "Wednesday")
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "Yesterday")
+	assert.Contains(t, view, "◆")
 }
 
 // TestHeaderIncludesDayOfWeekNonRelative tests the scenario:
@@ -640,8 +640,8 @@ func TestHeaderIncludesDayOfWeekNonRelative(t *testing.T) {
 	assert.Contains(t, view, "Feb 1")
 	// Header should not contain relative date labels
 	header := strings.Split(view, "\n")[0]
-	assert.NotContains(t, header, "Yesterday")
-	assert.NotContains(t, header, "Today")
+	assert.NotContains(t, header, "◆")
+	assert.NotContains(t, header, "★")
 }
 
 // TestHomeDirectoryDisplaysFullPath tests the scenario:
@@ -756,7 +756,7 @@ func TestDetailViewCommandsForSelectedContext(t *testing.T) {
 	assert.Contains(t, view, "main")
 	assert.Contains(t, view, "Wednesday")
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "Yesterday")
+	assert.Contains(t, view, "◆")
 
 	// Check buckets
 	assert.Contains(t, view, "8am")
@@ -787,7 +787,7 @@ func TestDetailHeaderConsistentLayout(t *testing.T) {
 	// Header should show context name instead of "Work Summary"
 	assert.NotContains(t, view, "Work Summary")
 	assert.Contains(t, view, "●")
-	assert.Contains(t, view, "Wednesday Feb 4 (Yesterday)")
+	assert.Contains(t, view, "◆ Wednesday Feb 4")
 }
 
 // TestDetailHeaderFocusIndicator tests focus indicator in detail view
