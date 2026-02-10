@@ -1,0 +1,508 @@
+Feature: Interactive Summary - Phase 4: Command Detail View, Filtering, and Time Periods
+
+  Phase 4 adds three capabilities:
+    1. Command Detail View — inspect a single command's metadata and
+       surrounding session context.
+    2. Filter input — narrow commands across all views by a substring.
+    3. Week/Month period views — bucket by day or week instead of hour.
+
+  Background:
+    Given the database contains commands from the following days:
+      | date       | time  | context              | command                                     | exit | duration | pid   |
+      | 2026-02-03 | 09:15 | ~/projects/shy:main  | go build -o shy .                            | 0    | 1200     | 10001 |
+      | 2026-02-03 | 09:30 | ~/projects/shy:main  | go test ./... -v                             | 0    | 4500     | 10001 |
+      | 2026-02-03 | 14:20 | ~/projects/shy:main  | shy summary                                  | 0    | 300      | 10001 |
+      | 2026-02-04 | 08:15 | ~/projects/shy:main  | go build -o shy .                            | 0    | 1100     | 10001 |
+      | 2026-02-04 | 08:22 | ~/projects/shy:main  | ./shy summary                                | 0    | 250      | 10001 |
+      | 2026-02-04 | 08:30 | ~/projects/shy:main  | go test ./... -v                             | 1    | 8200     | 10001 |
+      | 2026-02-04 | 09:00 | ~/projects/shy:main  | git commit -m "feat: add summary"            | 0    | 500      | 10001 |
+      | 2026-02-04 | 09:05 | ~/projects/shy:main  | go build -o shy .                            | 0    | 1050     | 10001 |
+      | 2026-02-04 | 09:30 | ~/projects/shy:main  | git push                                     | 0    | 2100     | 10001 |
+      | 2026-02-04 | 14:20 | ~/projects/shy:main  | shy summary                                  | 0    | 310      | 10001 |
+      | 2026-02-04 | 14:25 | ~/projects/shy:main  | go test ./cmd -v                             | 0    | 3200     | 10001 |
+      | 2026-02-04 | 08:00 | ~/projects/shy:bugfix| git checkout bugfix                          | 0    | 150      | 10002 |
+      | 2026-02-04 | 08:10 | ~/projects/shy:bugfix| go test ./... -v                             | 0    | 5100     | 10002 |
+      | 2026-02-04 | 08:45 | ~/projects/shy:bugfix| git diff                                     | 0    | 80       | 10002 |
+      | 2026-02-04 | 10:00 | ~/downloads          | curl -O https://example.com/archive.tar.gz   | 0    | 15000    | 10003 |
+      | 2026-02-04 | 10:05 | ~/downloads          | tar xzf archive.tar.gz                       | 0    | 900      | 10003 |
+      | 2026-02-05 | 10:00 | ~/projects/shy:main  | go build -o shy .                            | 0    | 1000     | 10001 |
+      | 2026-02-05 | 10:30 | ~/projects/shy:main  | go test ./... -v                             | 0    | 4000     | 10001 |
+    And today is 2026-02-06
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  PART 1 — Command Detail View
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # --- Entering the Command Detail View ---
+
+  Scenario: Enter command detail view from context detail
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04
+    And "go build -o shy ." (8:15) is selected
+    When I press "Enter"
+    Then I see the Command Detail View
+    And the header shows "Command Details" and the event number
+
+  Scenario: Command detail shows metadata fields
+    Given I am viewing the Command Detail View for "go build -o shy ." (8:15)
+    Then I see the following metadata:
+      | field       | value                     |
+      | Command     | go build -o shy .         |
+      | Exit Status | 0                         |
+      | Timestamp   | 2026-02-04 08:15          |
+      | Working Dir | ~/projects/shy            |
+      | Duration    | 1.1s                      |
+      | Git Repo    | github.com/chris/shy      |
+      | Git Branch  | main                      |
+
+  Scenario: Exit status shows check mark for success
+    Given I am viewing the Command Detail View for "go build -o shy ." (8:15)
+    Then the exit status shows "0" with a success indicator
+
+  Scenario: Exit status shows cross mark for failure
+    Given I am viewing the Command Detail View for "go test ./... -v" (8:30, exit 1)
+    Then the exit status shows "1" with a failure indicator
+
+  Scenario: Duration displays in human-readable format
+    Given I am viewing the Command Detail View for "curl -O https://example.com/archive.tar.gz"
+    Then the duration shows "15s"
+
+  Scenario: Missing metadata shows dash or is omitted
+    Given a command has no duration recorded
+    When I view its Command Detail View
+    Then the duration field shows "—" or is omitted
+
+  # --- Session Context ---
+
+  Scenario: Session context shows surrounding commands from the same session
+    Given I am viewing the Command Detail View for "git commit -m \"feat: add summary\"" (9:00, pid 10001)
+    Then the session context shows commands from pid 10001 around the selected command:
+      | event | command                         |
+      |       | go test ./... -v                |
+      | ▶     | git commit -m "feat: add summary"|
+      |       | go build -o shy .               |
+
+  Scenario: Current command is highlighted in session context
+    Given I am viewing the Command Detail View for "git commit -m \"feat: add summary\""
+    Then the selected command has the "▶" indicator in the session context
+
+  # --- Navigation within Command Detail View ---
+
+  Scenario: Navigate to next command in session context
+    Given I am viewing the Command Detail View for "git commit -m \"feat: add summary\""
+    When I press "j"
+    Then the metadata updates to show "go build -o shy ." (9:05)
+    And the session context selection moves down
+
+  Scenario: Navigate to previous command in session context
+    Given I am viewing the Command Detail View for "git commit -m \"feat: add summary\""
+    When I press "k"
+    Then the metadata updates to show "go test ./... -v" (8:30)
+    And the session context selection moves up
+
+  Scenario: Navigation stops at session boundaries
+    Given I am viewing the Command Detail View for the first command in the session
+    When I press "k"
+    Then the selection does not move
+
+  # --- Back Navigation ---
+
+  Scenario: Return to context detail view with Esc
+    Given I am viewing the Command Detail View
+    And I entered from the Context Detail View for "~/projects/shy:main"
+    When I press "Esc"
+    Then I see the Context Detail View for "~/projects/shy:main"
+    And the command I was viewing is selected
+    
+  Scenario: Return to context detail view with '-'
+    Given I am viewing the Command Detail View
+    And I entered from the Context Detail View for "~/projects/shy:main"
+    When I press "-"
+    Then I see the Context Detail View for "~/projects/shy:main"
+    And the command I was viewing is selected
+
+  Scenario: Quit from command detail view
+    Given I am viewing the Command Detail View
+    When I press "q"
+    Then the application exits
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  PART 2 — Filter Input
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # --- Activating the Filter ---
+
+  Scenario: Open filter input with slash in summary view
+    Given I am viewing the summary for 2026-02-04
+    When I press "/"
+    Then a filter input bar appears at the bottom
+    And the filter bar shows "Filter: " with a cursor
+
+  Scenario: Open filter input in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main"
+    When I press "/"
+    Then a filter input bar appears at the bottom
+
+  # --- Typing a Filter ---
+
+  Scenario: Typing into the filter bar updates the text
+    Given the filter input is open
+    When I type "go test"
+    Then the filter bar shows "Filter: go test"
+
+  Scenario: Filter applies as you type in summary view
+    Given I am viewing the summary for 2026-02-04
+    And the filter input is open
+    When I type "go test"
+    Then "~/projects/shy:main" shows "3 commands"
+    And "~/projects/shy:bugfix" shows "1 command"
+    And "~/downloads" shows "0 commands"
+
+  Scenario: Filter applies as you type in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04
+    And the filter input is open
+    When I type "go build"
+    Then I see only commands matching "go build":
+      | bucket | commands                            |
+      | 8am    | go build -o shy .                   |
+      | 9am    | go build -o shy .                   |
+    And the 2pm bucket is not visible
+
+  # --- Submitting and Clearing ---
+
+  Scenario: Submit filter with Enter
+    Given the filter input is open
+    And I have typed "git"
+    When I press "Enter"
+    Then the filter input closes
+    And the filter "git" remains active
+    And only commands containing "git" are shown
+
+  Scenario: Cancel filter with Esc restores previous filter
+    Given the filter "build" was previously active
+    And I press "/"
+    And I have typed "git"
+    When I press "Esc"
+    Then the filter input closes
+    And the filter "build" is still active
+
+  Scenario: Cancel filter with Esc when no prior filter shows all commands
+    Given no filter is active
+    And I press "/"
+    And I have typed "git"
+    When I press "Esc"
+    Then the filter input closes
+    And no filter is active
+    And all commands are shown
+
+  Scenario: Clear filter by submitting empty text
+    Given the filter "go test" is active
+    And I am viewing the summary for 2026-02-04
+    When I press "/"
+    And I clear the text and press "Enter"
+    Then no filter is active
+    And "~/projects/shy:main" shows "8 commands"
+
+  # --- Filter Interaction with Display Modes ---
+
+  Scenario: Filter and unique mode combine
+    Given I am viewing the summary for 2026-02-04
+    And unique mode is active
+    And the filter "go" is active
+    Then "~/projects/shy:main" shows "1 command"
+    And that command is "go test ./cmd -v"
+    And "go build -o shy ." is excluded because it was executed more than once
+    And "go test ./... -v" is excluded because it was executed more than once
+
+  Scenario: Filter and multi mode combine
+    Given I am viewing the summary for 2026-02-04
+    And multi mode is active
+    And the filter "go" is active
+    Then "~/projects/shy:main" shows "3 commands"
+    And the matching commands are the 2 instances of "go build -o shy ." and 1 instance of "go test ./... -v"
+    And "go test ./cmd -v" is excluded because it was executed exactly once
+
+  # --- Filter Persistence ---
+
+  Scenario: Filter persists when switching views
+    Given the filter "build" is active in the summary view
+    When I press "Enter" on "~/projects/shy:main"
+    Then the Context Detail View shows only commands matching "build"
+
+  Scenario: Filter persists when navigating dates
+    Given the filter "git" is active
+    When I press "h" to go to the previous day
+    Then the filter "git" is still active
+
+  Scenario: Filter indicator shown in status bar
+    Given the filter "go test" is active
+    Then the status bar shows "/go test" as a filter indicator
+
+  # --- Backspace and Editing ---
+
+  Scenario: Backspace removes characters from filter
+    Given the filter input is open
+    And the text is "go test"
+    When I press Backspace
+    Then the filter bar shows "Filter: go tes"
+
+  Scenario: Backspace on empty filter clears and closes
+    Given the filter input is open
+    And the text is empty
+    When I press Backspace
+    Then the filter input closes
+    And no filter is active
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  PART 3 — Week / Month Period Views
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # --- Period Selection ---
+
+  Scenario: Default period is Day
+    Given I launch the summary
+    Then the period is "Day"
+    And commands are bucketed by hour
+
+  Scenario: Press ] to cycle to next period (Day to Week)
+    Given I am viewing the summary for 2026-02-04
+    And the period is "Day"
+    When I press "]"
+    Then the period is "Week"
+    And the header shows "Week of 2026-02-03" (Monday of that week)
+    And contexts show command counts for the full week
+
+  Scenario: Press ] to cycle to next period (Week to Month)
+    Given I am viewing the summary in Week period
+    When I press "]"
+    Then the period is "Month"
+    And the header shows "February 2026"
+    And contexts show command counts for the full month
+
+  Scenario: Press ] at Month does not cycle further
+    Given I am viewing the summary in Month period
+    When I press "]"
+    Then the period is still "Month"
+
+  Scenario: Press [ to cycle to previous period (Month to Week)
+    Given I am viewing the summary in Month period
+    When I press "["
+    Then the period is "Week"
+
+  Scenario: Press [ to cycle to previous period (Week to Day)
+    Given I am viewing the summary in Week period
+    When I press "["
+    Then the period is "Day"
+    And the date returns to the anchor day within the week
+
+  Scenario: Press [ at Day does not cycle further
+    Given I am viewing the summary for 2026-02-04
+    And the period is "Day"
+    When I press "["
+    Then the period is still "Day"
+
+  # --- Week View Summary ---
+
+  Scenario: Week view shows aggregated command counts
+    Given I am viewing the summary in Week period for the week of 2026-02-03
+    Then "~/projects/shy:main" shows "13 commands"
+    And those 13 commands are 3 from Mon 2/3, 8 from Tue 2/4, and 2 from Wed 2/5
+
+  Scenario: Week view date navigation moves by week
+    Given I am viewing the summary in Week period for the week of 2026-02-03
+    When I press "h"
+    Then the header shows the week of 2026-01-27
+
+  # --- Week View Context Detail ---
+
+  Scenario: Week context detail buckets by day
+    Given I am viewing the Context Detail View for "~/projects/shy:main" in Week period
+    Then I see commands grouped by day:
+      | bucket      | command count |
+      | Mon Feb 3   | 3             |
+      | Tue Feb 4   | 8             |
+      | Wed Feb 5   | 2             |
+
+  Scenario: Week context detail shows full timestamps
+    Given I am viewing the Context Detail View for "~/projects/shy:main" in Week period
+    Then commands show full time (e.g. "9:15 AM") instead of minute-only
+
+  # --- Month View Summary ---
+
+  Scenario: Month view shows aggregated command counts
+    Given I am viewing the summary in Month period for February 2026
+    Then "~/projects/shy:main" shows the total commands for the entire month
+
+  Scenario: Month view date navigation moves by month
+    Given I am viewing the summary in Month period for February 2026
+    When I press "h"
+    Then the header shows January 2026
+
+  # --- Month View Context Detail ---
+
+  Scenario: Month context detail buckets by week
+    Given I am viewing the Context Detail View for "~/projects/shy:main" in Month period
+    And the commands on Feb 3, Feb 4, and Feb 5 all fall within ISO week 6
+    Then I see commands grouped by week:
+      | bucket | command count |
+      | Week 6 | 13            |
+
+  # --- Period Switching in Context Detail View ---
+
+  Scenario: Switch from Day to Week in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04 in Day period
+    When I press "]"
+    Then the period is "Week"
+    And the buckets change from hours to days
+    And the context remains "~/projects/shy:main"
+    And the first command is selected
+
+  Scenario: Switch from Week to Month in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" in Week period
+    When I press "]"
+    Then the period is "Month"
+    And the buckets change from days to weeks
+    And the context remains "~/projects/shy:main"
+    And the first command is selected
+
+  Scenario: Switch from Month to Week in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" in Month period
+    When I press "["
+    Then the period is "Week"
+    And the buckets change from weeks to days
+    And the context remains "~/projects/shy:main"
+
+  Scenario: Switch from Week to Day in context detail view preserves anchor date
+    Given I am viewing the Context Detail View in Week period for the week of 2026-02-03
+    And the original anchor date was 2026-02-04
+    When I press "["
+    Then the period is "Day"
+    And I see the Day view for 2026-02-04
+    And the buckets are hourly
+
+  Scenario: ] at Month in context detail view does not cycle further
+    Given I am viewing the Context Detail View for "~/projects/shy:main" in Month period
+    When I press "]"
+    Then the period is still "Month"
+
+  Scenario: [ at Day in context detail view does not cycle further
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04 in Day period
+    When I press "["
+    Then the period is still "Day"
+
+  Scenario: Period switch in context detail view resets command selection
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04 in Day period
+    And I have navigated to the 5th command
+    When I press "]"
+    Then the first command is selected
+
+  Scenario: Display mode is preserved when switching period in context detail view
+    Given I am viewing the Context Detail View for "~/projects/shy:main" on 2026-02-04 in Day period
+    And unique mode is active
+    When I press "]"
+    Then the period is "Week"
+    And unique mode is still active
+    And only unique commands are shown in the week buckets
+
+  # --- Period Keys Work Across Views ---
+
+  Scenario: Period keys work in summary view
+    Given I am viewing the summary for 2026-02-04
+    When I press "]"
+    Then the period is "Week"
+    When I press "]"
+    Then the period is "Month"
+    When I press "["
+    Then the period is "Week"
+    When I press "["
+    Then the period is "Day"
+
+  # --- Period Indicator ---
+
+  Scenario: Header shows current period in Day mode
+    Given I am viewing the summary
+    And the period is "Day"
+    Then the header shows "Day" as the active period
+
+  Scenario: Header shows current period in Week mode
+    Given I am viewing the summary in Week period
+    Then the header shows "Week" as the active period
+
+  Scenario: Header shows current period in Month mode
+    Given I am viewing the summary in Month period
+    Then the header shows "Month" as the active period
+
+  # --- Cannot Navigate Past Today ---
+
+  Scenario: Cannot navigate past current week
+    Given I am viewing the summary in Week period for the week containing today
+    When I press "l"
+    Then the date does not advance
+
+  Scenario: Cannot navigate past current month
+    Given I am viewing the summary in Month period for the month containing today
+    When I press "l"
+    Then the date does not advance
+
+  # --- Display Modes with Periods ---
+
+  Scenario: Unique mode in week view shows commands executed exactly once across the week
+    Given I am viewing the summary in Week period for the week of 2026-02-03
+    When I press "u"
+    Then "~/projects/shy:main" shows only commands whose text appears exactly once across the entire week
+    And "go build -o shy ." is excluded because it appears on multiple days
+    And "go test ./... -v" is excluded because it appears on multiple days
+
+  Scenario: Multi mode in week view shows commands executed more than once across the week
+    Given I am viewing the summary in Week period for the week of 2026-02-03
+    When I press "m"
+    Then "~/projects/shy:main" shows only instances of commands whose text appears more than once across the entire week
+    And "go build -o shy ." instances are included
+    And "go test ./... -v" instances are included
+
+  Scenario: Unique mode in month view shows commands executed exactly once across the month
+    Given I am viewing the summary in Month period for February 2026
+    When I press "u"
+    Then "~/projects/shy:main" shows only commands whose text appears exactly once across the entire month
+
+  Scenario: Multi mode in month view shows commands executed more than once across the month
+    Given I am viewing the summary in Month period for February 2026
+    When I press "m"
+    Then "~/projects/shy:main" shows only instances of commands whose text appears more than once across the entire month
+
+  Scenario: Filter works in week view
+    Given I am viewing the summary in Week period for the week of 2026-02-03
+    And the filter "build" is active
+    Then "~/projects/shy:main" shows the count of commands matching "build" across the week
+    And "~/downloads" shows "0 commands"
+
+  Scenario: Filter works in month view
+    Given I am viewing the summary in Month period for February 2026
+    And the filter "build" is active
+    Then "~/projects/shy:main" shows the count of commands matching "build" across the month
+    And "~/downloads" shows "0 commands"
+
+  Scenario: Filter and unique mode combine in week view
+    Given I am viewing the summary in Week period for the week of 2026-02-03
+    And unique mode is active
+    And the filter "go" is active
+    Then "~/projects/shy:main" shows only commands matching "go" that appear exactly once across the week
+
+  Scenario: Filter and multi mode combine in month view
+    Given I am viewing the summary in Month period for February 2026
+    And multi mode is active
+    And the filter "go" is active
+    Then "~/projects/shy:main" shows only instances of commands matching "go" that appear more than once across the month
+
+  Scenario: Display mode persists when switching periods
+    Given I am viewing the summary for 2026-02-04
+    And unique mode is active
+    When I press "]"
+    Then the period is "Week"
+    And unique mode is still active
+
+  Scenario: Filter persists when switching periods
+    Given I am viewing the summary for 2026-02-04
+    And the filter "git" is active
+    When I press "]"
+    Then the period is "Week"
+    And the filter "git" is still active

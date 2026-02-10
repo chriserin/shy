@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +19,7 @@ type ViewState int
 const (
 	SummaryView ViewState = iota
 	ContextDetailView
+	CommandDetailView
 )
 
 // DisplayMode controls which commands are shown based on frequency
@@ -26,6 +29,15 @@ const (
 	AllMode    DisplayMode = iota
 	UniqueMode
 	MultiMode
+)
+
+// Period represents the time granularity for the view
+type Period int
+
+const (
+	DayPeriod   Period = iota
+	WeekPeriod
+	MonthPeriod
 )
 
 // DetailBucket represents a time bucket with its label and commands
@@ -61,6 +73,20 @@ type Model struct {
 	detailContextKey     summary.ContextKey
 	detailContextBranch  summary.BranchKey
 	pendingDetailReentry bool
+
+	// Command detail view
+	cmdDetailAll      []models.Command // full session context: [before..., target, after...]
+	cmdDetailIdx      int              // index of currently selected command
+	cmdDetailStartIdx int              // index of the original target in cmdDetailAll
+
+	// Period
+	period     Period    // current period (default DayPeriod)
+	anchorDate time.Time // saved day-level date for Week→Day restore
+
+	// Filter
+	filterText     string // currently active filter (persists across views)
+	filterActive   bool   // whether the filter input bar is open
+	filterPrevText string // saved before opening bar, for Esc cancel
 
 	// Display mode
 	displayMode       DisplayMode
@@ -151,12 +177,173 @@ func (m *Model) loadContexts() tea.Msg {
 	return contextsLoadedMsg{contexts: items}
 }
 
-// dateRange returns the start and end timestamps for the current date
+// dateRange returns the start and end timestamps for the current period
 func (m *Model) dateRange() (int64, int64) {
 	year, month, day := m.currentDate.Date()
-	startOfDay := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
-	endOfDay := startOfDay.AddDate(0, 0, 1)
-	return startOfDay.Unix(), endOfDay.Unix()
+
+	switch m.period {
+	case WeekPeriod:
+		// Monday 00:00 → next Monday 00:00
+		d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+		weekday := d.Weekday()
+		if weekday == time.Sunday {
+			weekday = 7
+		}
+		monday := d.AddDate(0, 0, -int(weekday-time.Monday))
+		return monday.Unix(), monday.AddDate(0, 0, 7).Unix()
+
+	case MonthPeriod:
+		// 1st of month 00:00 → 1st of next month 00:00
+		startOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+		endOfMonth := startOfMonth.AddDate(0, 1, 0)
+		return startOfMonth.Unix(), endOfMonth.Unix()
+
+	default: // DayPeriod
+		startOfDay := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+		endOfDay := startOfDay.AddDate(0, 0, 1)
+		return startOfDay.Unix(), endOfDay.Unix()
+	}
+}
+
+// isCurrentPeriod returns true if currentDate falls within the current period of "now"
+func (m *Model) isCurrentPeriod() bool {
+	now := m.now()
+	switch m.period {
+	case WeekPeriod:
+		nowY, nowW := now.ISOWeek()
+		curY, curW := m.currentDate.ISOWeek()
+		return nowY == curY && nowW == curW
+	case MonthPeriod:
+		return now.Year() == m.currentDate.Year() && now.Month() == m.currentDate.Month()
+	default: // DayPeriod
+		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+		currentStart := time.Date(m.currentDate.Year(), m.currentDate.Month(), m.currentDate.Day(), 0, 0, 0, 0, time.Local)
+		return !currentStart.Before(todayStart)
+	}
+}
+
+// navigateBack moves the date backward by one period unit
+func (m *Model) navigateBack() {
+	switch m.period {
+	case WeekPeriod:
+		m.currentDate = m.currentDate.AddDate(0, 0, -7)
+	case MonthPeriod:
+		m.currentDate = m.currentDate.AddDate(0, -1, 0)
+	default:
+		m.currentDate = m.currentDate.AddDate(0, 0, -1)
+	}
+}
+
+// navigateForward moves the date forward by one period unit
+func (m *Model) navigateForward() {
+	switch m.period {
+	case WeekPeriod:
+		m.currentDate = m.currentDate.AddDate(0, 0, 7)
+	case MonthPeriod:
+		m.currentDate = m.currentDate.AddDate(0, 1, 0)
+	default:
+		m.currentDate = m.currentDate.AddDate(0, 0, 1)
+	}
+}
+
+// cyclePeriodUp moves Day→Week→Month
+func (m *Model) cyclePeriodUp() bool {
+	switch m.period {
+	case DayPeriod:
+		m.anchorDate = m.currentDate
+		m.period = WeekPeriod
+		return true
+	case WeekPeriod:
+		m.period = MonthPeriod
+		return true
+	default:
+		return false
+	}
+}
+
+// cyclePeriodDown moves Month→Week→Day
+func (m *Model) cyclePeriodDown() bool {
+	switch m.period {
+	case MonthPeriod:
+		m.period = WeekPeriod
+		return true
+	case WeekPeriod:
+		m.period = DayPeriod
+		if !m.anchorDate.IsZero() {
+			m.currentDate = m.anchorDate
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+// cmdDetailTotalContext returns the total number of context lines (before + after)
+// available for the command detail view.
+func (m *Model) cmdDetailTotalContext() int {
+	if m.height <= 0 {
+		return 10 // fallback
+	}
+	// 16 = frame(2) + blank(1) + metadata(8) + blank-sep-blank-label(4) + target command(1)
+	avail := m.height - 16
+	if avail < 1 {
+		return 1
+	}
+	return avail
+}
+
+// balanceContext trims before/after slices so their combined length fits within
+// total, while maximizing the number of commands shown. When one side is short,
+// the surplus goes to the other.
+func balanceContext(before, after []models.Command, total int) ([]models.Command, []models.Command) {
+	if len(before)+len(after) <= total {
+		return before, after
+	}
+	half := total / 2
+	bLen, aLen := len(before), len(after)
+	if bLen <= half {
+		// before is short — give surplus to after
+		aMax := total - bLen
+		if aLen > aMax {
+			after = after[:aMax]
+		}
+	} else if aLen <= half {
+		// after is short — give surplus to before
+		bMax := total - aLen
+		if bLen > bMax {
+			before = before[bLen-bMax:]
+		}
+	} else {
+		// both sides overflow — split evenly
+		before = before[bLen-half:]
+		after = after[:total-half]
+	}
+	return before, after
+}
+
+// loadCommandContext loads session context for a specific command
+func (m *Model) loadCommandContext(cmdID int64) tea.Cmd {
+	return func() tea.Msg {
+		database, err := db.New(m.dbPath)
+		if err != nil {
+			return errMsg{err}
+		}
+		defer database.Close()
+
+		total := m.cmdDetailTotalContext()
+		before, target, after, err := database.GetCommandWithContext(cmdID, total)
+		if err != nil {
+			return errMsg{err}
+		}
+
+		before, after = balanceContext(before, after, total)
+
+		return commandContextLoadedMsg{
+			before: before,
+			target: target,
+			after:  after,
+		}
+	}
 }
 
 // Update implements tea.Model
@@ -168,6 +355,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.viewState == CommandDetailView && m.cmdDetailIdx < len(m.cmdDetailAll) {
+			return m, m.loadCommandContext(m.cmdDetailAll[m.cmdDetailIdx].ID)
+		}
 		return m, nil
 
 	case tea.FocusMsg:
@@ -203,6 +393,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case commandContextLoadedMsg:
+		var all []models.Command
+		all = append(all, msg.before...)
+		if msg.target != nil {
+			all = append(all, *msg.target)
+		}
+		all = append(all, msg.after...)
+		m.cmdDetailAll = all
+		m.cmdDetailIdx = len(msg.before) // point at target
+		if m.viewState != CommandDetailView {
+			m.cmdDetailStartIdx = m.cmdDetailIdx
+		}
+		m.viewState = CommandDetailView
+		return m, nil
+
 	case errMsg:
 		// TODO: handle error display
 		return m, nil
@@ -212,7 +417,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	if m.filterActive {
+		return m.handleFilterKey(msg)
+	}
+
 	switch m.viewState {
+	case CommandDetailView:
+		return m.handleCommandDetailKey(msg)
 	case ContextDetailView:
 		return m.handleDetailKey(msg)
 	default:
@@ -244,28 +455,27 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 
 	case "h":
-		m.currentDate = m.currentDate.AddDate(0, 0, -1)
+		m.navigateBack()
 		m.selectedIdx = 0
 		return m, m.loadContexts
 
 	case "l":
-		now := m.now()
-		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
-		currentStart := time.Date(m.currentDate.Year(), m.currentDate.Month(), m.currentDate.Day(), 0, 0, 0, 0, time.Local)
-		if !currentStart.Before(todayStart) {
+		if m.isCurrentPeriod() {
 			return m, nil
 		}
-		m.currentDate = m.currentDate.AddDate(0, 0, 1)
+		m.navigateForward()
 		m.selectedIdx = 0
 		return m, m.loadContexts
 
 	case "t":
 		m.currentDate = m.now()
+		m.period = DayPeriod
 		m.selectedIdx = 0
 		return m, m.loadContexts
 
 	case "y":
 		m.currentDate = m.now().AddDate(0, 0, -1)
+		m.period = DayPeriod
 		m.selectedIdx = 0
 		return m, m.loadContexts
 
@@ -279,6 +489,25 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 	case "a":
 		m.displayMode = AllMode
+		return m, nil
+
+	case "/":
+		m.filterActive = true
+		m.filterPrevText = m.filterText
+		return m, nil
+
+	case "]":
+		if m.cyclePeriodUp() {
+			m.selectedIdx = 0
+			return m, m.loadContexts
+		}
+		return m, nil
+
+	case "[":
+		if m.cyclePeriodDown() {
+			m.selectedIdx = 0
+			return m, m.loadContexts
+		}
 		return m, nil
 	}
 
@@ -304,6 +533,13 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "enter":
+		if len(m.detailCommands) > 0 {
+			cmd := m.detailCommands[m.detailCmdIdx]
+			return m, m.loadCommandContext(cmd.ID)
+		}
+		return m, nil
+
 	case "esc", "-":
 		m.viewState = SummaryView
 		return m, nil
@@ -325,29 +561,28 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 
 	case "h":
-		m.currentDate = m.currentDate.AddDate(0, 0, -1)
+		m.navigateBack()
 		m.pendingDetailReentry = true
 		return m, m.loadContexts
 
 	case "l":
-		now := m.now()
-		todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
-		currentStart := time.Date(m.currentDate.Year(), m.currentDate.Month(), m.currentDate.Day(), 0, 0, 0, 0, time.Local)
-		if !currentStart.Before(todayStart) {
+		if m.isCurrentPeriod() {
 			return m, nil
 		}
-		m.currentDate = m.currentDate.AddDate(0, 0, 1)
+		m.navigateForward()
 		m.pendingDetailReentry = true
 		return m, m.loadContexts
 
 	case "t":
 		m.currentDate = m.now()
+		m.period = DayPeriod
 		m.selectedIdx = 0
 		m.viewState = SummaryView
 		return m, m.loadContexts
 
 	case "y":
 		m.currentDate = m.now().AddDate(0, 0, -1)
+		m.period = DayPeriod
 		m.selectedIdx = 0
 		m.viewState = SummaryView
 		return m, m.loadContexts
@@ -366,6 +601,123 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.displayMode = AllMode
 		m.enterDetailView()
 		return m, nil
+
+	case "/":
+		m.filterActive = true
+		m.filterPrevText = m.filterText
+		return m, nil
+
+	case "]":
+		if m.cyclePeriodUp() {
+			m.pendingDetailReentry = true
+			return m, m.loadContexts
+		}
+		return m, nil
+
+	case "[":
+		if m.cyclePeriodDown() {
+			m.pendingDetailReentry = true
+			return m, m.loadContexts
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// cmdDetailAllCommands returns the full session context list
+func (m *Model) cmdDetailAllCommands() []models.Command {
+	return m.cmdDetailAll
+}
+
+func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+
+	case "j", "down":
+		if m.cmdDetailIdx < len(m.cmdDetailAll)-1 {
+			nextCmd := m.cmdDetailAll[m.cmdDetailIdx+1]
+			return m, m.loadCommandContext(nextCmd.ID)
+		}
+		return m, nil
+
+	case "k", "up":
+		if m.cmdDetailIdx > 0 {
+			prevCmd := m.cmdDetailAll[m.cmdDetailIdx-1]
+			return m, m.loadCommandContext(prevCmd.ID)
+		}
+		return m, nil
+
+	case "esc", "-":
+		// Return to ContextDetailView, restore selection to viewed command
+		m.viewState = ContextDetailView
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			target := m.cmdDetailAll[m.cmdDetailIdx]
+			for i, cmd := range m.detailCommands {
+				if cmd.ID == target.ID {
+					m.detailCmdIdx = i
+					m.ensureDetailCmdVisible()
+					break
+				}
+			}
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+
+	case tea.KeyEnter:
+		m.filterActive = false
+		// If in detail view, re-enter to apply filter
+		if m.viewState == ContextDetailView {
+			m.enterDetailView()
+		}
+		return m, nil
+
+	case tea.KeyEscape:
+		m.filterActive = false
+		m.filterText = m.filterPrevText
+		// If in detail view, re-enter to restore filter
+		if m.viewState == ContextDetailView {
+			m.enterDetailView()
+		}
+		return m, nil
+
+	case tea.KeyBackspace:
+		if len(m.filterText) == 0 {
+			m.filterActive = false
+			return m, nil
+		}
+		// Remove last rune
+		runes := []rune(m.filterText)
+		m.filterText = string(runes[:len(runes)-1])
+		// Live update in detail view
+		if m.viewState == ContextDetailView {
+			m.enterDetailView()
+		}
+		return m, nil
+
+	case tea.KeySpace:
+		m.filterText += " "
+		if m.viewState == ContextDetailView {
+			m.enterDetailView()
+		}
+		return m, nil
+
+	case tea.KeyRunes:
+		m.filterText += string(msg.Runes)
+		// Live update in detail view
+		if m.viewState == ContextDetailView {
+			m.enterDetailView()
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -377,12 +729,23 @@ func (m *Model) enterDetailView() {
 	m.detailContextKey = ctx.Key
 	m.detailContextBranch = ctx.Branch
 
-	// Compute frequencies across entire context, then filter
-	m.detailFrequencies = commandFrequencies(ctx.Commands)
-	filtered := filterByMode(ctx.Commands, m.displayMode)
+	// Apply substring filter first, then compute frequencies and mode filter
+	subFiltered := filterBySubstring(ctx.Commands, m.filterText)
+	m.detailFrequencies = commandFrequencies(subFiltered)
+	filtered := filterByMode(subFiltered, m.displayMode)
 
-	// Bucket filtered commands by hour
-	bucketMap := summary.BucketBy(filtered, summary.Hourly)
+	// Bucket size depends on period
+	var bucketSize summary.BucketSize
+	switch m.period {
+	case WeekPeriod:
+		bucketSize = summary.Daily
+	case MonthPeriod:
+		bucketSize = summary.Weekly
+	default:
+		bucketSize = summary.Hourly
+	}
+
+	bucketMap := summary.BucketBy(filtered, bucketSize)
 	orderedIDs := summary.GetOrderedBuckets(bucketMap)
 
 	// Build detail buckets and flat command list
@@ -391,7 +754,29 @@ func (m *Model) enterDetailView() {
 
 	for _, id := range orderedIDs {
 		bucket := bucketMap[id]
-		label := summary.FormatHour(id)
+
+		// Format label based on period
+		var label string
+		switch m.period {
+		case WeekPeriod:
+			t := time.Unix(int64(id), 0).Local()
+			label = t.Format("Mon Jan 2")
+		case MonthPeriod:
+			// Derive the Monday from the first command in this bucket
+			if len(bucket.Commands) > 0 {
+				t := time.Unix(bucket.Commands[0].Timestamp, 0).Local()
+				weekday := t.Weekday()
+				if weekday == time.Sunday {
+					weekday = 7
+				}
+				monday := t.AddDate(0, 0, -int(weekday-time.Monday))
+				label = fmt.Sprintf("Week of %s", monday.Format("Jan 2"))
+			} else {
+				label = fmt.Sprintf("Week %d", id)
+			}
+		default:
+			label = summary.FormatHour(id)
+		}
 
 		// Sort commands within bucket by timestamp
 		cmds := make([]models.Command, len(bucket.Commands))
@@ -440,7 +825,7 @@ func (m *Model) ensureDetailCmdVisible() {
 	if m.height == 0 || len(m.detailCommands) == 0 {
 		return
 	}
-	avail := m.height - 5
+	avail := m.height - 2 // headerBar(1) + footerBar(1)
 	if avail < 1 {
 		avail = 1
 	}
@@ -466,6 +851,12 @@ type contextsLoadedMsg struct {
 
 type errMsg struct {
 	err error
+}
+
+type commandContextLoadedMsg struct {
+	before []models.Command
+	target *models.Command
+	after  []models.Command
 }
 
 // Getters for testing
@@ -509,6 +900,66 @@ func (m *Model) DisplayMode() DisplayMode {
 	return m.displayMode
 }
 
+func (m *Model) CmdDetailTarget() *models.Command {
+	if m.cmdDetailIdx < len(m.cmdDetailAll) {
+		cmd := m.cmdDetailAll[m.cmdDetailIdx]
+		return &cmd
+	}
+	return nil
+}
+
+func (m *Model) CmdDetailIdx() int {
+	return m.cmdDetailIdx
+}
+
+func (m *Model) CmdDetailBefore() []models.Command {
+	if m.cmdDetailStartIdx > 0 {
+		return m.cmdDetailAll[:m.cmdDetailStartIdx]
+	}
+	return nil
+}
+
+func (m *Model) CmdDetailAfter() []models.Command {
+	if m.cmdDetailStartIdx+1 < len(m.cmdDetailAll) {
+		return m.cmdDetailAll[m.cmdDetailStartIdx+1:]
+	}
+	return nil
+}
+
+func (m *Model) CmdDetailTotalContext() int {
+	return m.cmdDetailTotalContext()
+}
+
+func (m *Model) CmdDetailAll() []models.Command {
+	return m.cmdDetailAll
+}
+
+func (m *Model) Period() Period {
+	return m.period
+}
+
+func (m *Model) FilterText() string {
+	return m.filterText
+}
+
+func (m *Model) FilterActive() bool {
+	return m.filterActive
+}
+
+// filterBySubstring returns commands where CommandText contains the filter string
+func filterBySubstring(commands []models.Command, filter string) []models.Command {
+	if filter == "" {
+		return commands
+	}
+	var result []models.Command
+	for _, cmd := range commands {
+		if strings.Contains(cmd.CommandText, filter) {
+			result = append(result, cmd)
+		}
+	}
+	return result
+}
+
 // commandFrequencies counts occurrences of each command text
 func commandFrequencies(commands []models.Command) map[string]int {
 	freq := make(map[string]int)
@@ -536,7 +987,8 @@ func filterByMode(commands []models.Command, mode DisplayMode) []models.Command 
 	return result
 }
 
-// filteredCommandCount returns the count of commands matching the mode
-func filteredCommandCount(commands []models.Command, mode DisplayMode) int {
-	return len(filterByMode(commands, mode))
+// filteredCommandCount returns the count of commands matching the filter and mode
+func filteredCommandCount(commands []models.Command, mode DisplayMode, filter string) int {
+	filtered := filterBySubstring(commands, filter)
+	return len(filterByMode(filtered, mode))
 }

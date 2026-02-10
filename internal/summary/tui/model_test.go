@@ -102,8 +102,7 @@ func TestLaunchWithYesterdaysContexts(t *testing.T) {
 	model := initModel(t, dbPath, today)
 
 	view := model.View()
-	assert.Contains(t, view, "Work Summary")
-	assert.Contains(t, view, "2026-02-04")
+	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "Yesterday")
 	assert.Contains(t, view, "projects/shy")
 	assert.Contains(t, view, "main")
@@ -209,7 +208,7 @@ func TestNavigateToPreviousDay(t *testing.T) {
 
 	assert.Equal(t, dayBefore.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 	view := model.View()
-	assert.Contains(t, view, "2026-02-03")
+	assert.Contains(t, view, "Feb 3")
 }
 
 // TestNavigateToNextDay tests the scenario:
@@ -232,7 +231,7 @@ func TestNavigateToNextDay(t *testing.T) {
 
 	assert.Equal(t, yesterday.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 	view := model.View()
-	assert.Contains(t, view, "2026-02-04")
+	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "Yesterday")
 }
 
@@ -252,7 +251,7 @@ func TestNavigateToTodayWithNoCommands(t *testing.T) {
 	pressKey(model, 'l')
 
 	view := model.View()
-	assert.Contains(t, view, "2026-02-05")
+	assert.Contains(t, view, "Feb 5")
 	assert.Contains(t, view, "Today")
 	assert.Contains(t, view, "No commands found")
 }
@@ -295,7 +294,7 @@ func TestJumpToToday(t *testing.T) {
 	pressKey(model, 't')
 
 	view := model.View()
-	assert.Contains(t, view, "2026-02-05")
+	assert.Contains(t, view, "Feb 5")
 	assert.Contains(t, view, "Today")
 }
 
@@ -318,7 +317,7 @@ func TestJumpToYesterday(t *testing.T) {
 	pressKey(model, 'y')
 
 	view := model.View()
-	assert.Contains(t, view, "2026-02-04")
+	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "Yesterday")
 }
 
@@ -613,7 +612,7 @@ func TestHeaderIncludesDayOfWeek(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Wednesday")
-	assert.Contains(t, view, "2026-02-04")
+	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "Yesterday")
 }
 
@@ -638,7 +637,7 @@ func TestHeaderIncludesDayOfWeekNonRelative(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Sunday")
-	assert.Contains(t, view, "2026-02-01")
+	assert.Contains(t, view, "Feb 1")
 	// Header should not contain relative date labels
 	header := strings.Split(view, "\n")[0]
 	assert.NotContains(t, header, "Yesterday")
@@ -756,7 +755,7 @@ func TestDetailViewCommandsForSelectedContext(t *testing.T) {
 	// Header shows context name, not "Work Summary"
 	assert.Contains(t, view, "main")
 	assert.Contains(t, view, "Wednesday")
-	assert.Contains(t, view, "2026-02-04")
+	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "Yesterday")
 
 	// Check buckets
@@ -788,7 +787,7 @@ func TestDetailHeaderConsistentLayout(t *testing.T) {
 	// Header should show context name instead of "Work Summary"
 	assert.NotContains(t, view, "Work Summary")
 	assert.Contains(t, view, "●")
-	assert.Contains(t, view, "Wednesday 2026-02-04 (Yesterday)")
+	assert.Contains(t, view, "Wednesday Feb 4 (Yesterday)")
 }
 
 // TestDetailHeaderFocusIndicator tests focus indicator in detail view
@@ -1000,7 +999,8 @@ func TestDetailReturnToSummaryWithEsc(t *testing.T) {
 	assert.Equal(t, SummaryView, model.ViewState())
 
 	view := model.View()
-	assert.Contains(t, view, "Work Summary")
+	assert.NotContains(t, view, "Work Summary")
+	assert.Contains(t, view, "●")
 	assert.Equal(t, 0, model.SelectedIdx())
 }
 
@@ -1280,13 +1280,11 @@ func TestDetailEmptyState(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "No commands found")
-	assert.NotContains(t, view, "[j/k] Select")
-	assert.Contains(t, view, "[Esc] Back")
-	assert.Contains(t, view, "[h/l] Time")
-	assert.Contains(t, view, "[H/L] Context")
+	assert.NotContains(t, view, "[j/k]")
+	assert.NotContains(t, view, "[Esc]")
 }
 
-// TestDetailStatusBar tests status bar content in detail view
+// TestDetailStatusBar tests footer bar content in detail view
 func TestDetailStatusBar(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
 	yesterday := today.AddDate(0, 0, -1)
@@ -1297,10 +1295,10 @@ func TestDetailStatusBar(t *testing.T) {
 	pressEnter(model)
 
 	view := model.View()
-	assert.Contains(t, view, "[j/k] Select")
-	assert.Contains(t, view, "[Esc] Back")
-	assert.Contains(t, view, "[h/l] Time")
-	assert.Contains(t, view, "[H/L] Context")
+	// Footer shows mode indicator, no key hints
+	assert.Contains(t, view, "All")
+	assert.NotContains(t, view, "[j/k]")
+	assert.NotContains(t, view, "[Esc]")
 }
 
 // TestDetailViewportOverflow tests that header and footer stay visible when commands overflow
@@ -1330,7 +1328,7 @@ func TestDetailViewportOverflow(t *testing.T) {
 	// Header should be on first line
 	assert.Contains(t, lines[0], "main")
 
-	// Status bar should be on last non-empty line
+	// Footer bar should be on last non-empty line
 	lastLine := ""
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.TrimSpace(lines[i]) != "" {
@@ -1338,7 +1336,7 @@ func TestDetailViewportOverflow(t *testing.T) {
 			break
 		}
 	}
-	assert.Contains(t, lastLine, "[Esc] Back")
+	assert.Contains(t, lastLine, "All")
 
 	// Not all 30 commands should be visible
 	visibleCount := 0
@@ -1387,7 +1385,7 @@ func TestDetailViewportScrollsWithSelection(t *testing.T) {
 	// Header still visible (first line)
 	assert.Contains(t, lines[0], "main")
 
-	// Status bar still visible (last non-empty line)
+	// Footer bar still visible (last non-empty line)
 	lastLine := ""
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.TrimSpace(lines[i]) != "" {
@@ -1395,7 +1393,7 @@ func TestDetailViewportScrollsWithSelection(t *testing.T) {
 			break
 		}
 	}
-	assert.Contains(t, lastLine, "[Esc] Back")
+	assert.Contains(t, lastLine, "All")
 }
 
 // TestDetailViewportScrollUpShowsBucketHeader tests that scrolling back up reveals the bucket header
@@ -1765,8 +1763,8 @@ func TestDetailNoMultiRunEmptyState(t *testing.T) {
 	assert.NotContains(t, view, "[j/k] Select")
 }
 
-// TestStatusBarShowsModeKeys tests status bar shows display mode keys
-func TestStatusBarShowsModeKeys(t *testing.T) {
+// TestStatusBarShowsModeIndicator tests footer bar shows active display mode
+func TestStatusBarShowsModeIndicator(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
 	yesterday := today.AddDate(0, 0, -1)
 
@@ -1774,12 +1772,12 @@ func TestStatusBarShowsModeKeys(t *testing.T) {
 	model := initModel(t, dbPath, today)
 
 	view := model.View()
-	assert.Contains(t, view, "[u] Uniq")
-	assert.Contains(t, view, "[m] Multi")
+	// Default mode is All
+	assert.Contains(t, view, "All")
 }
 
-// TestStatusBarShowsActiveIndicator tests status bar shows active mode indicator
-func TestStatusBarShowsActiveIndicator(t *testing.T) {
+// TestStatusBarShowsActiveMode tests footer bar shows switched mode
+func TestStatusBarShowsActiveMode(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
 	yesterday := today.AddDate(0, 0, -1)
 
@@ -1789,11 +1787,11 @@ func TestStatusBarShowsActiveIndicator(t *testing.T) {
 	pressKey(model, 'u')
 
 	view := model.View()
-	assert.Contains(t, view, "*Uniq*")
+	assert.Contains(t, view, "Uniq")
 }
 
-// TestStatusBarModeKeysInDetail tests status bar shows mode keys in detail view
-func TestStatusBarModeKeysInDetail(t *testing.T) {
+// TestStatusBarModeInDetail tests footer bar shows mode in detail view
+func TestStatusBarModeInDetail(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
 	yesterday := today.AddDate(0, 0, -1)
 
@@ -1803,8 +1801,7 @@ func TestStatusBarModeKeysInDetail(t *testing.T) {
 	pressEnter(model)
 
 	view := model.View()
-	assert.Contains(t, view, "[u] Uniq")
-	assert.Contains(t, view, "[m] Multi")
+	assert.Contains(t, view, "All")
 }
 
 // TestDetailNavigateNextDayEmptyContext tests navigating to a day where context has no commands
@@ -1831,4 +1828,1439 @@ func TestDetailNavigateNextDayEmptyContext(t *testing.T) {
 	view := model.View()
 	assert.Contains(t, view, "No commands found")
 	assert.Contains(t, view, ctxName)
+}
+
+// === Phase 4a Test Helpers ===
+
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+// makeCommandFull creates a command with full metadata including pid and duration
+func makeCommandFull(date time.Time, hour, minute int, text, workingDir string, gitRepo, gitBranch *string, exitStatus int, durationMs *int64, pid *int64) models.Command {
+	timestamp := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, time.Local)
+	app := "zsh"
+	return models.Command{
+		CommandText: text,
+		WorkingDir:  workingDir,
+		GitRepo:     gitRepo,
+		GitBranch:   gitBranch,
+		ExitStatus:  exitStatus,
+		Timestamp:   timestamp.Unix(),
+		Duration:    durationMs,
+		SourcePid:   pid,
+		SourceApp:   &app,
+	}
+}
+
+// phase4aCommands returns commands with full metadata for phase 4a tests
+func phase4aCommands(date time.Time) []models.Command {
+	pid := int64Ptr(10001)
+	return []models.Command{
+		makeCommandFull(date, 8, 15, "go build -o shy .", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(1200), pid),
+		makeCommandFull(date, 8, 22, "./shy summary", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(250), pid),
+		makeCommandFull(date, 8, 30, "go test ./... -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 1, int64Ptr(8200), pid),
+		makeCommandFull(date, 9, 0, `git commit -m "feat: add summary"`, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(500), pid),
+		makeCommandFull(date, 9, 5, "go build -o shy .", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(1050), pid),
+		makeCommandFull(date, 9, 30, "git push", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(2100), pid),
+		makeCommandFull(date, 14, 20, "shy summary", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(310), pid),
+		makeCommandFull(date, 14, 25, "go test ./cmd -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(3200), pid),
+	}
+}
+
+// enterCommandDetailDirect simulates entering command detail view by directly setting state
+// This avoids needing DB access for GetCommandWithContext
+func enterCommandDetailDirect(model *Model, target *models.Command, before, after []models.Command) {
+	var all []models.Command
+	all = append(all, before...)
+	if target != nil {
+		all = append(all, *target)
+	}
+	all = append(all, after...)
+	model.cmdDetailAll = all
+	model.cmdDetailIdx = len(before) // point at target
+	model.cmdDetailStartIdx = model.cmdDetailIdx
+	model.viewState = CommandDetailView
+}
+
+// === Phase 4a Tests ===
+
+// TestCmdDetailEnterFromContextDetail tests entering command detail view via Enter
+func TestCmdDetailEnterFromContextDetail(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase4aCommands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Press Enter on first command to enter command detail
+	pressEnter(model)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	view := model.View()
+	assert.Contains(t, view, "Event:")
+}
+
+// TestCmdDetailShowsMetadata tests that command detail view shows metadata fields
+func TestCmdDetailShowsMetadata(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[0] // "go build -o shy ." at 8:15
+	target.ID = 1
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, cmds[1:3])
+
+	view := model.View()
+	assert.Contains(t, view, "Command:")
+	assert.Contains(t, view, "go build -o shy .")
+	assert.Contains(t, view, "Timestamp:")
+	assert.Contains(t, view, "Working Dir:")
+	assert.Contains(t, view, "Duration:")
+	assert.Contains(t, view, "Git Repo:")
+	assert.Contains(t, view, "github.com/chris/shy")
+	assert.Contains(t, view, "Git Branch:")
+	assert.Contains(t, view, "main")
+}
+
+// TestCmdDetailExitStatusSuccess tests success indicator
+func TestCmdDetailExitStatusSuccess(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[0] // exit status 0
+	target.ID = 1
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, nil)
+
+	view := model.View()
+	assert.Contains(t, view, "0 \u2713")
+}
+
+// TestCmdDetailExitStatusFailure tests failure indicator
+func TestCmdDetailExitStatusFailure(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[2] // "go test ./... -v" with exit status 1
+	target.ID = 3
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, nil)
+
+	view := model.View()
+	assert.Contains(t, view, "1 \u2717")
+}
+
+// TestCmdDetailDurationHumanReadable tests human-readable duration
+func TestCmdDetailDurationHumanReadable(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[2] // duration 8200ms = 8s
+	target.ID = 3
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, nil)
+
+	view := model.View()
+	assert.Contains(t, view, "Duration:")
+	assert.Contains(t, view, "8s")
+}
+
+// TestCmdDetailMissingDuration tests missing duration shows em dash
+func TestCmdDetailMissingDuration(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	target := makeCommandWithText(yesterday, 9, 0, "test cmd", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"))
+	target.ID = 1
+	target.Duration = nil
+
+	cmds := phase4aCommands(yesterday)
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, nil)
+
+	view := model.View()
+	assert.Contains(t, view, "Duration:")
+	assert.Contains(t, view, "\u2014")
+}
+
+// TestCmdDetailSessionContext tests session context display
+func TestCmdDetailSessionContext(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[3] // git commit
+	target.ID = 4
+	before := []models.Command{cmds[1], cmds[2]}
+	before[0].ID = 2
+	before[1].ID = 3
+	after := []models.Command{cmds[4]}
+	after[0].ID = 5
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, before, after)
+
+	view := model.View()
+	assert.Contains(t, view, "Context (same session):")
+	assert.Contains(t, view, "./shy summary")
+	assert.Contains(t, view, "go test ./... -v")
+	assert.Contains(t, view, `git commit -m "feat: add summary"`)
+	assert.Contains(t, view, "go build -o shy .")
+}
+
+// TestCmdDetailCurrentCommandHighlighted tests the target is highlighted
+func TestCmdDetailCurrentCommandHighlighted(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[3]
+	target.ID = 4
+	before := []models.Command{cmds[2]}
+	before[0].ID = 3
+	after := []models.Command{cmds[4]}
+	after[0].ID = 5
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, before, after)
+
+	view := model.View()
+	assert.Contains(t, view, "▶")
+}
+
+// TestCmdDetailNavigateDown tests navigating down in command detail
+func TestCmdDetailNavigateDown(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[3] // git commit at index 3
+	target.ID = 4
+	before := []models.Command{cmds[2]}
+	before[0].ID = 3
+	after := []models.Command{cmds[4]}
+	after[0].ID = 5
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, before, after)
+
+	assert.Equal(t, `git commit -m "feat: add summary"`, model.CmdDetailTarget().CommandText)
+
+	// j reloads context centered on the next command
+	pressKey(model, 'j')
+	assert.Equal(t, "go build -o shy .", model.CmdDetailTarget().CommandText)
+}
+
+// TestCmdDetailNavigateUp tests navigating up in command detail
+func TestCmdDetailNavigateUp(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[3]
+	target.ID = 4
+	before := []models.Command{cmds[2]}
+	before[0].ID = 3
+	after := []models.Command{cmds[4]}
+	after[0].ID = 5
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, before, after)
+
+	assert.Equal(t, `git commit -m "feat: add summary"`, model.CmdDetailTarget().CommandText)
+
+	// k reloads context centered on the previous command
+	pressKey(model, 'k')
+	assert.Equal(t, "go test ./... -v", model.CmdDetailTarget().CommandText)
+}
+
+// TestCmdDetailNavigationStopsAtBoundary tests navigation stops at session boundaries
+func TestCmdDetailNavigationStopsAtBoundary(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday) // 8 commands, same PID
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	// Enter via the full flow so context is loaded from DB
+	pressEnter(model) // → ContextDetailView
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	pressEnter(model) // → CommandDetailView on first command
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	firstCmdText := cmds[0].CommandText
+	assert.Equal(t, firstCmdText, model.CmdDetailTarget().CommandText)
+
+	// Try to go up past the session start — should stay on first command
+	pressKey(model, 'k')
+	assert.Equal(t, firstCmdText, model.CmdDetailTarget().CommandText)
+
+	// Navigate all the way to the last command
+	lastCmdText := cmds[len(cmds)-1].CommandText
+	for i := 0; i < len(cmds); i++ {
+		pressKey(model, 'j')
+	}
+	assert.Equal(t, lastCmdText, model.CmdDetailTarget().CommandText)
+
+	// Try to go down past the session end — should stay on last command
+	pressKey(model, 'j')
+	assert.Equal(t, lastCmdText, model.CmdDetailTarget().CommandText)
+}
+
+// TestCmdDetailNavigateAllCommands walks through every command in the session
+// via j/k navigation, verifying the target command text at each position.
+func TestCmdDetailNavigateAllCommands(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday) // 8 commands, same PID
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	allTexts := make([]string, len(cmds))
+	for i, c := range cmds {
+		allTexts[i] = c.CommandText
+	}
+
+	// Enter command detail on the 3rd command (ID 3)
+	target := cmds[2]
+	target.ID = 3
+	before := []models.Command{cmds[0], cmds[1]}
+	before[0].ID = 1
+	before[1].ID = 2
+	after := []models.Command{cmds[3], cmds[4]}
+	after[0].ID = 4
+	after[1].ID = 5
+	enterCommandDetailDirect(model, &target, before, after)
+
+	assert.Equal(t, allTexts[2], model.CmdDetailTarget().CommandText)
+
+	// Navigate up to the very first command
+	pressKey(model, 'k')
+	assert.Equal(t, allTexts[1], model.CmdDetailTarget().CommandText)
+
+	pressKey(model, 'k')
+	assert.Equal(t, allTexts[0], model.CmdDetailTarget().CommandText)
+
+	// Clamped at top
+	pressKey(model, 'k')
+	assert.Equal(t, allTexts[0], model.CmdDetailTarget().CommandText)
+
+	// Navigate down through every command in the session to the last
+	for i := 1; i < len(allTexts); i++ {
+		pressKey(model, 'j')
+		assert.Equal(t, allTexts[i], model.CmdDetailTarget().CommandText, "command text after pressing j %d times", i)
+	}
+
+	// Clamped at bottom
+	pressKey(model, 'j')
+	assert.Equal(t, allTexts[len(allTexts)-1], model.CmdDetailTarget().CommandText)
+
+	// Verify the view renders the currently selected command's metadata
+	view := model.View()
+	assert.Contains(t, view, "Event:")
+	assert.Contains(t, view, allTexts[len(allTexts)-1])
+}
+
+// TestCmdDetailReturnWithEsc tests returning to context detail with Esc
+func TestCmdDetailReturnWithEsc(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase4aCommands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Navigate to second command
+	pressKey(model, 'j')
+	selectedCmd := model.DetailCommands()[model.DetailCmdIdx()]
+
+	// Enter command detail
+	target := selectedCmd
+	enterCommandDetailDirect(model, &target, nil, nil)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	// Press Esc to return
+	pressEsc(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+}
+
+// TestCmdDetailReturnWithDash tests returning to context detail with '-'
+func TestCmdDetailReturnWithDash(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase4aCommands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail
+	pressEnter(model)
+
+	// Enter command detail
+	target := model.DetailCommands()[0]
+	enterCommandDetailDirect(model, &target, nil, nil)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	// Press '-' to return
+	pressKey(model, '-')
+	assert.Equal(t, ContextDetailView, model.ViewState())
+}
+
+// TestCmdDetailQuit tests quitting from command detail view
+func TestCmdDetailQuit(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[0]
+	target.ID = 1
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, nil)
+
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.NotNil(t, cmd)
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "expected tea.QuitMsg")
+}
+
+// TestCmdDetailStatusBar tests footer bar content in command detail view
+func TestCmdDetailStatusBar(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	target := cmds[0]
+	target.ID = 1
+
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	enterCommandDetailDirect(model, &target, nil, nil)
+
+	view := model.View()
+	// Footer bar has no key hints in command detail view
+	assert.NotContains(t, view, "[j/k]")
+	assert.NotContains(t, view, "[Esc]")
+}
+
+// TestCmdDetailContextFillsHeight tests that total context scales with terminal height
+func TestCmdDetailContextFillsHeight(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday)
+	dbPath := setupTestDB(t, cmds)
+
+	tests := []struct {
+		name      string
+		height    int
+		wantTotal int
+	}{
+		{"tall terminal", 40, 24},      // 40 - 16 = 24
+		{"short terminal", 20, 4},      // 20 - 16 = 4
+		{"medium terminal", 30, 14},    // 30 - 16 = 14
+		{"very short terminal", 15, 1}, // 15 - 16 < 1 → 1
+		{"zero height fallback", 0, 10}, // fallback
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := initModel(t, dbPath, today)
+			model.Update(tea.WindowSizeMsg{Width: 80, Height: tt.height})
+
+			assert.Equal(t, tt.wantTotal, model.CmdDetailTotalContext())
+		})
+	}
+}
+
+// TestCmdDetailContextCountMatchesHeight tests that the actual number of context
+// commands loaded matches what fits the terminal height
+func TestCmdDetailContextCountMatchesHeight(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	// All 8 commands share the same PID, so context lookups return session neighbors
+	cmds := phase4aCommands(yesterday)
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	// Set height to 40 → totalContext = 24 → but only 8 cmds in DB
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
+
+	// Enter context detail, then command detail via the full flow
+	pressEnter(model) // → ContextDetailView
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	pressEnter(model) // → CommandDetailView (first command)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	// With 8 commands in DB and target at index 0, we expect:
+	// 0 before + 1 target + 7 after = 8 total (limited by DB, not totalContext)
+	allCmds := model.CmdDetailAll()
+	assert.Equal(t, len(cmds), len(allCmds))
+
+	// Now test with height 20 → totalContext = 4 → at most 4 context + 1 target = 5
+	model2 := initModel(t, dbPath, today)
+	model2.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	pressEnter(model2) // → ContextDetailView
+	pressEnter(model2) // → CommandDetailView
+
+	allCmds2 := model2.CmdDetailAll()
+	// totalContext=4, target is first cmd (index 0), so 0 before + 1 target + 4 after = 5
+	assert.LessOrEqual(t, len(allCmds2), 5)
+	assert.GreaterOrEqual(t, len(allCmds2), 1) // at least the target
+}
+
+// TestCmdDetailContextBalancesWhenNearEdge tests that when near the start/end
+// of a session, surplus context from the short side fills the other side
+func TestCmdDetailContextBalancesWhenNearEdge(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday) // 8 commands, same PID
+	dbPath := setupTestDB(t, cmds)
+
+	// height 30 → totalContext = 14 → balanced would be 7 before + 7 after
+	// But at the first command there are 0 before, so all 14 should go to after
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	pressEnter(model)
+	pressEnter(model) // first command
+
+	allCmds := model.CmdDetailAll()
+	// 0 before + 1 target + 7 after = 8 (limited by 8 cmds in DB, not 12)
+	assert.Equal(t, len(cmds), len(allCmds), "near start: should show all 8 commands")
+	assert.Equal(t, cmds[0].CommandText, model.CmdDetailTarget().CommandText)
+
+	// Navigate to the last command
+	for i := 0; i < len(cmds)-1; i++ {
+		pressKey(model, 'j')
+	}
+	assert.Equal(t, cmds[len(cmds)-1].CommandText, model.CmdDetailTarget().CommandText)
+
+	// At the last command: 0 after, so all 14 should go to before
+	allCmds = model.CmdDetailAll()
+	assert.Equal(t, len(cmds), len(allCmds), "near end: should show all 8 commands")
+}
+
+// TestCmdDetailResizeReloadsContext tests that resizing the terminal reloads
+// the context to fill the new available space
+func TestCmdDetailResizeReloadsContext(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	cmds := phase4aCommands(yesterday) // 8 commands, same PID
+	dbPath := setupTestDB(t, cmds)
+	model := initModel(t, dbPath, today)
+
+	// Start small: height 18 → totalContext = 2
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 18})
+	pressEnter(model) // → ContextDetailView
+	pressEnter(model) // → CommandDetailView on first command
+
+	assert.Equal(t, CommandDetailView, model.ViewState())
+	smallCount := len(model.CmdDetailAll())
+	// totalContext=2, target at start → 0 before + 1 target + 2 after = 3
+	assert.LessOrEqual(t, smallCount, 3)
+
+	// Resize larger: height 40 → totalContext = 24
+	_, cmd := model.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
+	assert.NotNil(t, cmd, "resize in CommandDetailView should trigger reload")
+	msg := cmd()
+	model.Update(msg)
+
+	assert.Equal(t, CommandDetailView, model.ViewState())
+	largeCount := len(model.CmdDetailAll())
+	// All 8 commands fit within totalContext=24
+	assert.Equal(t, len(cmds), largeCount)
+	assert.Greater(t, largeCount, smallCount)
+}
+
+// === Phase 4b Test Helpers ===
+
+// typeString sends each rune as a KeyMsg to simulate typing
+func typeString(model *Model, s string) {
+	for _, r := range s {
+		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+}
+
+// pressBackspace simulates pressing backspace
+func pressBackspace(model *Model) {
+	model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+}
+
+// pressSlash simulates pressing '/' to open filter
+func pressSlash(model *Model) {
+	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+}
+
+// === Phase 4b Tests ===
+
+// TestFilterOpenWithSlash tests opening filter with '/'
+func TestFilterOpenWithSlash(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	assert.False(t, model.FilterActive())
+
+	pressSlash(model)
+	assert.True(t, model.FilterActive())
+
+	view := model.View()
+	assert.Contains(t, view, "Filter:")
+}
+
+// TestFilterTypingUpdatesText tests typing updates filter text
+func TestFilterTypingUpdatesText(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	typeString(model, "go test")
+
+	assert.Equal(t, "go test", model.FilterText())
+	view := model.View()
+	assert.Contains(t, view, "Filter: go test")
+}
+
+// TestFilterLiveApplicationSummary tests filter applies live in summary view
+func TestFilterLiveApplicationSummary(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	typeString(model, "go build")
+
+	view := model.View()
+	// shy:main has 3x "go build" commands
+	assert.Contains(t, view, "3 commands")
+	// downloads has 0 matching
+	assert.Contains(t, view, "0 commands")
+}
+
+// TestFilterLiveApplicationDetail tests filter applies live in detail view
+func TestFilterLiveApplicationDetail(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Enter detail for shy:main
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 8, len(model.DetailCommands()))
+
+	// Open filter and type
+	pressSlash(model)
+	typeString(model, "go build")
+
+	// Should show only "go build" commands
+	assert.Equal(t, 3, len(model.DetailCommands()))
+}
+
+// TestFilterSubmitWithEnter tests submitting filter with Enter
+func TestFilterSubmitWithEnter(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	typeString(model, "git")
+	assert.True(t, model.FilterActive())
+
+	pressEnter(model)
+	assert.False(t, model.FilterActive())
+	assert.Equal(t, "git", model.FilterText())
+}
+
+// TestFilterCancelWithEscRestoresPrevious tests Esc restores previous filter
+func TestFilterCancelWithEscRestoresPrevious(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set initial filter
+	pressSlash(model)
+	typeString(model, "build")
+	pressEnter(model)
+	assert.Equal(t, "build", model.FilterText())
+
+	// Open again and type something different
+	pressSlash(model)
+	typeString(model, "git")
+	assert.Equal(t, "buildgit", model.FilterText()) // appended
+
+	// Cancel with Esc — should restore "build"
+	pressEsc(model)
+	assert.False(t, model.FilterActive())
+	assert.Equal(t, "build", model.FilterText())
+}
+
+// TestFilterCancelWithEscNoPrior tests Esc with no prior filter clears all
+func TestFilterCancelWithEscNoPrior(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	typeString(model, "git")
+
+	pressEsc(model)
+	assert.False(t, model.FilterActive())
+	assert.Equal(t, "", model.FilterText())
+}
+
+// TestFilterClearWithEmptySubmit tests clearing filter by submitting empty
+func TestFilterClearWithEmptySubmit(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set filter
+	pressSlash(model)
+	typeString(model, "go test")
+	pressEnter(model)
+	assert.Equal(t, "go test", model.FilterText())
+
+	// Open again, clear text, submit
+	pressSlash(model)
+	// Remove all chars with backspace
+	for i := 0; i < len("go test"); i++ {
+		pressBackspace(model)
+	}
+	pressEnter(model)
+	assert.Equal(t, "", model.FilterText())
+
+	view := model.View()
+	assert.Contains(t, view, "8 commands")
+}
+
+// TestFilterBackspaceRemovesChars tests backspace removes characters
+func TestFilterBackspaceRemovesChars(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	typeString(model, "go test")
+	assert.Equal(t, "go test", model.FilterText())
+
+	pressBackspace(model)
+	assert.Equal(t, "go tes", model.FilterText())
+}
+
+// TestFilterBackspaceOnEmptyCloses tests backspace on empty closes filter
+func TestFilterBackspaceOnEmptyCloses(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	assert.True(t, model.FilterActive())
+	assert.Equal(t, "", model.FilterText())
+
+	pressBackspace(model)
+	assert.False(t, model.FilterActive())
+}
+
+// TestFilterAndUniqueModeCombine tests filter with unique mode
+func TestFilterAndUniqueModeCombine(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set filter to "go"
+	pressSlash(model)
+	typeString(model, "go")
+	pressEnter(model)
+
+	// Set unique mode
+	pressKey(model, 'u')
+
+	view := model.View()
+	// "go test ./cmd -v" is the only unique "go" command (count=1)
+	// "go build" (3x) and "go test ./... -v" (2x) excluded
+	assert.Contains(t, view, "1 command")
+}
+
+// TestFilterAndMultiModeCombine tests filter with multi mode
+func TestFilterAndMultiModeCombine(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set filter to "go"
+	pressSlash(model)
+	typeString(model, "go")
+	pressEnter(model)
+
+	// Set multi mode
+	pressKey(model, 'm')
+
+	view := model.View()
+	// "go build" (3x) + "go test ./... -v" (2x) = 5 instances
+	assert.Contains(t, view, "5 commands")
+}
+
+// TestFilterPersistsAcrossViews tests filter persists when entering/leaving detail
+func TestFilterPersistsAcrossViews(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set filter
+	pressSlash(model)
+	typeString(model, "build")
+	pressEnter(model)
+	assert.Equal(t, "build", model.FilterText())
+
+	// Enter detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, "build", model.FilterText())
+
+	// Should only show "go build" commands
+	assert.Equal(t, 3, len(model.DetailCommands()))
+
+	// Return
+	pressEsc(model)
+	assert.Equal(t, "build", model.FilterText())
+}
+
+// TestFilterPersistsAcrossDates tests filter persists when navigating dates
+func TestFilterPersistsAcrossDates(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set filter
+	pressSlash(model)
+	typeString(model, "git")
+	pressEnter(model)
+	assert.Equal(t, "git", model.FilterText())
+
+	pressKey(model, 'h')
+	assert.Equal(t, "git", model.FilterText())
+}
+
+// TestFilterIndicatorInStatusBar tests filter indicator in status bar
+func TestFilterIndicatorInStatusBar(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	// Set filter
+	pressSlash(model)
+	typeString(model, "go test")
+	pressEnter(model)
+
+	view := model.View()
+	assert.Contains(t, view, "/go test")
+}
+
+// TestFilterSlashInDetailView tests opening filter in detail view
+func TestFilterSlashInDetailView(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	pressSlash(model)
+	assert.True(t, model.FilterActive())
+}
+
+// TestFilterQuitWhileFilterOpen tests quitting while filter is open
+func TestFilterQuitWhileFilterOpen(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase3Commands(yesterday))
+	model := initModel(t, dbPath, today)
+
+	pressSlash(model)
+	assert.True(t, model.FilterActive())
+
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	assert.NotNil(t, cmd)
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "expected tea.QuitMsg")
+}
+
+// === Phase 4c Test Helpers ===
+
+// phase4Commands returns multi-day data matching the feat file background
+func phase4Commands() []models.Command {
+	pid := int64Ptr(10001)
+	pid2 := int64Ptr(10002)
+	pid3 := int64Ptr(10003)
+
+	mon := time.Date(2026, 2, 3, 0, 0, 0, 0, time.Local) // Monday
+	tue := time.Date(2026, 2, 4, 0, 0, 0, 0, time.Local) // Tuesday
+	wed := time.Date(2026, 2, 5, 0, 0, 0, 0, time.Local) // Wednesday
+
+	return []models.Command{
+		// Mon Feb 3 - ~/projects/shy:main (3 commands)
+		makeCommandFull(mon, 9, 15, "go build -o shy .", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(1200), pid),
+		makeCommandFull(mon, 9, 30, "go test ./... -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(4500), pid),
+		makeCommandFull(mon, 14, 20, "shy summary", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(300), pid),
+
+		// Tue Feb 4 - ~/projects/shy:main (8 commands)
+		makeCommandFull(tue, 8, 15, "go build -o shy .", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(1100), pid),
+		makeCommandFull(tue, 8, 22, "./shy summary", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(250), pid),
+		makeCommandFull(tue, 8, 30, "go test ./... -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 1, int64Ptr(8200), pid),
+		makeCommandFull(tue, 9, 0, `git commit -m "feat: add summary"`, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(500), pid),
+		makeCommandFull(tue, 9, 5, "go build -o shy .", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(1050), pid),
+		makeCommandFull(tue, 9, 30, "git push", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(2100), pid),
+		makeCommandFull(tue, 14, 20, "shy summary", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(310), pid),
+		makeCommandFull(tue, 14, 25, "go test ./cmd -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(3200), pid),
+
+		// Tue Feb 4 - ~/projects/shy:bugfix (3 commands)
+		makeCommandFull(tue, 8, 0, "git checkout bugfix", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("bugfix"), 0, int64Ptr(150), pid2),
+		makeCommandFull(tue, 8, 10, "go test ./... -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("bugfix"), 0, int64Ptr(5100), pid2),
+		makeCommandFull(tue, 8, 45, "git diff", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("bugfix"), 0, int64Ptr(80), pid2),
+
+		// Tue Feb 4 - ~/downloads (2 commands)
+		makeCommandFull(tue, 10, 0, "curl -O https://example.com/archive.tar.gz", "/home/user/downloads", nil, nil, 0, int64Ptr(15000), pid3),
+		makeCommandFull(tue, 10, 5, "tar xzf archive.tar.gz", "/home/user/downloads", nil, nil, 0, int64Ptr(900), pid3),
+
+		// Wed Feb 5 - ~/projects/shy:main (2 commands)
+		makeCommandFull(wed, 10, 0, "go build -o shy .", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(1000), pid),
+		makeCommandFull(wed, 10, 30, "go test ./... -v", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main"), 0, int64Ptr(4000), pid),
+	}
+}
+
+// pressBracketRight presses ']'
+func pressBracketRight(model *Model) {
+	pressKey(model, ']')
+}
+
+// pressBracketLeft presses '['
+func pressBracketLeft(model *Model) {
+	pressKey(model, '[')
+}
+
+// === Phase 4c Tests ===
+
+// TestDefaultPeriodIsDay tests the default period is Day
+func TestDefaultPeriodIsDay(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	assert.Equal(t, DayPeriod, model.Period())
+	view := model.View()
+	assert.Contains(t, view, "Day")
+}
+
+// TestPeriodCycleDayToWeek tests ] cycles Day to Week
+func TestPeriodCycleDayToWeek(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	assert.Equal(t, DayPeriod, model.Period())
+
+	pressBracketRight(model)
+	assert.Equal(t, WeekPeriod, model.Period())
+	view := model.View()
+	assert.Contains(t, view, "Week")
+	assert.Contains(t, view, "Week of")
+}
+
+// TestPeriodCycleWeekToMonth tests ] cycles Week to Month
+func TestPeriodCycleWeekToMonth(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+	assert.Equal(t, MonthPeriod, model.Period())
+	view := model.View()
+	assert.Contains(t, view, "Month")
+	assert.Contains(t, view, "February 2026")
+}
+
+// TestPeriodCycleMonthClamped tests ] at Month does nothing
+func TestPeriodCycleMonthClamped(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+	pressBracketRight(model) // Month → still Month
+	assert.Equal(t, MonthPeriod, model.Period())
+}
+
+// TestPeriodCycleMonthToWeek tests [ cycles Month to Week
+func TestPeriodCycleMonthToWeek(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+	pressBracketLeft(model)  // Month → Week
+	assert.Equal(t, WeekPeriod, model.Period())
+}
+
+// TestPeriodCycleWeekToDay tests [ cycles Week to Day
+func TestPeriodCycleWeekToDay(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketLeft(model)  // Week → Day
+	assert.Equal(t, DayPeriod, model.Period())
+}
+
+// TestPeriodCycleDayClamped tests [ at Day does nothing
+func TestPeriodCycleDayClamped(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketLeft(model) // Day → still Day
+	assert.Equal(t, DayPeriod, model.Period())
+}
+
+// TestWeekViewAggregatedCounts tests week view shows aggregated command counts
+func TestWeekViewAggregatedCounts(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	assert.Equal(t, WeekPeriod, model.Period())
+
+	view := model.View()
+	// shy:main has 3(Mon) + 8(Tue) + 2(Wed) = 13 commands for the week
+	assert.Contains(t, view, "13 commands")
+}
+
+// TestWeekDateNavMovesByWeek tests h/l moves by 7 days in week view
+func TestWeekDateNavMovesByWeek(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+
+	// Note currentDate before
+	dateBefore := model.CurrentDate()
+
+	pressKey(model, 'h') // go back 1 week
+	dateAfter := model.CurrentDate()
+
+	diff := dateBefore.Sub(dateAfter)
+	assert.Equal(t, 7*24*time.Hour, diff)
+
+	view := model.View()
+	assert.Contains(t, view, "Week of Jan 26")
+}
+
+// TestMonthDateNavMovesByMonth tests h/l moves by month
+func TestMonthDateNavMovesByMonth(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+
+	pressKey(model, 'h') // go back 1 month
+	view := model.View()
+	assert.Contains(t, view, "January 2026")
+}
+
+// TestWeekDetailBucketsByDay tests week detail view buckets by day
+func TestWeekDetailBucketsByDay(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+
+	// Enter detail for shy:main (should be first, most commands)
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	view := model.View()
+	// Should bucket by day (Feb 3 2026 = Tuesday)
+	assert.Contains(t, view, "Tue Feb 3")
+	assert.Contains(t, view, "Wed Feb 4")
+	assert.Contains(t, view, "Thu Feb 5")
+}
+
+// TestWeekDetailShowsFullTimestamps tests week detail shows full timestamps
+func TestWeekDetailShowsFullTimestamps(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model)
+	pressEnter(model)
+
+	view := model.View()
+	// Should show full time like "9:15 AM" instead of just ":15"
+	assert.Contains(t, view, "AM")
+}
+
+// TestMonthDetailBucketsByWeek tests month detail view buckets by week
+func TestMonthDetailBucketsByWeek(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	view := model.View()
+	assert.Contains(t, view, "Week of Feb 2") // Feb 3-5 are in ISO week 6, Monday is Feb 2
+}
+
+// TestHeaderWeekFormat tests header format in week view
+func TestHeaderWeekFormat(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model)
+
+	view := model.View()
+	assert.Contains(t, view, "Week of Feb 2")
+	assert.Contains(t, view, "Week")
+}
+
+// TestHeaderMonthFormat tests header format in month view
+func TestHeaderMonthFormat(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model)
+	pressBracketRight(model)
+
+	view := model.View()
+	assert.Contains(t, view, "February 2026")
+	assert.Contains(t, view, "Month")
+}
+
+// TestHeaderDayPeriodIndicator tests header shows Day indicator
+func TestHeaderDayPeriodIndicator(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	view := model.View()
+	assert.Contains(t, view, "Day")
+}
+
+// TestCannotNavigatePastCurrentWeek tests cannot navigate past current week
+func TestCannotNavigatePastCurrentWeek(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+
+	dateBefore := model.CurrentDate()
+	pressKey(model, 'l') // Try to navigate forward
+	dateAfter := model.CurrentDate()
+
+	// Should not have moved (we're already in current week)
+	assert.Equal(t, dateBefore.Format("2006-01-02"), dateAfter.Format("2006-01-02"))
+}
+
+// TestCannotNavigatePastCurrentMonth tests cannot navigate past current month
+func TestCannotNavigatePastCurrentMonth(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+
+	dateBefore := model.CurrentDate()
+	pressKey(model, 'l') // Try to navigate forward
+	dateAfter := model.CurrentDate()
+
+	assert.Equal(t, dateBefore.Format("2006-01-02"), dateAfter.Format("2006-01-02"))
+}
+
+// TestPeriodSwitchInDetailResetsSelection tests period switch resets selection
+func TestPeriodSwitchInDetailResetsSelection(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	// Navigate to Tue Feb 4
+	pressKey(model, 'h')
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Navigate to 5th command
+	for i := 0; i < 4; i++ {
+		pressKey(model, 'j')
+	}
+	assert.Equal(t, 4, model.DetailCmdIdx())
+
+	// Switch to week period
+	pressBracketRight(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 0, model.DetailCmdIdx())
+}
+
+// TestPeriodSwitchPreservesDisplayMode tests display mode is preserved
+func TestPeriodSwitchPreservesDisplayMode(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressKey(model, 'u') // unique mode
+	assert.Equal(t, UniqueMode, model.DisplayMode())
+
+	pressBracketRight(model) // Day → Week
+	assert.Equal(t, UniqueMode, model.DisplayMode())
+}
+
+// TestPeriodSwitchPreservesContext tests context is preserved in detail view
+func TestPeriodSwitchPreservesContext(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	// Navigate to Tue and enter detail for shy:main
+	pressKey(model, 'h')
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	view := model.View()
+	assert.Contains(t, view, "main")
+
+	// Switch to week
+	pressBracketRight(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	view = model.View()
+	assert.Contains(t, view, "main")
+}
+
+// TestAnchorDatePreservedWeekToDay tests Day→Week→Day restores anchor date
+func TestAnchorDatePreservedWeekToDay(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	// Navigate to Tue Feb 4
+	pressKey(model, 'h')
+	assert.Contains(t, model.CurrentDate().Format("2006-01-02"), "2026-02-04")
+
+	// Day → Week
+	pressBracketRight(model)
+	assert.Equal(t, WeekPeriod, model.Period())
+
+	// Week → Day (should restore Feb 4)
+	pressBracketLeft(model)
+	assert.Equal(t, DayPeriod, model.Period())
+	assert.Equal(t, "2026-02-04", model.CurrentDate().Format("2006-01-02"))
+}
+
+// TestPeriodKeysBothViews tests ] and [ work in both summary and detail views
+func TestPeriodKeysBothViews(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	// Summary view
+	pressBracketRight(model)
+	assert.Equal(t, WeekPeriod, model.Period())
+	pressBracketRight(model)
+	assert.Equal(t, MonthPeriod, model.Period())
+	pressBracketLeft(model)
+	assert.Equal(t, WeekPeriod, model.Period())
+	pressBracketLeft(model)
+	assert.Equal(t, DayPeriod, model.Period())
+}
+
+// TestUniqueModeInWeekView tests unique mode works in week view
+func TestUniqueModeInWeekView(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressKey(model, 'u')     // unique mode
+
+	// In week view, shy:main has 13 total commands.
+	// "go build -o shy ." appears 4x, "go test ./... -v" 3x, "shy summary" 2x
+	// Unique: "./shy summary"(1), git commit(1), git push(1), "go test ./cmd -v"(1) = 4
+	view := model.View()
+	assert.Contains(t, view, "4 commands")
+}
+
+// TestMultiModeInMonthView tests multi mode works in month view
+func TestMultiModeInMonthView(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+	pressBracketRight(model) // Week → Month
+	pressKey(model, 'm')     // multi mode
+
+	view := model.View()
+	// Multi-run commands across month for shy:main:
+	// "go build" 4x, "go test ./... -v" 3x, "shy summary" 2x = 9 instances
+	assert.Contains(t, view, "9 commands")
+}
+
+// TestFilterWorksInWeekView tests filter works in week view
+func TestFilterWorksInWeekView(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	pressBracketRight(model) // Day → Week
+
+	// Set filter to "build"
+	pressSlash(model)
+	typeString(model, "build")
+	pressEnter(model)
+
+	view := model.View()
+	// shy:main has 4 "go build" commands across the week
+	assert.Contains(t, view, "4 commands")
+	// downloads has 0 matching
+	assert.Contains(t, view, "0 commands")
+}
+
+// TestFilterPersistsWhenSwitchingPeriods tests filter persists when switching periods
+func TestFilterPersistsWhenSwitchingPeriods(t *testing.T) {
+	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
+
+	dbPath := setupTestDB(t, phase4Commands())
+	model := initModel(t, dbPath, today)
+
+	// Set filter
+	pressSlash(model)
+	typeString(model, "git")
+	pressEnter(model)
+	assert.Equal(t, "git", model.FilterText())
+
+	// Switch to week
+	pressBracketRight(model)
+	assert.Equal(t, "git", model.FilterText())
+
+	// Switch to month
+	pressBracketRight(model)
+	assert.Equal(t, "git", model.FilterText())
 }
