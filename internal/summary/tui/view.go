@@ -203,12 +203,6 @@ func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {
 
 	cmdText := singleLine(cmd.CommandText)
 
-	if m.displayMode == MultiMode {
-		if count, ok := m.detailFrequencies[cmd.CommandText]; ok && count > 1 {
-			cmdText = cmdText + fmt.Sprintf("  ⟳ %d", count)
-		}
-	}
-
 	timeStr := "  " + minute + "  "
 
 	if selected {
@@ -360,8 +354,6 @@ func (m *Model) activeModeName() string {
 	switch m.displayMode {
 	case UniqueMode:
 		return "Uniq"
-	case MultiMode:
-		return "Multi"
 	default:
 		return "All"
 	}

@@ -28,7 +28,6 @@ type DisplayMode int
 const (
 	AllMode    DisplayMode = iota
 	UniqueMode
-	MultiMode
 )
 
 // Period represents the time granularity for the view
@@ -89,8 +88,7 @@ type Model struct {
 	filterPrevText string // saved before opening bar, for Esc cancel
 
 	// Display mode
-	displayMode       DisplayMode
-	detailFrequencies map[string]int // command text → count across entire context
+	displayMode DisplayMode
 
 	// Selection
 	selectedIdx int
@@ -483,10 +481,6 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		m.displayMode = UniqueMode
 		return m, nil
 
-	case "m":
-		m.displayMode = MultiMode
-		return m, nil
-
 	case "a":
 		m.displayMode = AllMode
 		return m, nil
@@ -589,11 +583,6 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 
 	case "u":
 		m.displayMode = UniqueMode
-		m.enterDetailView()
-		return m, nil
-
-	case "m":
-		m.displayMode = MultiMode
 		m.enterDetailView()
 		return m, nil
 
@@ -729,9 +718,8 @@ func (m *Model) enterDetailView() {
 	m.detailContextKey = ctx.Key
 	m.detailContextBranch = ctx.Branch
 
-	// Apply substring filter first, then compute frequencies and mode filter
+	// Apply substring filter first, then mode filter
 	subFiltered := filterBySubstring(ctx.Commands, m.filterText)
-	m.detailFrequencies = commandFrequencies(subFiltered)
 	filtered := filterByMode(subFiltered, m.displayMode)
 
 	// Bucket size depends on period
@@ -979,8 +967,6 @@ func filterByMode(commands []models.Command, mode DisplayMode) []models.Command 
 	for _, cmd := range commands {
 		count := freq[cmd.CommandText]
 		if mode == UniqueMode && count == 1 {
-			result = append(result, cmd)
-		} else if mode == MultiMode && count > 1 {
 			result = append(result, cmd)
 		}
 	}

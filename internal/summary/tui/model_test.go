@@ -1497,22 +1497,6 @@ func TestUniqueModeShowsUniqueCounts(t *testing.T) {
 	assert.Contains(t, view, "2 commands")
 }
 
-// TestMultiModeShowsMultiRunCounts tests multi mode shows count of multi-run command instances
-func TestMultiModeShowsMultiRunCounts(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressKey(model, 'm')
-
-	assert.Equal(t, MultiMode, model.DisplayMode())
-	view := model.View()
-	assert.Contains(t, view, "5 commands")
-	assert.Contains(t, view, "0 commands")
-}
-
 // TestAllModeReturnsTotalCounts tests pressing 'a' returns to all mode
 func TestAllModeReturnsTotalCounts(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
@@ -1544,40 +1528,6 @@ func TestPressingUWhileInUniqueModeStays(t *testing.T) {
 
 	pressKey(model, 'u')
 	assert.Equal(t, UniqueMode, model.DisplayMode())
-}
-
-// TestSwitchingFromOneMode tests switching from unique to multi
-func TestSwitchingFromOneMode(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressKey(model, 'u')
-	assert.Equal(t, UniqueMode, model.DisplayMode())
-
-	pressKey(model, 'm')
-	assert.Equal(t, MultiMode, model.DisplayMode())
-	view := model.View()
-	assert.Contains(t, view, "5 commands")
-}
-
-// TestOnlyAReturnsToAllMode tests only 'a' returns to all mode
-func TestOnlyAReturnsToAllMode(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressKey(model, 'm')
-	assert.Equal(t, MultiMode, model.DisplayMode())
-
-	pressKey(model, 'a')
-	assert.Equal(t, AllMode, model.DisplayMode())
-	view := model.View()
-	assert.Contains(t, view, "8 commands")
 }
 
 // TestModePersistsEnterLeaveDetail tests mode persists when entering and leaving detail
@@ -1645,81 +1595,6 @@ func TestUniqueModeFiltersInDetail(t *testing.T) {
 	assert.NotContains(t, view, "go build")
 }
 
-// TestMultiModeFiltersInDetail tests multi mode filters to multi-run commands
-func TestMultiModeFiltersInDetail(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressEnter(model)
-	pressKey(model, 'm')
-
-	assert.Equal(t, 5, len(model.DetailCommands()))
-	assert.Equal(t, 2, len(model.DetailBuckets()))
-
-	view := model.View()
-	assert.Contains(t, view, "8am")
-	assert.Contains(t, view, "9am")
-	assert.NotContains(t, view, "2pm")
-}
-
-// TestMultiModeShowsRepeatCount tests multi mode shows repeat count
-func TestMultiModeShowsRepeatCount(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressEnter(model)
-	pressKey(model, 'm')
-
-	view := model.View()
-	assert.Contains(t, view, "⟳ 3")
-	assert.Contains(t, view, "⟳ 2")
-}
-
-// TestBucketsWithNoMatchingHidden tests buckets with no matching commands are hidden
-func TestBucketsWithNoMatchingHidden(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressEnter(model)
-	pressKey(model, 'm')
-
-	view := model.View()
-	assert.NotContains(t, view, "2pm")
-	assert.Contains(t, view, "8am")
-	assert.Contains(t, view, "9am")
-}
-
-// TestAllModeShowsEverythingInDetail tests switching from multi back to all shows everything
-func TestAllModeShowsEverythingInDetail(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	pressEnter(model)
-	pressKey(model, 'm')
-	assert.Equal(t, 5, len(model.DetailCommands()))
-
-	pressKey(model, 'a')
-	assert.Equal(t, 8, len(model.DetailCommands()))
-	assert.Equal(t, 3, len(model.DetailBuckets()))
-
-	view := model.View()
-	assert.Contains(t, view, "8am")
-	assert.Contains(t, view, "9am")
-	assert.Contains(t, view, "2pm")
-}
-
 // TestChangingModeResetsSelection tests changing mode resets selection to first
 func TestChangingModeResetsSelection(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
@@ -1738,29 +1613,6 @@ func TestChangingModeResetsSelection(t *testing.T) {
 
 	pressKey(model, 'u')
 	assert.Equal(t, 0, model.DetailCmdIdx())
-}
-
-// TestDetailNoMultiRunEmptyState tests detail view for context with no multi-run commands
-func TestDetailNoMultiRunEmptyState(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	// Navigate to downloads context (last one, has 2 unique commands)
-	for i := 0; i < len(model.Contexts())-1; i++ {
-		pressKey(model, 'j')
-	}
-	ctx := model.Contexts()[model.SelectedIdx()]
-	assert.Contains(t, formatContextName(ctx.Key, ctx.Branch), "downloads")
-
-	pressEnter(model)
-	pressKey(model, 'm')
-
-	view := model.View()
-	assert.Contains(t, view, "No commands found")
-	assert.NotContains(t, view, "[j/k] Select")
 }
 
 // TestStatusBarShowsModeIndicator tests footer bar shows active display mode
@@ -2647,27 +2499,6 @@ func TestFilterAndUniqueModeCombine(t *testing.T) {
 	assert.Contains(t, view, "1 command")
 }
 
-// TestFilterAndMultiModeCombine tests filter with multi mode
-func TestFilterAndMultiModeCombine(t *testing.T) {
-	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
-	yesterday := today.AddDate(0, 0, -1)
-
-	dbPath := setupTestDB(t, phase3Commands(yesterday))
-	model := initModel(t, dbPath, today)
-
-	// Set filter to "go"
-	pressSlash(model)
-	typeString(model, "go")
-	pressEnter(model)
-
-	// Set multi mode
-	pressKey(model, 'm')
-
-	view := model.View()
-	// "go build" (3x) + "go test ./... -v" (2x) = 5 instances
-	assert.Contains(t, view, "5 commands")
-}
-
 // TestFilterPersistsAcrossViews tests filter persists when entering/leaving detail
 func TestFilterPersistsAcrossViews(t *testing.T) {
 	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
@@ -3203,23 +3034,6 @@ func TestUniqueModeInWeekView(t *testing.T) {
 	// Unique: "./shy summary"(1), git commit(1), git push(1), "go test ./cmd -v"(1) = 4
 	view := model.View()
 	assert.Contains(t, view, "4 commands")
-}
-
-// TestMultiModeInMonthView tests multi mode works in month view
-func TestMultiModeInMonthView(t *testing.T) {
-	today := time.Date(2026, 2, 6, 12, 0, 0, 0, time.Local)
-
-	dbPath := setupTestDB(t, phase4Commands())
-	model := initModel(t, dbPath, today)
-
-	pressBracketRight(model) // Day → Week
-	pressBracketRight(model) // Week → Month
-	pressKey(model, 'm')     // multi mode
-
-	view := model.View()
-	// Multi-run commands across month for shy:main:
-	// "go build" 4x, "go test ./... -v" 3x, "shy summary" 2x = 9 instances
-	assert.Contains(t, view, "9 commands")
 }
 
 // TestFilterWorksInWeekView tests filter works in week view
