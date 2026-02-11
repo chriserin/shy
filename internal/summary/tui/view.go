@@ -495,18 +495,12 @@ func (m *Model) dateDisplayString() string {
 
 	switch m.period {
 	case WeekPeriod:
-		year, month, day := m.currentDate.Date()
-		d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
-		weekday := d.Weekday()
-		if weekday == time.Sunday {
-			weekday = 7
-		}
-		monday := d.AddDate(0, 0, -int(weekday-time.Monday))
-		return fmt.Sprintf("Week of %s ", m.formatShortDate(monday, currentYear))
+		monday := mondayOfWeek(m.currentDate)
+		return fmt.Sprintf("Week of %s ", formatShortDate(monday, currentYear))
 	case MonthPeriod:
 		return m.currentDate.Format("January 2006 ")
 	default:
-		dateStr := m.formatShortDate(m.currentDate, currentYear)
+		dateStr := formatShortDate(m.currentDate, currentYear)
 		dayName := m.currentDate.Format("Monday")
 		indicator := m.relativeDateIndicator()
 		if indicator != "" {
@@ -517,7 +511,7 @@ func (m *Model) dateDisplayString() string {
 }
 
 // formatShortDate formats a date as "Jan 2" for the current year or "Jan 2, 2006" for past years.
-func (m *Model) formatShortDate(t time.Time, currentYear int) string {
+func formatShortDate(t time.Time, currentYear int) string {
 	if t.Year() == currentYear {
 		return t.Format("Jan 2")
 	}

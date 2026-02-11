@@ -190,6 +190,17 @@ func (m *Model) loadContexts() tea.Msg {
 	return contextsLoadedMsg{contexts: items}
 }
 
+// mondayOfWeek returns the Monday (00:00 local) of the ISO week containing date.
+func mondayOfWeek(date time.Time) time.Time {
+	year, month, day := date.Date()
+	d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
+	weekday := d.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	return d.AddDate(0, 0, -int(weekday-time.Monday))
+}
+
 // dateRangeForPeriod returns the start and end timestamps for the given date and period.
 func dateRangeForPeriod(date time.Time, period Period) (int64, int64) {
 	year, month, day := date.Date()
@@ -197,12 +208,7 @@ func dateRangeForPeriod(date time.Time, period Period) (int64, int64) {
 	switch period {
 	case WeekPeriod:
 		// Monday 00:00 → next Monday 00:00
-		d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
-		weekday := d.Weekday()
-		if weekday == time.Sunday {
-			weekday = 7
-		}
-		monday := d.AddDate(0, 0, -int(weekday-time.Monday))
+		monday := mondayOfWeek(date)
 		return monday.Unix(), monday.AddDate(0, 0, 7).Unix()
 
 	case MonthPeriod:
@@ -854,11 +860,7 @@ func (m *Model) enterDetailView() tea.Cmd {
 			// Derive the Monday from the first command in this bucket
 			if len(bucket.Commands) > 0 {
 				t := time.Unix(bucket.Commands[0].Timestamp, 0).Local()
-				weekday := t.Weekday()
-				if weekday == time.Sunday {
-					weekday = 7
-				}
-				monday := t.AddDate(0, 0, -int(weekday-time.Monday))
+				monday := mondayOfWeek(t)
 				label = fmt.Sprintf("Week of %s", monday.Format("Jan 2"))
 			} else {
 				label = fmt.Sprintf("Week %d", id)
@@ -955,13 +957,7 @@ func periodDateLabel(date time.Time, period Period, nowFn func() time.Time) stri
 
 	switch period {
 	case WeekPeriod:
-		year, month, day := date.Date()
-		d := time.Date(year, month, day, 0, 0, 0, 0, time.Local)
-		weekday := d.Weekday()
-		if weekday == time.Sunday {
-			weekday = 7
-		}
-		monday := d.AddDate(0, 0, -int(weekday-time.Monday))
+		monday := mondayOfWeek(date)
 		if monday.Year() == currentYear {
 			return fmt.Sprintf("Week of %s", monday.Format("Jan 2"))
 		}
