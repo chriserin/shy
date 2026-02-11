@@ -115,6 +115,9 @@ type Model struct {
 	// Focus
 	focused bool
 
+	// Status flash message (e.g. "Yanked!")
+	statusMsg string
+
 	// For testing - allows injecting "today"
 	now func() time.Time
 }
@@ -453,6 +456,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.emptyNextPeriod = msg.next
 		return m, nil
 
+	case yankResultMsg:
+		if msg.err != nil {
+			m.statusMsg = "Yank failed"
+		} else {
+			m.statusMsg = "Yanked!"
+		}
+		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return clearStatusMsg{}
+		})
+
+	case clearStatusMsg:
+		m.statusMsg = ""
+		return m, nil
+
 	case errMsg:
 		// TODO: handle error display
 		return m, nil
@@ -543,7 +560,7 @@ func (m *Model) handleSharedKey(msg tea.KeyMsg) (model *Model, cmd tea.Cmd, hand
 		model, cmd = m.jumpToDate(m.now())
 		return model, cmd, true
 
-	case "y":
+	case "e":
 		model, cmd = m.jumpToDate(m.now().AddDate(0, 0, -1))
 		return model, cmd, true
 
@@ -638,6 +655,12 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "y":
+		if len(m.detailCommands) > 0 {
+			return m, yankToClipboard(m.detailCommands[m.detailCmdIdx].CommandText)
+		}
+		return m, nil
+
 	case "-":
 		m.viewState = SummaryView
 		return m, nil
@@ -691,6 +714,12 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		if m.cmdDetailIdx > 0 {
 			prevCmd := m.cmdDetailAll[m.cmdDetailIdx-1]
 			return m, m.loadCommandContext(prevCmd.ID)
+		}
+		return m, nil
+
+	case "y":
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			return m, yankToClipboard(m.cmdDetailAll[m.cmdDetailIdx].CommandText)
 		}
 		return m, nil
 
@@ -1033,6 +1062,8 @@ type emptyStatePeeksMsg struct {
 	next *periodPeekData
 }
 
+type clearStatusMsg struct{}
+
 // Getters for testing
 func (m *Model) SelectedIdx() int {
 	return m.selectedIdx
@@ -1130,6 +1161,10 @@ func (m *Model) EmptyNextPeriod() *periodPeekData {
 
 func (m *Model) HelpPreviousView() ViewState {
 	return m.helpPreviousView
+}
+
+func (m *Model) StatusMsg() string {
+	return m.statusMsg
 }
 
 // filterBySubstring returns commands where CommandText contains the filter string

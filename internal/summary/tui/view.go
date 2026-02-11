@@ -496,10 +496,17 @@ func (m *Model) renderFooterBar() string {
 		left += barStyle.Render(" /" + m.filterText + " ")
 	}
 
-	leftWidth := ansi.StringWidth(left)
-	padding := max(m.width-leftWidth, 0)
+	// Right: status flash message
+	var right string
+	if m.statusMsg != "" {
+		right = barDimStyle.Render(" " + m.statusMsg + " ")
+	}
 
-	return left + barStyle.Render(strings.Repeat(" ", padding))
+	leftWidth := ansi.StringWidth(left)
+	rightWidth := ansi.StringWidth(right)
+	padding := max(m.width-leftWidth-rightWidth, 0)
+
+	return left + barStyle.Render(strings.Repeat(" ", padding)) + right
 }
 
 func (m *Model) activeModeName() string {

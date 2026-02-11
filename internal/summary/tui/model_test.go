@@ -315,7 +315,7 @@ func TestJumpToYesterday(t *testing.T) {
 	model := initModel(t, dbPath, today)
 	model.currentDate = dayBefore
 
-	pressKey(model, 'y')
+	pressKey(model, 'e')
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
@@ -1242,7 +1242,7 @@ func TestDetailJumpToYesterday(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	pressKey(model, 'y')
+	pressKey(model, 'e')
 	assert.Equal(t, SummaryView, model.ViewState())
 	assert.Equal(t, yesterday.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 }
