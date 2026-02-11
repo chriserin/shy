@@ -387,14 +387,18 @@ func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {
 		minute = fmt.Sprintf("%2d:%s", hour12(t), t.Format("04 PM"))
 	}
 
-	cmdText := singleLine(cmd.CommandText)
+	first, multi := firstLine(cmd.CommandText)
+	var indicator string
+	if multi {
+		indicator = detailErrorStyle.Render(" ↵")
+	}
 
 	timeStr := "  " + minute + "  "
 
 	if selected {
-		return selectedStyle.Render("▶ ") + countStyle.Render(timeStr) + selectedStyle.Render(cmdText)
+		return selectedStyle.Render("▶ ") + countStyle.Render(timeStr) + selectedStyle.Render(first) + indicator
 	}
-	return countStyle.Render("  "+timeStr) + normalStyle.Render(cmdText)
+	return countStyle.Render("  "+timeStr) + normalStyle.Render(first) + indicator
 }
 
 func (m *Model) renderHeaderBar() string {
@@ -607,7 +611,12 @@ func (m *Model) renderCommandDetailView() string {
 
 		b.WriteString("\n")
 		// Metadata fields (label in blue, value in white — matching tv preview)
-		b.WriteString(margin + "  " + renderDetailField("Command:", singleLine(cmd.CommandText), normalStyle) + "\n")
+		cmdFirst, cmdMulti := firstLine(cmd.CommandText)
+		cmdField := normalStyle.Render(cmdFirst)
+		if cmdMulti {
+			cmdField += detailErrorStyle.Render(" ↵")
+		}
+		b.WriteString(margin + "  " + renderDetailField("Command:", cmdField, lipgloss.NewStyle()) + "\n")
 		b.WriteString(margin + "  " + renderDetailField("Working Dir:", formatDir(cmd.WorkingDir), normalStyle) + "\n")
 
 		if cmd.GitRepo != nil {
@@ -643,12 +652,16 @@ func (m *Model) renderCommandDetailView() string {
 
 		allCmds := m.cmdDetailAllCommands()
 		for i, ctxCmd := range allCmds {
-			cmdText := singleLine(ctxCmd.CommandText)
+			first, multi := firstLine(ctxCmd.CommandText)
 			idStr := fmt.Sprintf("%5d  ", ctxCmd.ID)
+			var indicator string
+			if multi {
+				indicator = detailErrorStyle.Render(" ↵")
+			}
 			if i == m.cmdDetailIdx {
-				b.WriteString(margin + "  " + selectedStyle.Render("▶ ") + countStyle.Render(idStr) + selectedStyle.Render(cmdText) + "\n")
+				b.WriteString(margin + "  " + selectedStyle.Render("▶ ") + countStyle.Render(idStr) + selectedStyle.Render(first) + indicator + "\n")
 			} else {
-				b.WriteString(margin + "  " + countStyle.Render("  "+idStr) + normalStyle.Render(cmdText) + "\n")
+				b.WriteString(margin + "  " + countStyle.Render("  "+idStr) + normalStyle.Render(first) + indicator + "\n")
 			}
 		}
 	}
@@ -703,6 +716,14 @@ func singleLine(s string) string {
 		return parts[0] + " ↵"
 	}
 	return s
+}
+
+// firstLine returns the first line and whether the string contained multiple lines.
+func firstLine(s string) (string, bool) {
+	if parts := strings.SplitN(s, "\n", 2); len(parts) > 1 {
+		return parts[0], true
+	}
+	return s, false
 }
 
 // renderExitStatus returns a colored exit status string (green for 0, red for non-zero).
