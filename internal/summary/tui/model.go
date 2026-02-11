@@ -125,13 +125,6 @@ type Model struct {
 // Option is a functional option for configuring the Model
 type Option func(*Model)
 
-// WithNow sets the function used to get the current time (for testing)
-func WithNow(fn func() time.Time) Option {
-	return func(m *Model) {
-		m.now = fn
-	}
-}
-
 // New creates a new Model
 func New(dbPath string, opts ...Option) *Model {
 	m := &Model{

@@ -1461,3 +1461,13 @@ func TestHistoryReversedRangeNegative(t *testing.T) {
 
 	rootCmd.SetArgs(nil)
 }
+
+// stringPtr returns a pointer to the given string
+func stringPtr(s string) *string {
+	return &s
+}
+
+// int64Ptr returns a pointer to the given int64
+func int64Ptr(i int64) *int64 {
+	return &i
+}

@@ -142,38 +142,3 @@ func TestDetectGitContext_DifferentBranch(t *testing.T) {
 	require.NotNil(t, gitCtx, "git context should be detected")
 	assert.Equal(t, "feature/test-branch", gitCtx.Branch, "git branch should match")
 }
-
-// TestFindGitRoot tests finding the git repository root
-func TestFindGitRoot(t *testing.T) {
-	// Given: a git repository with subdirectories
-	tempDir := t.TempDir()
-	repoDir := filepath.Join(tempDir, "myproject")
-	err := os.Mkdir(repoDir, 0755)
-	require.NoError(t, err, "failed to create repo dir")
-
-	setupGitRepo(t, repoDir, "https://github.com/user/myproject.git", "main")
-
-	subDir := filepath.Join(repoDir, "src", "components")
-	err = os.MkdirAll(subDir, 0755)
-	require.NoError(t, err, "failed to create subdirectory")
-
-	// When: I find the git root from a subdirectory
-	root, err := FindGitRoot(subDir)
-	require.NoError(t, err, "failed to find git root")
-
-	// Then: the root should match the repository directory
-	assert.Equal(t, repoDir, root, "git root should match repo directory")
-}
-
-// TestFindGitRoot_NoGitRepo tests FindGitRoot when not in a git repository
-func TestFindGitRoot_NoGitRepo(t *testing.T) {
-	// Given: a directory that is not in a git repository
-	tempDir := t.TempDir()
-
-	// When: I find the git root
-	root, err := FindGitRoot(tempDir)
-	require.NoError(t, err, "should not error on non-git directory")
-
-	// Then: the root should be empty
-	assert.Equal(t, "", root, "git root should be empty for non-git directory")
-}

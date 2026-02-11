@@ -56,6 +56,13 @@ func strPtr(s string) *string {
 	return &s
 }
 
+// WithNow sets the function used to get the current time (for testing)
+func WithNow(fn func() time.Time) Option {
+	return func(m *Model) {
+		m.now = fn
+	}
+}
+
 // initModel creates a model and loads its initial contexts
 func initModel(t *testing.T, dbPath string, today time.Time) *Model {
 	t.Helper()
