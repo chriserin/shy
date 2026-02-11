@@ -26,6 +26,7 @@ var (
 	barBoldStyle   = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("15")).Bold(true)
 	barAccentStyle = lipgloss.NewStyle().Background(lipgloss.Color("4")).Foreground(lipgloss.Color("0")).Bold(true)
 	barDimStyle    = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("4"))
+	barBranchStyle = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("14"))
 
 	// Hint key style (no background, for empty-state navigation hints)
 	hintKeyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
@@ -816,6 +817,11 @@ func formatDurationHuman(durationMs *int64) string {
 	return fmt.Sprintf("%ds", seconds)
 }
 
+// hasBranch returns true when the context has a git repo with a real branch.
+func hasBranch(key summary.ContextKey, branch summary.BranchKey) bool {
+	return key.GitRepo != "" && branch != summary.NoBranch
+}
+
 // styledContextNameSegments returns styled segments for a context name with
 // distinct styles for directory, separator, and branch (no background).
 func styledContextNameSegments(key summary.ContextKey, branch summary.BranchKey) []styledSegment {
@@ -824,7 +830,7 @@ func styledContextNameSegments(key summary.ContextKey, branch summary.BranchKey)
 	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 
 	dir := formatDir(key.WorkingDir)
-	if key.GitRepo != "" && branch != summary.NoBranch {
+	if hasBranch(key, branch) {
 		b := string(branch)
 		return []styledSegment{
 			{bold.Render(dir), ansi.StringWidth(dir)},
@@ -841,8 +847,7 @@ func styledContextNameSegments(key summary.ContextKey, branch summary.BranchKey)
 // distinct styles for directory, separator, and branch.
 func renderBarContextName(key summary.ContextKey, branch summary.BranchKey) string {
 	dir := formatDir(key.WorkingDir)
-	if key.GitRepo != "" && branch != summary.NoBranch {
-		barBranchStyle := lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("14"))
+	if hasBranch(key, branch) {
 		return barBoldStyle.Render(" "+dir) +
 			barDimStyle.Render(":") +
 			barBranchStyle.Render(string(branch))
@@ -852,8 +857,7 @@ func renderBarContextName(key summary.ContextKey, branch summary.BranchKey) stri
 
 func formatContextName(key summary.ContextKey, branch summary.BranchKey) string {
 	dir := formatDir(key.WorkingDir)
-
-	if key.GitRepo != "" && branch != summary.NoBranch {
+	if hasBranch(key, branch) {
 		return fmt.Sprintf("%s:%s", dir, string(branch))
 	}
 	return dir
