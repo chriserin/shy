@@ -37,9 +37,6 @@ func registerCompletions() {
 	// summary command completions
 	registerSummaryCompletions(summaryCmd)
 
-	// tabsum command completions
-	registerTabsumCompletions(tabsumCmd)
-
 	// last-command completions
 	registerLastCommandCompletions(lastCommandCmd)
 
@@ -140,16 +137,6 @@ func registerSummaryCompletions(cmd *cobra.Command) {
 
 	// --source-app flag: complete with source apps from database
 	cmd.RegisterFlagCompletionFunc("source-app", completeSourceApp)
-}
-
-func registerTabsumCompletions(cmd *cobra.Command) {
-	// --date flag
-	cmd.RegisterFlagCompletionFunc("date", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{
-			"yesterday\tYesterday's activity",
-			"today\tToday's activity",
-		}, cobra.ShellCompDirectiveNoFileComp
-	})
 }
 
 func registerLastCommandCompletions(cmd *cobra.Command) {
