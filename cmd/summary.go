@@ -22,6 +22,7 @@ func init() {
 
 func runSummary(cmd *cobra.Command, args []string) error {
 	model := tui.New(dbPath)
+	defer model.Close()
 
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
 	if _, err := p.Run(); err != nil {

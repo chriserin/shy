@@ -27,7 +27,7 @@ const (
 type DisplayMode int
 
 const (
-	AllMode    DisplayMode = iota
+	AllMode DisplayMode = iota
 	UniqueMode
 )
 
@@ -35,7 +35,7 @@ const (
 type Period int
 
 const (
-	DayPeriod   Period = iota
+	DayPeriod Period = iota
 	WeekPeriod
 	MonthPeriod
 )
@@ -74,8 +74,8 @@ type Model struct {
 	currentDate time.Time
 
 	// View state
-	viewState        ViewState
-	helpPreviousView ViewState
+	viewState            ViewState
+	helpPreviousView     ViewState
 	detailBuckets        []DetailBucket
 	detailCommands       []models.Command
 	detailCmdIdx         int
@@ -137,6 +137,7 @@ func New(dbPath string, opts ...Option) *Model {
 		selectedIdx: 0,
 		focused:     true,
 		now:         time.Now,
+		width:       80,
 	}
 
 	for _, opt := range opts {
@@ -151,19 +152,26 @@ func New(dbPath string, opts ...Option) *Model {
 
 // Init implements tea.Model
 func (m *Model) Init() tea.Cmd {
+	database, err := db.New(m.dbPath)
+	if err != nil {
+		return func() tea.Msg { return errMsg{err} }
+	}
+	m.db = database
 	return m.loadContexts
+}
+
+// Close releases the persistent database connection.
+func (m *Model) Close() error {
+	if m.db != nil {
+		return m.db.Close()
+	}
+	return nil
 }
 
 // loadContexts loads contexts for the current date
 func (m *Model) loadContexts() tea.Msg {
-	database, err := db.New(m.dbPath)
-	if err != nil {
-		return errMsg{err}
-	}
-	defer database.Close()
-
 	startTime, endTime := m.dateRange()
-	commands, err := database.GetCommandsByDateRange(startTime, endTime, nil)
+	commands, err := m.db.GetCommandsByDateRange(startTime, endTime, nil)
 	if err != nil {
 		return errMsg{err}
 	}
@@ -359,13 +367,8 @@ func balanceContext(before, after []models.Command, total int) ([]models.Command
 
 // loadCommandContext loads session context for a specific command
 func (m *Model) loadCommandContext(cmdID int64) tea.Cmd {
+	database := m.db
 	return func() tea.Msg {
-		database, err := db.New(m.dbPath)
-		if err != nil {
-			return errMsg{err}
-		}
-		defer database.Close()
-
 		total := m.cmdDetailTotalContext()
 		before, target, after, err := database.GetCommandWithContext(cmdID, total)
 		if err != nil {
@@ -898,7 +901,7 @@ func (m *Model) enterDetailView() tea.Cmd {
 // loadEmptyStatePeeks returns an async command that queries adjacent periods
 // for the current context and returns peek data (date label + command count).
 func (m *Model) loadEmptyStatePeeks() tea.Cmd {
-	dbPath := m.dbPath
+	database := m.db
 	ctxKey := m.detailContextKey
 	ctxBranch := m.detailContextBranch
 	curDate := m.currentDate
@@ -909,12 +912,6 @@ func (m *Model) loadEmptyStatePeeks() tea.Cmd {
 	isCurrentPeriod := m.isCurrentPeriod()
 
 	return func() tea.Msg {
-		database, err := db.New(dbPath)
-		if err != nil {
-			return emptyStatePeeksMsg{}
-		}
-		defer database.Close()
-
 		peekPeriod := func(date time.Time) *periodPeekData {
 			start, end := dateRangeForPeriod(date, period)
 			commands, err := database.GetCommandsByDateRange(start, end, nil)
@@ -999,10 +996,8 @@ func (m *Model) ensureDetailCmdVisible() {
 	if m.height == 0 || len(m.detailCommands) == 0 {
 		return
 	}
-	avail := m.height - 2 // headerBar(1) + footerBar(1)
-	if avail < 1 {
-		avail = 1
-	}
+	// headerBar(1) + footerBar(1)
+	avail := max(m.height-2, 1)
 	cmdLine, bucketStart := m.detailCmdBodyLine()
 	if cmdLine < m.detailScrollOffset {
 		// Scroll up: show the bucket header context above the command

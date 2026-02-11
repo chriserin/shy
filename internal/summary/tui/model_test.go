@@ -63,6 +63,7 @@ func initModel(t *testing.T, dbPath string, today time.Time) *Model {
 	cmd := model.Init()
 	msg := cmd()
 	model.Update(msg)
+	t.Cleanup(func() { model.Close() })
 	return model
 }
 
@@ -88,13 +89,13 @@ func TestLaunchWithYesterdaysContexts(t *testing.T) {
 		makeCommand(yesterday, 12, "/home/user/downloads", nil, nil),
 	}
 
-	for i := 0; i < 40; i++ {
+	for range 40 {
 		commands = append(commands, makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")))
 	}
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		commands = append(commands, makeCommand(yesterday, 11, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("bugfix")))
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		commands = append(commands, makeCommand(yesterday, 12, "/home/user/downloads", nil, nil))
 	}
 
@@ -103,7 +104,7 @@ func TestLaunchWithYesterdaysContexts(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "◆")
+	assert.Contains(t, view, "YESTERDAY")
 	assert.Contains(t, view, "projects/shy")
 	assert.Contains(t, view, "main")
 	assert.Contains(t, view, "bugfix")
@@ -232,7 +233,7 @@ func TestNavigateToNextDay(t *testing.T) {
 	assert.Equal(t, yesterday.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "◆")
+	assert.Contains(t, view, "YESTERDAY")
 }
 
 // TestNavigateToTodayWithNoCommands tests the scenario:
@@ -252,7 +253,7 @@ func TestNavigateToTodayWithNoCommands(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 5")
-	assert.Contains(t, view, "★")
+	assert.Contains(t, view, "TODAY")
 	assert.Contains(t, view, "No commands found")
 }
 
@@ -295,7 +296,7 @@ func TestJumpToToday(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 5")
-	assert.Contains(t, view, "★")
+	assert.Contains(t, view, "TODAY")
 }
 
 // TestJumpToYesterday tests the scenario:
@@ -318,7 +319,7 @@ func TestJumpToYesterday(t *testing.T) {
 
 	view := model.View()
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "◆")
+	assert.Contains(t, view, "YESTERDAY")
 }
 
 // TestSelectionResetsWhenChangingDays tests the scenario:
@@ -417,7 +418,7 @@ func TestViewportScrollsToKeepSelectionVisible(t *testing.T) {
 	yesterday := today.AddDate(0, 0, -1)
 
 	var commands []models.Command
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		dir := "/home/user/projects/project" + string(rune('a'+i))
 		commands = append(commands, makeCommand(yesterday, 9, dir, strPtr("github.com/user/repo"), strPtr("main")))
 	}
@@ -428,7 +429,7 @@ func TestViewportScrollsToKeepSelectionVisible(t *testing.T) {
 	model.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	assert.Equal(t, 0, model.SelectedIdx())
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 
@@ -508,15 +509,15 @@ func TestContextsOrderedByCommandCountDescending(t *testing.T) {
 
 	var commands []models.Command
 	// 5 commands for shy:main
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		commands = append(commands, makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")))
 	}
 	// 20 commands for other:feature
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		commands = append(commands, makeCommand(yesterday, 10, "/home/user/projects/other", strPtr("github.com/chris/other"), strPtr("feature")))
 	}
 	// 12 commands for downloads
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		commands = append(commands, makeCommand(yesterday, 11, "/home/user/downloads", nil, nil))
 	}
 
@@ -559,13 +560,13 @@ func TestCommandCountsRightAligned(t *testing.T) {
 	yesterday := today.AddDate(0, 0, -1)
 
 	var commands []models.Command
-	for i := 0; i < 142; i++ {
+	for range 142 {
 		commands = append(commands, makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")))
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		commands = append(commands, makeCommand(yesterday, 10, "/home/user/projects/other", strPtr("github.com/chris/other"), strPtr("feature")))
 	}
-	for i := 0; i < 42; i++ {
+	for range 42 {
 		commands = append(commands, makeCommand(yesterday, 11, "/home/user/downloads", nil, nil))
 	}
 
@@ -613,7 +614,7 @@ func TestHeaderIncludesDayOfWeek(t *testing.T) {
 	view := model.View()
 	assert.Contains(t, view, "Wednesday")
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "◆")
+	assert.Contains(t, view, "YESTERDAY")
 }
 
 // TestHeaderIncludesDayOfWeekNonRelative tests the scenario:
@@ -640,8 +641,8 @@ func TestHeaderIncludesDayOfWeekNonRelative(t *testing.T) {
 	assert.Contains(t, view, "Feb 1")
 	// Header should not contain relative date labels
 	header := strings.Split(view, "\n")[0]
-	assert.NotContains(t, header, "◆")
-	assert.NotContains(t, header, "★")
+	assert.NotContains(t, header, "YESTERDAY")
+	assert.NotContains(t, header, "TODAY")
 }
 
 // TestHomeDirectoryDisplaysFullPath tests the scenario:
@@ -756,7 +757,7 @@ func TestDetailViewCommandsForSelectedContext(t *testing.T) {
 	assert.Contains(t, view, "main")
 	assert.Contains(t, view, "Wednesday")
 	assert.Contains(t, view, "Feb 4")
-	assert.Contains(t, view, "◆")
+	assert.Contains(t, view, "YESTERDAY")
 
 	// Check buckets
 	assert.Contains(t, view, "8am")
@@ -787,7 +788,7 @@ func TestDetailHeaderConsistentLayout(t *testing.T) {
 	// Header should show context name instead of "Work Summary"
 	assert.NotContains(t, view, "Work Summary")
 	assert.Contains(t, view, "●")
-	assert.Contains(t, view, "◆ Wednesday Feb 4")
+	assert.Contains(t, view, "YESTERDAY Wednesday Feb 4")
 }
 
 // TestDetailHeaderFocusIndicator tests focus indicator in detail view
@@ -1096,7 +1097,7 @@ func TestDetailContextSwitchStopsAtLast(t *testing.T) {
 
 	// Go to last context
 	lastIdx := len(model.Contexts()) - 1
-	for i := 0; i < lastIdx; i++ {
+	for range lastIdx {
 		pressKey(model, 'j')
 	}
 
@@ -1308,7 +1309,7 @@ func TestDetailViewportOverflow(t *testing.T) {
 
 	// Create 30 commands across multiple hours for one context
 	var cmds []models.Command
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		hour := 8 + (i / 10)
 		minute := (i % 10) * 5
 		cmds = append(cmds, makeCommandWithText(yesterday, hour, minute,
@@ -1356,7 +1357,7 @@ func TestDetailViewportScrollsWithSelection(t *testing.T) {
 
 	// Create 30 commands for one context
 	var cmds []models.Command
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		hour := 8 + (i / 10)
 		minute := (i % 10) * 5
 		cmds = append(cmds, makeCommandWithText(yesterday, hour, minute,
@@ -1371,7 +1372,7 @@ func TestDetailViewportScrollsWithSelection(t *testing.T) {
 	pressEnter(model)
 
 	// Navigate past the visible area
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		pressKey(model, 'j')
 	}
 
@@ -1403,12 +1404,12 @@ func TestDetailViewportScrollUpShowsBucketHeader(t *testing.T) {
 
 	// Create commands in two buckets: 8am (10 cmds) and 9am (10 cmds)
 	var cmds []models.Command
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		cmds = append(cmds, makeCommandWithText(yesterday, 8, i*5,
 			fmt.Sprintf("eight-%02d", i),
 			"/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")))
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		cmds = append(cmds, makeCommandWithText(yesterday, 9, i*5,
 			fmt.Sprintf("nine-%02d", i),
 			"/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")))
@@ -1422,7 +1423,7 @@ func TestDetailViewportScrollUpShowsBucketHeader(t *testing.T) {
 	pressEnter(model)
 
 	// Scroll down into the 9am bucket
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		pressKey(model, 'j')
 	}
 	view := model.View()
@@ -1606,7 +1607,7 @@ func TestChangingModeResetsSelection(t *testing.T) {
 	pressEnter(model)
 
 	// Navigate to 5th command (index 4)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		pressKey(model, 'j')
 	}
 	assert.Equal(t, 4, model.DetailCmdIdx())
@@ -1981,7 +1982,7 @@ func TestCmdDetailNavigationStopsAtBoundary(t *testing.T) {
 
 	// Navigate all the way to the last command
 	lastCmdText := cmds[len(cmds)-1].CommandText
-	for i := 0; i < len(cmds); i++ {
+	for range cmds {
 		pressKey(model, 'j')
 	}
 	assert.Equal(t, lastCmdText, model.CmdDetailTarget().CommandText)
@@ -2121,10 +2122,10 @@ func TestCmdDetailContextFillsHeight(t *testing.T) {
 		height    int
 		wantTotal int
 	}{
-		{"tall terminal", 40, 24},      // 40 - 16 = 24
-		{"short terminal", 20, 4},      // 20 - 16 = 4
-		{"medium terminal", 30, 14},    // 30 - 16 = 14
-		{"very short terminal", 15, 1}, // 15 - 16 < 1 → 1
+		{"tall terminal", 40, 24},       // 40 - 16 = 24
+		{"short terminal", 20, 4},       // 20 - 16 = 4
+		{"medium terminal", 30, 14},     // 30 - 16 = 14
+		{"very short terminal", 15, 1},  // 15 - 16 < 1 → 1
 		{"zero height fallback", 0, 10}, // fallback
 	}
 
@@ -2409,7 +2410,7 @@ func TestFilterClearWithEmptySubmit(t *testing.T) {
 	// Open again, clear text, submit
 	pressSlash(model)
 	// Remove all chars with backspace
-	for i := 0; i < len("go test"); i++ {
+	for range len("go test") {
 		pressBackspace(model)
 	}
 	pressEnter(model)
@@ -2906,7 +2907,7 @@ func TestPeriodSwitchInDetailResetsSelection(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
 	// Navigate to 5th command
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		pressKey(model, 'j')
 	}
 	assert.Equal(t, 4, model.DetailCmdIdx())

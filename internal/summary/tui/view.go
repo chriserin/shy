@@ -35,6 +35,10 @@ var (
 	detailLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // bright-blue
 	detailErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // bright-red
 	detailGitStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("13")) // bright-magenta
+
+	// title styles
+	titleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	dayStyle   = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("14"))
 )
 
 const marginX = 2
@@ -55,11 +59,6 @@ func (m *Model) renderView() string {
 func (m *Model) renderHelpView() string {
 	var b strings.Builder
 
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
 	margin := strings.Repeat(" ", marginX)
 
 	// Render header bar for the previous view (so user retains context)
@@ -76,8 +75,6 @@ func (m *Model) renderHelpView() string {
 			maxKeyWidth = len(bind.key)
 		}
 	}
-
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
 
 	b.WriteString("\n")
 	b.WriteString(margin + titleStyle.Render("  Help") + "\n")
@@ -118,33 +115,17 @@ func (m *Model) renderHelpHeaderBar() string {
 }
 
 func (m *Model) renderHelpFooterBar() string {
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
 	content := barStyle.Render(" Press ") + barBoldStyle.Render("?") + barStyle.Render(" or ") + barBoldStyle.Render("esc") + barStyle.Render(" to close")
 	contentWidth := ansi.StringWidth(content)
-	pad := width - contentWidth
-	if pad < 0 {
-		pad = 0
-	}
+	pad := max(m.width-contentWidth, 0)
 	return content + barStyle.Render(strings.Repeat(" ", pad))
 }
 
 func (m *Model) renderSummaryView() string {
 	var b strings.Builder
 
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
 	// Content width excludes left and right margins
-	contentWidth := width - 2*marginX
-	if contentWidth < 20 {
-		contentWidth = 20
-	}
+	contentWidth := max(m.width-2*marginX, 20)
 	margin := strings.Repeat(" ", marginX)
 
 	// Header bar
@@ -194,15 +175,7 @@ func (m *Model) renderSummaryView() string {
 func (m *Model) renderDetailView() string {
 	var b strings.Builder
 
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
-	contentWidth := width - 2*marginX
-	if contentWidth < 20 {
-		contentWidth = 20
-	}
+	contentWidth := max(m.width-2*marginX, 20)
 	margin := strings.Repeat(" ", marginX)
 
 	// Header bar
@@ -225,10 +198,7 @@ func (m *Model) renderDetailView() string {
 			bodyLines = append(bodyLines, "")
 			// Bucket header
 			label := bucketLabelStyle.Render(bucket.Label)
-			dashWidth := contentWidth - 2 - ansi.StringWidth(bucket.Label) - 1
-			if dashWidth < 2 {
-				dashWidth = 2
-			}
+			dashWidth := max(contentWidth-2-ansi.StringWidth(bucket.Label)-1, 2)
 			bodyLines = append(bodyLines, margin+"  "+label+" "+separatorStyle.Render(strings.Repeat("─", dashWidth)))
 			// Commands
 			for _, cmd := range bucket.Commands {
@@ -239,18 +209,10 @@ func (m *Model) renderDetailView() string {
 
 		// Apply viewport scrolling if height is set
 		if m.height > 0 {
-			avail := m.height - 2 // headerBar(1) + footerBar(1)
-			if avail < 1 {
-				avail = 1
-			}
-			start := m.detailScrollOffset
-			if start > len(bodyLines) {
-				start = len(bodyLines)
-			}
-			end := start + avail
-			if end > len(bodyLines) {
-				end = len(bodyLines)
-			}
+			// headerBar(1) + footerBar(1)
+			avail := max(m.height-2, 1)
+			start := min(m.detailScrollOffset, len(bodyLines))
+			end := min(start+avail, len(bodyLines))
 			bodyLines = bodyLines[start:end]
 		}
 
@@ -337,11 +299,7 @@ func (m *Model) emptyDetailMessageLines(contentWidth int) []string {
 func (m *Model) renderEmptyDetailState(margin string) []string {
 	var lines []string
 
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-	contentWidth := width - 2*marginX
+	contentWidth := m.width - 2*marginX
 
 	lines = append(lines, "")
 	for _, msgLine := range m.emptyDetailMessageLines(contentWidth) {
@@ -353,50 +311,44 @@ func (m *Model) renderEmptyDetailState(margin string) []string {
 	if m.emptyPrevPeriod != nil {
 		lines = append(lines, margin+formatHintLine("h", m.emptyPrevPeriod.dateLabel, m.emptyPrevPeriod.count, contentWidth))
 	} else {
-		lines = append(lines, margin+formatHintLineDisabled("h", contentWidth))
+		lines = append(lines, margin+formatHintLineDisabled("h"))
 	}
 
 	// l: next period
 	if m.emptyNextPeriod != nil {
 		lines = append(lines, margin+formatHintLine("l", m.emptyNextPeriod.dateLabel, m.emptyNextPeriod.count, contentWidth))
 	} else {
-		lines = append(lines, margin+formatHintLineDisabled("l", contentWidth))
+		lines = append(lines, margin+formatHintLineDisabled("l"))
 	}
 
 	// H/L: context hints — in orphaned state these target last/first context
 	orphaned := m.detailContextOrphaned()
 
 	// H: previous context (or last context when orphaned)
-	if orphaned && len(m.contexts) > 0 {
-		ctx := m.contexts[len(m.contexts)-1]
-		name := formatContextName(ctx.Key, ctx.Branch)
-		count := filteredCommandCount(ctx.Commands, m.displayMode, m.filterText)
-		lines = append(lines, margin+formatHintLine("H", name, count, contentWidth))
-	} else if !orphaned && m.selectedIdx > 0 {
-		prev := m.contexts[m.selectedIdx-1]
-		name := formatContextName(prev.Key, prev.Branch)
-		count := filteredCommandCount(prev.Commands, m.displayMode, m.filterText)
-		lines = append(lines, margin+formatHintLine("H", name, count, contentWidth))
-	} else {
-		lines = append(lines, margin+formatHintLineDisabled("H", contentWidth))
-	}
+	lines = append(lines, margin+m.contextHintLine("H", orphaned, len(m.contexts)-1, m.selectedIdx-1, contentWidth))
 
 	// L: next context (or first context when orphaned)
-	if orphaned && len(m.contexts) > 0 {
-		ctx := m.contexts[0]
-		name := formatContextName(ctx.Key, ctx.Branch)
-		count := filteredCommandCount(ctx.Commands, m.displayMode, m.filterText)
-		lines = append(lines, margin+formatHintLine("L", name, count, contentWidth))
-	} else if !orphaned && m.selectedIdx < len(m.contexts)-1 {
-		next := m.contexts[m.selectedIdx+1]
-		name := formatContextName(next.Key, next.Branch)
-		count := filteredCommandCount(next.Commands, m.displayMode, m.filterText)
-		lines = append(lines, margin+formatHintLine("L", name, count, contentWidth))
-	} else {
-		lines = append(lines, margin+formatHintLineDisabled("L", contentWidth))
-	}
+	lines = append(lines, margin+m.contextHintLine("L", orphaned, 0, m.selectedIdx+1, contentWidth))
 
 	return lines
+}
+
+// contextHintLine returns a formatted hint for a context navigation key (H/L).
+// orphanedIdx is the context index to use when orphaned; neighborIdx is the
+// adjacent context index to use otherwise.
+func (m *Model) contextHintLine(key string, orphaned bool, orphanedIdx, neighborIdx int, width int) string {
+	var ctx *ContextItem
+	if orphaned && len(m.contexts) > 0 {
+		ctx = &m.contexts[orphanedIdx]
+	} else if !orphaned && neighborIdx >= 0 && neighborIdx < len(m.contexts) {
+		ctx = &m.contexts[neighborIdx]
+	}
+	if ctx == nil {
+		return formatHintLineDisabled(key)
+	}
+	name := formatContextName(ctx.Key, ctx.Branch)
+	count := filteredCommandCount(ctx.Commands, m.displayMode, m.filterText)
+	return formatHintLine(key, name, count, width)
 }
 
 // formatHintLine renders a navigation hint: key in accent (no bg), label in normal, count in dim.
@@ -413,16 +365,13 @@ func formatHintLine(key, label string, count int, width int) string {
 	keyWidth := ansi.StringWidth(keyPart)
 	labelWidth := ansi.StringWidth(labelPart)
 	countWidth := len(countText)
-	padding := width - keyWidth - labelWidth - countWidth
-	if padding < 1 {
-		padding = 1
-	}
+	padding := max(width-keyWidth-labelWidth-countWidth, 1)
 
 	return keyPart + normalStyle.Render(labelPart) + strings.Repeat(" ", padding) + countStyle.Render(countText)
 }
 
 // formatHintLineDisabled renders a dim hint line when the navigation option is unavailable.
-func formatHintLineDisabled(key string, width int) string {
+func formatHintLineDisabled(key string) string {
 	return countStyle.Render(" " + key + " ")
 }
 
@@ -449,11 +398,6 @@ func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {
 }
 
 func (m *Model) renderHeaderBar() string {
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
 	// Focus indicator
 	var focusSegment string
 	if m.focused {
@@ -474,7 +418,7 @@ func (m *Model) renderHeaderBar() string {
 	}
 
 	// Right side: date display + period indicator
-	dateSegment := barStyle.Render(" " + m.dateDisplayString())
+	dateSegment := m.relativeDateIndicator() + barStyle.Render(" "+m.dateDisplayString())
 	periodSegment := barAccentStyle.Render(" " + m.periodName() + " ")
 
 	// Compose with padding
@@ -483,10 +427,7 @@ func (m *Model) renderHeaderBar() string {
 
 	leftWidth := ansi.StringWidth(left)
 	rightWidth := ansi.StringWidth(right)
-	padding := width - leftWidth - rightWidth
-	if padding < 0 {
-		padding = 0
-	}
+	padding := max(m.width-leftWidth-rightWidth, 0)
 
 	return left + barStyle.Render(strings.Repeat(" ", padding)) + right
 }
@@ -503,10 +444,6 @@ func (m *Model) dateDisplayString() string {
 	default:
 		dateStr := formatShortDate(m.currentDate, currentYear)
 		dayName := m.currentDate.Format("Monday")
-		indicator := m.relativeDateIndicator()
-		if indicator != "" {
-			return fmt.Sprintf("%s %s %s ", indicator, dayName, dateStr)
-		}
 		return fmt.Sprintf("%s %s ", dayName, dateStr)
 	}
 }
@@ -534,27 +471,19 @@ func (m *Model) relativeDateIndicator() string {
 
 	switch days {
 	case 0:
-		return "★"
+		return dayStyle.Render("TODAY")
 	case 1:
-		return "◆"
+		return dayStyle.Render("YESTERDAY")
 	default:
 		return ""
 	}
 }
 
 func (m *Model) renderFooterBar() string {
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
 	if m.filterActive {
 		content := barStyle.Render(fmt.Sprintf(" Filter: %s█", m.filterText))
 		contentWidth := ansi.StringWidth(content)
-		pad := width - contentWidth
-		if pad < 0 {
-			pad = 0
-		}
+		pad := max(m.width-contentWidth, 0)
 		return content + barStyle.Render(strings.Repeat(" ", pad))
 	}
 
@@ -568,10 +497,7 @@ func (m *Model) renderFooterBar() string {
 	}
 
 	leftWidth := ansi.StringWidth(left)
-	padding := width - leftWidth
-	if padding < 0 {
-		padding = 0
-	}
+	padding := max(m.width-leftWidth, 0)
 
 	return left + barStyle.Render(strings.Repeat(" ", padding))
 }
@@ -616,19 +542,13 @@ func (m *Model) renderContextItem(ctx ContextItem, selected bool, width int, cou
 
 	// Available space for name: width - prefix(2) - gap(2) - countWidth
 	gap := 2
-	nameMaxWidth := width - len(prefix) - gap - countWidth
-	if nameMaxWidth < 10 {
-		nameMaxWidth = 10
-	}
+	nameMaxWidth := max(width-len(prefix)-gap-countWidth, 10)
 
 	// Truncate name if too long
 	name = truncateWithEllipsis(name, nameMaxWidth)
 
 	// Build the line with right-aligned count
-	padding := width - ansi.StringWidth(prefix) - ansi.StringWidth(name) - ansi.StringWidth(countText)
-	if padding < 1 {
-		padding = 1
-	}
+	padding := max(width-ansi.StringWidth(prefix)-ansi.StringWidth(name)-ansi.StringWidth(countText), 1)
 
 	line := prefix + name + strings.Repeat(" ", padding) + countText
 
@@ -657,15 +577,7 @@ func truncateWithEllipsis(s string, maxWidth int) string {
 func (m *Model) renderCommandDetailView() string {
 	var b strings.Builder
 
-	width := m.width
-	if width == 0 {
-		width = 80
-	}
-
-	contentWidth := width - 2*marginX
-	if contentWidth < 20 {
-		contentWidth = 20
-	}
+	contentWidth := max(m.width-2*marginX, 20)
 	margin := strings.Repeat(" ", marginX)
 
 	// Header bar
@@ -757,10 +669,7 @@ func (m *Model) renderCommandDetailView() string {
 // value in the given style, padded to align at column 13.
 func renderDetailField(label string, value string, valueStyle lipgloss.Style) string {
 	const padTo = 13
-	padding := padTo - len(label)
-	if padding < 1 {
-		padding = 1
-	}
+	padding := max(padTo-len(label), 1)
 	return detailLabelStyle.Render(label) + strings.Repeat(" ", padding) + valueStyle.Render(value)
 }
 
@@ -783,16 +692,19 @@ func singleLine(s string) string {
 
 // renderExitStatus returns a colored exit status string (green for 0, red for non-zero).
 func renderExitStatus(code int) string {
+	var unicodeCheckmark = "\u2713"
+	var unicodeX = "\u2717"
 	if code == 0 {
-		return selectedStyle.Render("0 \u2713")
+		return selectedStyle.Render("0 " + unicodeCheckmark)
 	}
-	return detailErrorStyle.Render(fmt.Sprintf("%d \u2717", code))
+	return detailErrorStyle.Render(fmt.Sprintf("%d %s", code, unicodeX))
 }
 
 // formatDurationHuman formats a duration in milliseconds to human-readable form
 func formatDurationHuman(durationMs *int64) string {
+	var emDash = "\u2014"
 	if durationMs == nil {
-		return "\u2014" // em dash
+		return emDash
 	}
 
 	millis := *durationMs
@@ -867,11 +779,14 @@ func formatContextName(key summary.ContextKey, branch summary.BranchKey) string 
 // but keeps the full path when it is exactly the home directory.
 func formatDir(path string) string {
 	home, err := os.UserHomeDir()
+
 	if err != nil {
 		return path
 	}
+
 	if path == home {
 		return path
 	}
+
 	return summary.TildePath(path)
 }
