@@ -1,9 +1,7 @@
 package git
 
 import (
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -64,27 +62,4 @@ func getGitBranch(dir string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
-}
-
-// FindGitRoot finds the root of the git repository containing the given directory
-func FindGitRoot(dir string) (string, error) {
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
-
-	current := absDir
-	for {
-		gitDir := filepath.Join(current, ".git")
-		if _, err := os.Stat(gitDir); err == nil {
-			return current, nil
-		}
-
-		parent := filepath.Dir(current)
-		if parent == current {
-			// Reached root without finding .git
-			return "", nil
-		}
-		current = parent
-	}
 }

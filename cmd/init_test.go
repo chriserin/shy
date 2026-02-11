@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -422,20 +421,4 @@ func TestInitWithMultipleFlags(t *testing.T) {
 	initUse = false
 	initAutosuggest = false
 	rootCmd.SetArgs(nil)
-}
-
-// Capture stdout for testing
-func captureStdout(f func()) string {
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	f()
-
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	return buf.String()
 }

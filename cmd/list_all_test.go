@@ -101,12 +101,12 @@ func TestListAllWithCwd(t *testing.T) {
 		{"echo 6", proj1},
 	}
 
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		cmd := &models.Command{
 			CommandText: tc.command,
 			WorkingDir:  tc.workingDir,
 			ExitStatus:  0,
-			Timestamp:   time.Now().Unix(),
+			Timestamp:   time.Now().Unix() + int64(i),
 			Duration:    int64Ptr(1),
 		}
 		_, err := database.InsertCommand(cmd)
@@ -131,7 +131,7 @@ func TestListAllWithCwd(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 
 	require.Equal(t, 3, len(lines), "should have correct number of lines")
-	assert.Equal(t, "echo 5\necho 4\necho 3\n", output, "should have correct output")
+	assert.Equal(t, "echo 3\necho 4\necho 5\n", output, "should have correct output")
 
 	rootCmd.SetArgs(nil)
 }

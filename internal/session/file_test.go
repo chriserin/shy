@@ -203,8 +203,8 @@ func TestGetSessionFilePath_XDGCacheHome(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return filepath.ToSlash(s) == filepath.ToSlash(s) &&
-		(s == substr || len(s) >= len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
+	return (s == substr || len(s) >= len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
 }
 
 func containsMiddle(s, substr string) bool {
