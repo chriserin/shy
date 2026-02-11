@@ -9,7 +9,6 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/chris/shy/internal/summary"
 	"github.com/chris/shy/pkg/models"
 )
 
@@ -1365,62 +1364,6 @@ func (db *DB) scanCommandRows(rows *sql.Rows) ([]models.Command, error) {
 	}
 
 	return commands, nil
-}
-
-// GetContextSummary returns aggregated command summaries grouped by context
-// A context is defined by (working_dir, git_branch)
-func (db *DB) GetContextSummary(startTime, endTime int64) ([]summary.ContextSummary, error) {
-	query := `
-		SELECT
-			w.path,
-			COALESCE(g.branch, ''),
-			COUNT(*) as command_count,
-			MIN(c.timestamp) as first_time,
-			MAX(c.timestamp) as last_time
-		FROM commands c
-		JOIN working_dirs w ON c.working_dir_id = w.id
-		LEFT JOIN git_contexts g ON c.git_context_id = g.id
-		WHERE c.timestamp >= ? AND c.timestamp < ?
-		GROUP BY w.path, COALESCE(g.branch, '')
-		ORDER BY (MAX(c.timestamp) - MIN(c.timestamp)) DESC, COUNT(*) DESC, w.path ASC
-	`
-
-	rows, err := db.conn.Query(query, startTime, endTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query context summary: %w", err)
-	}
-	defer rows.Close()
-
-	var summaries []summary.ContextSummary
-
-	for rows.Next() {
-		var sum summary.ContextSummary
-		var gitBranch sql.NullString
-
-		err := rows.Scan(
-			&sum.WorkingDir,
-			&gitBranch,
-			&sum.CommandCount,
-			&sum.FirstTime,
-			&sum.LastTime,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan context summary: %w", err)
-		}
-
-		// Convert NULL git_branch to nil pointer
-		if gitBranch.Valid && gitBranch.String != "" {
-			sum.GitBranch = &gitBranch.String
-		}
-
-		summaries = append(summaries, sum)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating context summaries: %w", err)
-	}
-
-	return summaries, nil
 }
 
 // GetUniqueSourceApps returns unique source app names from the sources table
