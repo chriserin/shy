@@ -523,9 +523,6 @@ func (m *Model) periodName() string {
 }
 
 func (m *Model) renderContextItem(ctx ContextItem, selected bool, width int, countWidth int) string {
-	// Format context name
-	name := formatContextName(ctx.Key, ctx.Branch)
-
 	// Format command count
 	count := filteredCommandCount(ctx.Commands, m.displayMode, m.filterText)
 	countText := fmt.Sprintf("%d commands", count)
@@ -533,8 +530,6 @@ func (m *Model) renderContextItem(ctx ContextItem, selected bool, width int, cou
 		countText = "1 command "
 	}
 
-	// Right-align: "  " prefix + name + padding + countText
-	// prefix is 2 chars ("  " or "▶ ")
 	prefix := "  "
 	if selected {
 		prefix = "▶ "
@@ -544,18 +539,31 @@ func (m *Model) renderContextItem(ctx ContextItem, selected bool, width int, cou
 	gap := 2
 	nameMaxWidth := max(width-len(prefix)-gap-countWidth, 10)
 
-	// Truncate name if too long
+	// Build styled context name with green branch
+	name := styledSummaryContextName(ctx.Key, ctx.Branch, selected)
 	name = truncateWithEllipsis(name, nameMaxWidth)
 
 	// Build the line with right-aligned count
 	padding := max(width-ansi.StringWidth(prefix)-ansi.StringWidth(name)-ansi.StringWidth(countText), 1)
 
-	line := prefix + name + strings.Repeat(" ", padding) + countText
-
 	if selected {
-		return selectedStyle.Render(line)
+		return selectedStyle.Render(prefix) + name + strings.Repeat(" ", padding) + selectedStyle.Render(countText)
 	}
-	return normalStyle.Render(line)
+	return normalStyle.Render(prefix) + name + strings.Repeat(" ", padding) + countStyle.Render(countText)
+}
+
+// styledSummaryContextName renders a context name with the branch in cyan.
+func styledSummaryContextName(key summary.ContextKey, branch summary.BranchKey, selected bool) string {
+	dir := formatDir(key.WorkingDir)
+	branchCyanStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	dirStyle, sepStyle, brStyle := normalStyle, countStyle, branchCyanStyle
+	if selected {
+		dirStyle = selectedStyle
+	}
+	if hasBranch(key, branch) {
+		return dirStyle.Render(dir) + sepStyle.Render(":") + brStyle.Render(string(branch))
+	}
+	return dirStyle.Render(dir)
 }
 
 // countColumnWidth returns the width of the count column for alignment
