@@ -20,6 +20,7 @@ const (
 	SummaryView ViewState = iota
 	ContextDetailView
 	CommandDetailView
+	CommandTextView
 	HelpView
 )
 
@@ -92,6 +93,9 @@ type Model struct {
 	cmdDetailAll      []models.Command // full session context: [before..., target, after...]
 	cmdDetailIdx      int              // index of currently selected command
 	cmdDetailStartIdx int              // index of the original target in cmdDetailAll
+
+	// Command text view (full multi-line command text)
+	cmdTextScrollOffset int
 
 	// Period
 	period     Period    // current period (default DayPeriod)
@@ -488,6 +492,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	switch m.viewState {
 	case HelpView:
 		return m.handleHelpKey(msg)
+	case CommandTextView:
+		return m.handleCommandTextKey(msg)
 	case CommandDetailView:
 		return m.handleCommandDetailKey(msg)
 	case ContextDetailView:
@@ -710,6 +716,13 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "enter":
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			m.viewState = CommandTextView
+			m.cmdTextScrollOffset = 0
+		}
+		return m, nil
+
 	case "y":
 		if m.cmdDetailIdx < len(m.cmdDetailAll) {
 			return m, yankToClipboard(m.cmdDetailAll[m.cmdDetailIdx].CommandText)
@@ -737,6 +750,43 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m, nil
+}
+
+func (m *Model) handleCommandTextKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "enter", "esc", "-":
+		m.viewState = CommandDetailView
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			return m, m.loadCommandContext(m.cmdDetailAll[m.cmdDetailIdx].ID)
+		}
+		return m, nil
+	case "j", "down":
+		totalLines := m.cmdTextViewLineCount()
+		// avail = height - headerBar(1) - blank(1) - footerBar(1)
+		avail := max(m.height-3, 1)
+		maxOffset := max(totalLines-avail, 0)
+		if m.cmdTextScrollOffset < maxOffset {
+			m.cmdTextScrollOffset++
+		}
+		return m, nil
+	case "k", "up":
+		if m.cmdTextScrollOffset > 0 {
+			m.cmdTextScrollOffset--
+		}
+		return m, nil
+	case "y":
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			return m, yankToClipboard(m.cmdDetailAll[m.cmdDetailIdx].CommandText)
+		}
+		return m, nil
+	case "?":
+		m.helpPreviousView = m.viewState
+		m.viewState = HelpView
+		return m, nil
+	}
 	return m, nil
 }
 
@@ -1130,6 +1180,10 @@ func (m *Model) CmdDetailTotalContext() int {
 
 func (m *Model) CmdDetailAll() []models.Command {
 	return m.cmdDetailAll
+}
+
+func (m *Model) CmdTextScrollOffset() int {
+	return m.cmdTextScrollOffset
 }
 
 func (m *Model) Period() Period {

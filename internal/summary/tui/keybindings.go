@@ -13,6 +13,8 @@ func bindingsForView(vs ViewState) []helpBinding {
 		return contextDetailBindings()
 	case CommandDetailView:
 		return commandDetailBindings()
+	case CommandTextView:
+		return commandTextBindings()
 	default:
 		return summaryBindings()
 	}
@@ -57,6 +59,17 @@ func contextDetailBindings() []helpBinding {
 		{"esc", "Clear filter"},
 		{"]", "Cycle period up"},
 		{"[", "Cycle period down"},
+		{"?", "Help"},
+		{"q", "Quit"},
+	}
+}
+
+func commandTextBindings() []helpBinding {
+	return []helpBinding{
+		{"j", "Scroll down"},
+		{"k", "Scroll up"},
+		{"y", "Yank command"},
+		{"-", "Back"},
 		{"?", "Help"},
 		{"q", "Quit"},
 	}

@@ -47,6 +47,8 @@ func (m *Model) renderView() string {
 	switch m.viewState {
 	case HelpView:
 		return m.renderHelpView()
+	case CommandTextView:
+		return m.renderCommandTextView()
 	case CommandDetailView:
 		return m.renderCommandDetailView()
 	case ContextDetailView:
@@ -591,6 +593,130 @@ func truncateWithEllipsis(s string, maxWidth int) string {
 	// Truncate to maxWidth-1 to leave room for …
 	truncated := ansi.Truncate(s, maxWidth-1, "")
 	return truncated + "…"
+}
+
+// cmdTextVisualLine is a single rendered line in the command text view.
+type cmdTextVisualLine struct {
+	lineNum    int    // 1-indexed source line number (0 = continuation)
+	text       string // the text content for this visual line
+	isContinue bool   // true for wrapped continuation lines
+}
+
+// buildCmdTextLines splits command text into visual lines, wrapping long lines
+// to fit within textWidth characters.
+func buildCmdTextLines(commandText string, lineNumWidth, textWidth int) []cmdTextVisualLine {
+	srcLines := strings.Split(commandText, "\n")
+	var visual []cmdTextVisualLine
+
+	for i, line := range srcLines {
+		if textWidth <= 0 || ansi.StringWidth(line) <= textWidth {
+			visual = append(visual, cmdTextVisualLine{lineNum: i + 1, text: line})
+			continue
+		}
+		// Wrap long line
+		first := true
+		for len(line) > 0 {
+			chunk := ansi.Truncate(line, textWidth, "")
+			chunkWidth := ansi.StringWidth(chunk)
+			if chunkWidth == 0 && len(line) > 0 {
+				// Safety: at least one rune per chunk to avoid infinite loop
+				chunk = string([]rune(line)[:1])
+				chunkWidth = ansi.StringWidth(chunk)
+			}
+			if first {
+				visual = append(visual, cmdTextVisualLine{lineNum: i + 1, text: chunk})
+				first = false
+			} else {
+				visual = append(visual, cmdTextVisualLine{isContinue: true, text: chunk})
+			}
+			line = line[len(chunk):]
+			_ = chunkWidth
+		}
+	}
+
+	return visual
+}
+
+// cmdTextViewLineCount returns the total number of visual lines for the current
+// command in the text view, accounting for wrapping.
+func (m *Model) cmdTextViewLineCount() int {
+	target := m.CmdDetailTarget()
+	if target == nil {
+		return 0
+	}
+	srcLines := strings.Split(target.CommandText, "\n")
+	lineNumWidth := len(fmt.Sprintf("%d", len(srcLines)))
+	// prefix: margin(2) + indent(2) + lineNum + gap(2)
+	prefixWidth := marginX + 2 + lineNumWidth + 2
+	textWidth := max(m.width-prefixWidth, 1)
+	return len(buildCmdTextLines(target.CommandText, lineNumWidth, textWidth))
+}
+
+func (m *Model) renderCommandTextView() string {
+	var b strings.Builder
+
+	margin := strings.Repeat(" ", marginX)
+
+	// Header bar — render as CommandDetailView header for context
+	saved := m.viewState
+	m.viewState = CommandDetailView
+	b.WriteString(m.renderHeaderBar())
+	m.viewState = saved
+	b.WriteString("\n")
+
+	target := m.CmdDetailTarget()
+	contentLines := 0
+	if target == nil {
+		b.WriteString("\n" + margin + "No command selected\n")
+		contentLines = 2
+	} else {
+		b.WriteString("\n")
+		contentLines++
+
+		srcLines := strings.Split(target.CommandText, "\n")
+		lineNumWidth := len(fmt.Sprintf("%d", len(srcLines)))
+		// prefix: margin(2) + indent(2) + lineNum + gap(2)
+		prefixWidth := marginX + 2 + lineNumWidth + 2
+		textWidth := max(m.width-prefixWidth, 1)
+
+		visual := buildCmdTextLines(target.CommandText, lineNumWidth, textWidth)
+
+		// Viewport: headerBar(1) + blank(1) + footerBar(1) = 3
+		avail := max(m.height-3, 1)
+
+		start := min(m.cmdTextScrollOffset, len(visual))
+		end := min(start+avail, len(visual))
+		visible := visual[start:end]
+
+		for _, vl := range visible {
+			var numStr string
+			if vl.isContinue {
+				numStr = strings.Repeat(" ", lineNumWidth)
+			} else {
+				numStr = fmt.Sprintf("%*d", lineNumWidth, vl.lineNum)
+			}
+			b.WriteString(margin + "  " + countStyle.Render(numStr+"  ") + normalStyle.Render(vl.text) + "\n")
+			contentLines++
+		}
+	}
+
+	// Pad to push footer to bottom
+	if m.height > 0 {
+		avail := m.height - 2 // headerBar(1) + footerBar(1)
+		if avail > contentLines {
+			for i := 0; i < avail-contentLines; i++ {
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	// Footer bar
+	content := barStyle.Render(" Press ") + barBoldStyle.Render("-") + barStyle.Render(" or ") + barBoldStyle.Render("esc") + barStyle.Render(" to go back")
+	contentWidth := ansi.StringWidth(content)
+	pad := max(m.width-contentWidth, 0)
+	b.WriteString(content + barStyle.Render(strings.Repeat(" ", pad)))
+
+	return b.String()
 }
 
 func (m *Model) renderCommandDetailView() string {
