@@ -478,11 +478,108 @@ func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	}
 }
 
-func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+// navigateAndReload handles the view-specific reset after a period navigation.
+// In detail view it sets pendingDetailReentry; in summary view it resets selectedIdx.
+func (m *Model) navigateAndReload() (*Model, tea.Cmd) {
+	if m.viewState == ContextDetailView {
+		m.pendingDetailReentry = true
+	} else {
+		m.selectedIdx = 0
+	}
+	return m, m.loadContexts
+}
+
+// jumpToDate sets the date and period to DayPeriod, returning to summary view
+// if currently in the detail view.
+func (m *Model) jumpToDate(date time.Time) (*Model, tea.Cmd) {
+	m.currentDate = date
+	m.period = DayPeriod
+	m.selectedIdx = 0
+	if m.viewState == ContextDetailView {
+		m.viewState = SummaryView
+	}
+	return m, m.loadContexts
+}
+
+// setDisplayMode sets the display mode. In detail view it also refreshes.
+func (m *Model) setDisplayMode(mode DisplayMode) (*Model, tea.Cmd) {
+	m.displayMode = mode
+	if m.viewState == ContextDetailView {
+		return m, m.refreshDetailView()
+	}
+	return m, nil
+}
+
+// handleSharedKey handles keys shared between summary and detail views.
+// Returns handled=true if the key was consumed.
+func (m *Model) handleSharedKey(msg tea.KeyMsg) (model *Model, cmd tea.Cmd, handled bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
-		return m, tea.Quit
+		return m, tea.Quit, true
 
+	case "h":
+		m.navigateBack()
+		model, cmd = m.navigateAndReload()
+		return model, cmd, true
+
+	case "l":
+		if m.isCurrentPeriod() {
+			return m, nil, true
+		}
+		m.navigateForward()
+		model, cmd = m.navigateAndReload()
+		return model, cmd, true
+
+	case "t":
+		model, cmd = m.jumpToDate(m.now())
+		return model, cmd, true
+
+	case "y":
+		model, cmd = m.jumpToDate(m.now().AddDate(0, 0, -1))
+		return model, cmd, true
+
+	case "u":
+		model, cmd = m.setDisplayMode(UniqueMode)
+		return model, cmd, true
+
+	case "a":
+		model, cmd = m.setDisplayMode(AllMode)
+		return model, cmd, true
+
+	case "/":
+		m.filterActive = true
+		m.filterPrevText = m.filterText
+		return m, nil, true
+
+	case "]":
+		if m.cyclePeriodUp() {
+			model, cmd = m.navigateAndReload()
+			return model, cmd, true
+		}
+		return m, nil, true
+
+	case "[":
+		if m.cyclePeriodDown() {
+			model, cmd = m.navigateAndReload()
+			return model, cmd, true
+		}
+		return m, nil, true
+
+	case "?":
+		m.helpPreviousView = m.viewState
+		m.viewState = HelpView
+		return m, nil, true
+	}
+
+	return m, nil, false
+}
+
+func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+	if model, cmd, handled := m.handleSharedKey(msg); handled {
+		return model, cmd
+	}
+
+	switch msg.String() {
 	case "j", "down":
 		if m.selectedIdx < len(m.contexts)-1 {
 			m.selectedIdx++
@@ -500,73 +597,17 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			return m, m.enterDetailView()
 		}
 		return m, nil
-
-	case "h":
-		m.navigateBack()
-		m.selectedIdx = 0
-		return m, m.loadContexts
-
-	case "l":
-		if m.isCurrentPeriod() {
-			return m, nil
-		}
-		m.navigateForward()
-		m.selectedIdx = 0
-		return m, m.loadContexts
-
-	case "t":
-		m.currentDate = m.now()
-		m.period = DayPeriod
-		m.selectedIdx = 0
-		return m, m.loadContexts
-
-	case "y":
-		m.currentDate = m.now().AddDate(0, 0, -1)
-		m.period = DayPeriod
-		m.selectedIdx = 0
-		return m, m.loadContexts
-
-	case "u":
-		m.displayMode = UniqueMode
-		return m, nil
-
-	case "a":
-		m.displayMode = AllMode
-		return m, nil
-
-	case "/":
-		m.filterActive = true
-		m.filterPrevText = m.filterText
-		return m, nil
-
-	case "]":
-		if m.cyclePeriodUp() {
-			m.selectedIdx = 0
-			return m, m.loadContexts
-		}
-		return m, nil
-
-	case "[":
-		if m.cyclePeriodDown() {
-			m.selectedIdx = 0
-			return m, m.loadContexts
-		}
-		return m, nil
-
-	case "?":
-		m.helpPreviousView = m.viewState
-		m.viewState = HelpView
-		return m, nil
 	}
 
 	return m, nil
 }
 
 func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	switch msg.String() {
-	case "q", "ctrl+c":
-		return m, tea.Quit
+	if model, cmd, handled := m.handleSharedKey(msg); handled {
+		return model, cmd
+	}
 
+	switch msg.String() {
 	case "j", "down":
 		if m.detailCmdIdx < len(m.detailCommands)-1 {
 			m.detailCmdIdx++
@@ -593,7 +634,6 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 
 	case "H":
-		// Switch to previous context
 		if m.detailContextOrphaned() {
 			if len(m.contexts) > 0 {
 				m.selectedIdx = len(m.contexts) - 1
@@ -606,7 +646,6 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		return m, nil
 
 	case "L":
-		// Switch to next context
 		if m.detailContextOrphaned() {
 			if len(m.contexts) > 0 {
 				m.selectedIdx = 0
@@ -616,65 +655,6 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 			m.selectedIdx++
 			return m, m.enterDetailView()
 		}
-		return m, nil
-
-	case "h":
-		m.navigateBack()
-		m.pendingDetailReentry = true
-		return m, m.loadContexts
-
-	case "l":
-		if m.isCurrentPeriod() {
-			return m, nil
-		}
-		m.navigateForward()
-		m.pendingDetailReentry = true
-		return m, m.loadContexts
-
-	case "t":
-		m.currentDate = m.now()
-		m.period = DayPeriod
-		m.selectedIdx = 0
-		m.viewState = SummaryView
-		return m, m.loadContexts
-
-	case "y":
-		m.currentDate = m.now().AddDate(0, 0, -1)
-		m.period = DayPeriod
-		m.selectedIdx = 0
-		m.viewState = SummaryView
-		return m, m.loadContexts
-
-	case "u":
-		m.displayMode = UniqueMode
-		return m, m.refreshDetailView()
-
-	case "a":
-		m.displayMode = AllMode
-		return m, m.refreshDetailView()
-
-	case "/":
-		m.filterActive = true
-		m.filterPrevText = m.filterText
-		return m, nil
-
-	case "]":
-		if m.cyclePeriodUp() {
-			m.pendingDetailReentry = true
-			return m, m.loadContexts
-		}
-		return m, nil
-
-	case "[":
-		if m.cyclePeriodDown() {
-			m.pendingDetailReentry = true
-			return m, m.loadContexts
-		}
-		return m, nil
-
-	case "?":
-		m.helpPreviousView = m.viewState
-		m.viewState = HelpView
 		return m, nil
 	}
 
