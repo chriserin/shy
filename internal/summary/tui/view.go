@@ -25,7 +25,7 @@ var (
 	barStyle       = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7"))
 	barBoldStyle   = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("15")).Bold(true)
 	barAccentStyle = lipgloss.NewStyle().Background(lipgloss.Color("4")).Foreground(lipgloss.Color("0")).Bold(true)
-	barDimStyle    = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("8"))
+	barDimStyle    = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("4"))
 
 	// Hint key style (no background, for empty-state navigation hints)
 	hintKeyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
@@ -356,15 +356,16 @@ func (m *Model) emptyDetailMessageLines(contentWidth int) []string {
 	bold := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
 	dim := normalStyle // white (not bold) for prose
 
-	name := formatContextName(m.detailContextKey, m.detailContextBranch)
 	date := periodDateLabel(m.currentDate, m.period, m.now)
 
 	segments := []styledSegment{
 		{dim.Render("No commands found in "), ansi.StringWidth("No commands found in ")},
-		{bold.Render(name), ansi.StringWidth(name)},
-		{dim.Render(" on "), ansi.StringWidth(" on ")},
-		{bold.Render(date), ansi.StringWidth(date)},
 	}
+	segments = append(segments, styledContextNameSegments(m.detailContextKey, m.detailContextBranch)...)
+	segments = append(segments,
+		styledSegment{dim.Render(" on "), ansi.StringWidth(" on ")},
+		styledSegment{bold.Render(date), ansi.StringWidth(date)},
+	)
 	if m.filterText != "" {
 		q := fmt.Sprintf("%q", m.filterText)
 		segments = append(segments,
@@ -522,7 +523,7 @@ func (m *Model) renderHeaderBar() string {
 	// Focus indicator
 	var focusSegment string
 	if m.focused {
-		focusSegment = barAccentStyle.Render(" ● ")
+		focusSegment = barDimStyle.Render(" ● ")
 	} else {
 		focusSegment = barDimStyle.Render(" ○ ")
 	}
@@ -531,8 +532,7 @@ func (m *Model) renderHeaderBar() string {
 	var infoSegment string
 	switch m.viewState {
 	case ContextDetailView:
-		name := formatContextName(m.detailContextKey, m.detailContextBranch)
-		infoSegment = barBoldStyle.Render(" " + name)
+		infoSegment = renderBarContextName(m.detailContextKey, m.detailContextBranch)
 	case CommandDetailView:
 		if target := m.CmdDetailTarget(); target != nil {
 			infoSegment = barBoldStyle.Render(fmt.Sprintf(" Event: %d", target.ID))
@@ -887,6 +887,40 @@ func formatDurationHuman(durationMs *int64) string {
 		return fmt.Sprintf("%dm %ds", minutes, seconds)
 	}
 	return fmt.Sprintf("%ds", seconds)
+}
+
+// styledContextNameSegments returns styled segments for a context name with
+// distinct styles for directory, separator, and branch (no background).
+func styledContextNameSegments(key summary.ContextKey, branch summary.BranchKey) []styledSegment {
+	bold := lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Bold(true)
+	sep := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+
+	dir := formatDir(key.WorkingDir)
+	if key.GitRepo != "" && branch != summary.NoBranch {
+		b := string(branch)
+		return []styledSegment{
+			{bold.Render(dir), ansi.StringWidth(dir)},
+			{sep.Render(":"), 1},
+			{branchStyle.Render(b), ansi.StringWidth(b)},
+		}
+	}
+	return []styledSegment{
+		{bold.Render(dir), ansi.StringWidth(dir)},
+	}
+}
+
+// renderBarContextName renders the context name for the header bar with
+// distinct styles for directory, separator, and branch.
+func renderBarContextName(key summary.ContextKey, branch summary.BranchKey) string {
+	dir := formatDir(key.WorkingDir)
+	if key.GitRepo != "" && branch != summary.NoBranch {
+		barBranchStyle := lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("14"))
+		return barBoldStyle.Render(" "+dir) +
+			barDimStyle.Render(":") +
+			barBranchStyle.Render(string(branch))
+	}
+	return barBoldStyle.Render(" " + dir)
 }
 
 func formatContextName(key summary.ContextKey, branch summary.BranchKey) string {
