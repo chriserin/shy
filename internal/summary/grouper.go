@@ -1,6 +1,10 @@
 package summary
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/chris/shy/pkg/models"
 )
 
@@ -60,4 +64,47 @@ func GroupByContext(commands []models.Command) *GroupedCommands {
 	}
 
 	return grouped
+}
+
+// The function is safe for both absolute and relative paths and normalises
+// any Windows backslashes to forward slashes so the output is consistent
+// across platforms.
+func TildePath(path string) string {
+	// Normalise the path first – this removes "..", ".", etc. and
+	// gives us a consistent representation to compare against the home dir.
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		// If we can’t resolve an absolute path, fall back to the original.
+		abs = path
+	}
+
+	// Get the user’s home directory in the same format as `abs`.
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// In the unlikely event we can’t determine the home dir,
+		// just return the original path.
+		return path
+	}
+
+	// Normalise the home directory string too, to match the normalised abs.
+	home = filepath.Clean(home)
+
+	// On Windows the home dir might contain backslashes. Convert both
+	// strings to the same slash style so HasPrefix works as expected.
+	// We use filepath.ToSlash which turns “C:\Users\me” → “C:/Users/me”.
+	absSlash := filepath.ToSlash(abs)
+	homeSlash := filepath.ToSlash(home)
+
+	if !strings.HasPrefix(absSlash, homeSlash) {
+		// No home‑directory prefix – nothing to replace.
+		return path
+	}
+
+	// Compute the suffix after the home dir.
+	// `len(homeSlash)` is the index where the suffix starts.
+	suffix := absSlash[len(homeSlash):]
+
+	// Join with "~".  If the original path was exactly the home dir,
+	// suffix will be empty and we just return "~".
+	return filepath.Join("~", suffix)
 }
