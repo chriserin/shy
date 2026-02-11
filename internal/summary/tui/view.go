@@ -21,14 +21,14 @@ var (
 	separatorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	bucketLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
 
-	// Header/footer bar styles
-	barStyle       = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
-	barBoldStyle   = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("15")).Bold(true)
-	barAccentStyle = lipgloss.NewStyle().Background(lipgloss.Color("5")).Foreground(lipgloss.Color("15")).Bold(true)
-	barDimStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("8"))
+	// Header/footer bar styles (ANSI 0-15 only, adapts to terminal colorscheme)
+	barStyle       = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7"))
+	barBoldStyle   = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("15")).Bold(true)
+	barAccentStyle = lipgloss.NewStyle().Background(lipgloss.Color("4")).Foreground(lipgloss.Color("0")).Bold(true)
+	barDimStyle    = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("8"))
 
 	// Hint key style (no background, for empty-state navigation hints)
-	hintKeyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
+	hintKeyStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
 
 	// Command detail styles (matching tv preview palette)
 	detailLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // bright-blue
