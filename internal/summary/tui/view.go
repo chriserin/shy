@@ -414,6 +414,20 @@ func (m *Model) renderEmptyDetailState(margin string) []string {
 	}
 	lines = append(lines, "")
 
+	// h: previous period
+	if m.emptyPrevPeriod != nil {
+		lines = append(lines, margin+formatHintLine("h", m.emptyPrevPeriod.dateLabel, m.emptyPrevPeriod.count, contentWidth))
+	} else {
+		lines = append(lines, margin+formatHintLineDisabled("h", contentWidth))
+	}
+
+	// l: next period
+	if m.emptyNextPeriod != nil {
+		lines = append(lines, margin+formatHintLine("l", m.emptyNextPeriod.dateLabel, m.emptyNextPeriod.count, contentWidth))
+	} else {
+		lines = append(lines, margin+formatHintLineDisabled("l", contentWidth))
+	}
+
 	// H/L: context hints — in orphaned state these target last/first context
 	orphaned := m.detailContextOrphaned()
 
@@ -445,20 +459,6 @@ func (m *Model) renderEmptyDetailState(margin string) []string {
 		lines = append(lines, margin+formatHintLine("L", name, count, contentWidth))
 	} else {
 		lines = append(lines, margin+formatHintLineDisabled("L", contentWidth))
-	}
-
-	// h: previous period
-	if m.emptyPrevPeriod != nil {
-		lines = append(lines, margin+formatHintLine("h", m.emptyPrevPeriod.dateLabel, m.emptyPrevPeriod.count, contentWidth))
-	} else {
-		lines = append(lines, margin+formatHintLineDisabled("h", contentWidth))
-	}
-
-	// l: next period
-	if m.emptyNextPeriod != nil {
-		lines = append(lines, margin+formatHintLine("l", m.emptyNextPeriod.dateLabel, m.emptyNextPeriod.count, contentWidth))
-	} else {
-		lines = append(lines, margin+formatHintLineDisabled("l", contentWidth))
 	}
 
 	return lines
