@@ -51,65 +51,6 @@ func (m *Model) renderView() string {
 	}
 }
 
-// helpBinding represents a single keybinding entry for the help view.
-type helpBinding struct {
-	key  string
-	desc string
-}
-
-func summaryBindings() []helpBinding {
-	return []helpBinding{
-		{"j", "Navigate down"},
-		{"k", "Navigate up"},
-		{"enter", "Open context"},
-		{"h", "Previous period"},
-		{"l", "Next period"},
-		{"t", "Today"},
-		{"y", "Yesterday"},
-		{"u", "Unique mode"},
-		{"a", "All mode"},
-		{"/", "Filter"},
-		{"esc", "Clear filter"},
-		{"]", "Cycle period up"},
-		{"[", "Cycle period down"},
-		{"?", "Help"},
-		{"q", "Quit"},
-	}
-}
-
-func contextDetailBindings() []helpBinding {
-	return []helpBinding{
-		{"j", "Navigate down"},
-		{"k", "Navigate up"},
-		{"enter", "View command detail"},
-		{"-", "Back to summary"},
-		{"H", "Previous context"},
-		{"L", "Next context"},
-		{"h", "Previous period"},
-		{"l", "Next period"},
-		{"t", "Today"},
-		{"y", "Yesterday"},
-		{"u", "Unique mode"},
-		{"a", "All mode"},
-		{"/", "Filter"},
-		{"esc", "Clear filter"},
-		{"]", "Cycle period up"},
-		{"[", "Cycle period down"},
-		{"?", "Help"},
-		{"q", "Quit"},
-	}
-}
-
-func commandDetailBindings() []helpBinding {
-	return []helpBinding{
-		{"j", "Navigate down"},
-		{"k", "Navigate up"},
-		{"-", "Back to context"},
-		{"?", "Help"},
-		{"q", "Quit"},
-	}
-}
-
 func (m *Model) renderHelpView() string {
 	var b strings.Builder
 
@@ -125,15 +66,7 @@ func (m *Model) renderHelpView() string {
 	b.WriteString("\n")
 
 	// Select bindings for the source view
-	var bindings []helpBinding
-	switch m.helpPreviousView {
-	case ContextDetailView:
-		bindings = contextDetailBindings()
-	case CommandDetailView:
-		bindings = commandDetailBindings()
-	default:
-		bindings = summaryBindings()
-	}
+	bindings := bindingsForView(m.helpPreviousView)
 
 	// Find max key width for alignment
 	maxKeyWidth := 0
