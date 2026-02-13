@@ -10,11 +10,10 @@ import (
 )
 
 var (
-	likeRecentPwd        bool
-	likeRecentSession    bool
-	likeRecentExclude    string
-	likeRecentLimit      int
-	likeRecentIncludeShy bool
+	likeRecentPwd     bool
+	likeRecentSession bool
+	likeRecentExclude string
+	likeRecentLimit   int
 )
 
 var likeRecentCmd = &cobra.Command{
@@ -33,7 +32,6 @@ func init() {
 	likeRecentCmd.Flags().BoolVar(&likeRecentSession, "session", false, "Only match from current session (SHY_SESSION_PID)")
 	likeRecentCmd.Flags().StringVar(&likeRecentExclude, "exclude", "", "Exclude commands matching pattern (glob)")
 	likeRecentCmd.Flags().IntVar(&likeRecentLimit, "limit", 1, "Number of suggestions")
-	likeRecentCmd.Flags().BoolVar(&likeRecentIncludeShy, "include-shy", false, "Include shy commands in results")
 }
 
 func runLikeRecent(cmd *cobra.Command, args []string) error {
@@ -52,9 +50,8 @@ func runLikeRecent(cmd *cobra.Command, args []string) error {
 
 	// Build filter options
 	opts := db.LikeRecentOptions{
-		Prefix:     prefix,
-		IncludeShy: likeRecentIncludeShy,
-		Exclude:    likeRecentExclude,
+		Prefix:  prefix,
+		Exclude: likeRecentExclude,
 	}
 
 	// Add pwd filter if requested

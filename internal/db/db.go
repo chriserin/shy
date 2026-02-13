@@ -1086,7 +1086,6 @@ func (db *DB) CloseSession(sessionPid int64) (int64, error) {
 // LikeRecentOptions contains options for LikeRecent query
 type LikeRecentOptions struct {
 	Prefix     string
-	IncludeShy bool
 	Exclude    string
 	WorkingDir string
 	SourceApp  string
@@ -1129,11 +1128,6 @@ func (db *DB) LikeRecent(opts LikeRecentOptions) ([]string, error) {
 	// Build base WHERE clause for common filters (prefix, IncludeShy)
 	baseWhere := "command_text LIKE ?"
 	baseArgs := []any{opts.Prefix + "%"}
-
-	// Exclude shy commands by default
-	if !opts.IncludeShy {
-		baseWhere += " AND command_text NOT LIKE 'shy %' AND command_text != 'shy'"
-	}
 
 	// Create channels for results
 	sessionChan := make(chan queryResult, 1)
