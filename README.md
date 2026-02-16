@@ -3,6 +3,9 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/chriserin/shy/main/LICENSE)
 [![Tests](https://github.com/chriserin/shy/actions/workflows/test.yml/badge.svg)](https://github.com/chriserin/shy/actions/workflows/test.yml)
 
+Watch the demo on youtube.
+[![shy demo](https://img.youtube.com/vi/JFn25spML9E/maxresdefault.jpg)](https://youtu.be/JFn25spML9E)
+
 An opinionated, performant, and metadata rich command history tool.
 
 - [Features](#features)
@@ -186,6 +189,10 @@ If you would like to add a channel to your command history with [television](htt
 ```bash
 # Generate the television channel configuration
 shy tv config > ~/.config/television/cable/shy-history.toml
+
+# OR
+
+shy tv config > "$XDG_CONFIG_HOME"/television/cable/shy-history.toml
 ```
 
 Your shy history is now available through television with the command `tv shy-history`. This
