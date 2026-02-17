@@ -1193,3 +1193,237 @@ func TestDeleteCommands_OrphanCleanup(t *testing.T) {
 	database.conn.QueryRow("SELECT path FROM working_dirs").Scan(&remainingPath)
 	assert.Equal(t, "/home/test/dir2", remainingPath)
 }
+
+func TestStarCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	cmd := models.NewCommand("echo hello", "/home/test", 0)
+	id, err := database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	err = database.StarCommand(id)
+	require.NoError(t, err)
+
+	starred, err := database.IsStarred(id)
+	require.NoError(t, err)
+	assert.True(t, starred)
+}
+
+func TestUnstarCommand(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	cmd := models.NewCommand("echo hello", "/home/test", 0)
+	id, err := database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	err = database.StarCommand(id)
+	require.NoError(t, err)
+
+	err = database.UnstarCommand(id)
+	require.NoError(t, err)
+
+	starred, err := database.IsStarred(id)
+	require.NoError(t, err)
+	assert.False(t, starred)
+}
+
+func TestToggleStar(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	cmd := models.NewCommand("echo hello", "/home/test", 0)
+	id, err := database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	// Toggle on
+	starred, err := database.ToggleStar(id)
+	require.NoError(t, err)
+	assert.True(t, starred)
+
+	// Toggle off
+	starred, err = database.ToggleStar(id)
+	require.NoError(t, err)
+	assert.False(t, starred)
+}
+
+func TestGetStarredIDs(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert 5 commands
+	var ids []int64
+	for i := 0; i < 5; i++ {
+		cmd := models.NewCommand(fmt.Sprintf("cmd%d", i), "/home/test", 0)
+		id, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+		ids = append(ids, id)
+	}
+
+	// Star 3 of 5
+	require.NoError(t, database.StarCommand(ids[0]))
+	require.NoError(t, database.StarCommand(ids[2]))
+	require.NoError(t, database.StarCommand(ids[4]))
+
+	starredIDs, err := database.GetStarredIDs()
+	require.NoError(t, err)
+	assert.Len(t, starredIDs, 3)
+	assert.True(t, starredIDs[ids[0]])
+	assert.True(t, starredIDs[ids[2]])
+	assert.True(t, starredIDs[ids[4]])
+	assert.False(t, starredIDs[ids[1]])
+	assert.False(t, starredIDs[ids[3]])
+}
+
+func TestListStarredCommands(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands in different directories and sessions
+	app := "zsh"
+	pid1 := int64(1001)
+	pid2 := int64(2002)
+	active := true
+
+	cmd1 := models.NewCommand("cmd1", "/home/test/dir1", 0)
+	cmd1.SourceApp = &app
+	cmd1.SourcePid = &pid1
+	cmd1.SourceActive = &active
+	id1, err := database.InsertCommand(cmd1)
+	require.NoError(t, err)
+
+	cmd2 := models.NewCommand("cmd2", "/home/test/dir2", 0)
+	cmd2.SourceApp = &app
+	cmd2.SourcePid = &pid2
+	cmd2.SourceActive = &active
+	id2, err := database.InsertCommand(cmd2)
+	require.NoError(t, err)
+
+	cmd3 := models.NewCommand("cmd3", "/home/test/dir1", 0)
+	cmd3.SourceApp = &app
+	cmd3.SourcePid = &pid1
+	cmd3.SourceActive = &active
+	id3, err := database.InsertCommand(cmd3)
+	require.NoError(t, err)
+
+	// Star all three
+	require.NoError(t, database.StarCommand(id1))
+	require.NoError(t, database.StarCommand(id2))
+	require.NoError(t, database.StarCommand(id3))
+
+	// List all starred
+	results, err := database.ListStarredCommands("", 0, "")
+	require.NoError(t, err)
+	assert.Len(t, results, 3)
+
+	// List starred with pwd filter
+	results, err = database.ListStarredCommands("", 0, "/home/test/dir1")
+	require.NoError(t, err)
+	assert.Len(t, results, 2)
+	for _, cmd := range results {
+		assert.Equal(t, "/home/test/dir1", cmd.WorkingDir)
+	}
+
+	// List starred with session filter
+	results, err = database.ListStarredCommands("zsh", pid2, "")
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.Equal(t, id2, results[0].ID)
+}
+
+func TestStarDeleteCascade(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	cmd := models.NewCommand("echo hello", "/home/test", 0)
+	id, err := database.InsertCommand(cmd)
+	require.NoError(t, err)
+
+	require.NoError(t, database.StarCommand(id))
+
+	starred, err := database.IsStarred(id)
+	require.NoError(t, err)
+	assert.True(t, starred)
+
+	// Delete the command
+	_, err = database.DeleteCommands([]int64{id})
+	require.NoError(t, err)
+
+	// Star entry should be cascaded
+	starred, err = database.IsStarred(id)
+	require.NoError(t, err)
+	assert.False(t, starred)
+}
+
+func TestMigrateSchemaV1ToV2(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	// Create a v1 database manually
+	db1, err := NewWithOptions(dbPath, Options{SkipSchemaCheck: true})
+	require.NoError(t, err)
+
+	// Create v1 schema (without starred_commands)
+	_, err = db1.conn.Exec(CreateWorkingDirsTableSQL)
+	require.NoError(t, err)
+	_, err = db1.conn.Exec(CreateGitContextsTableSQL)
+	require.NoError(t, err)
+	_, err = db1.conn.Exec(CreateSourcesTableSQL)
+	require.NoError(t, err)
+	_, err = db1.conn.Exec(CreateCommandsTableSQL)
+	require.NoError(t, err)
+	_, err = db1.conn.Exec(CreateIndexesSQL)
+	require.NoError(t, err)
+	_, err = db1.conn.Exec("PRAGMA user_version = 1")
+	require.NoError(t, err)
+
+	// Insert a command at v1
+	cmd := models.NewCommand("echo test", "/home/test", 0)
+	_, err = db1.InsertCommand(cmd)
+	require.NoError(t, err)
+	db1.Close()
+
+	// Reopen — should trigger migration to v2
+	db2, err := New(dbPath)
+	require.NoError(t, err)
+	defer db2.Close()
+
+	// Verify version is now 2
+	var version int
+	err = db2.conn.QueryRow("PRAGMA user_version").Scan(&version)
+	require.NoError(t, err)
+	assert.Equal(t, 2, version)
+
+	// Verify starred_commands table exists
+	var tableName string
+	err = db2.conn.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='starred_commands'").Scan(&tableName)
+	require.NoError(t, err)
+	assert.Equal(t, "starred_commands", tableName)
+
+	// Verify star operations work
+	err = db2.StarCommand(1)
+	require.NoError(t, err)
+
+	starred, err := db2.IsStarred(1)
+	require.NoError(t, err)
+	assert.True(t, starred)
+}

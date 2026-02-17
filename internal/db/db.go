@@ -17,7 +17,7 @@ const (
 
 	// SchemaVersion is the current database schema version
 	// Increment this when making schema changes
-	SchemaVersion = 1
+	SchemaVersion = 2
 
 	CreateWorkingDirsTableSQL = `
 		CREATE TABLE IF NOT EXISTS working_dirs (
@@ -56,6 +56,12 @@ const (
 			git_context_id INTEGER REFERENCES git_contexts(id),
 			source_id INTEGER REFERENCES sources(id),
 			is_duplicate INTEGER DEFAULT 0
+		);
+	`
+
+	CreateStarredCommandsTableSQL = `
+		CREATE TABLE IF NOT EXISTS starred_commands (
+			command_id INTEGER PRIMARY KEY REFERENCES commands(id) ON DELETE CASCADE
 		);
 	`
 
@@ -153,6 +159,19 @@ func NewWithOptions(dbPath string, opts Options) (*DB, error) {
 			conn.Close()
 			return nil, fmt.Errorf("database not initialized, run: shy init-db")
 		}
+		// Migrate from v1 to v2: add starred_commands table
+		if version == 1 {
+			if err := migrateV1ToV2(conn); err != nil {
+				conn.Close()
+				return nil, fmt.Errorf("failed to migrate schema v1 to v2: %w", err)
+			}
+		}
+	}
+
+	// Enable foreign key enforcement (required for ON DELETE CASCADE)
+	if _, err := conn.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	// Enable WAL mode for better concurrency
@@ -177,6 +196,17 @@ func (db *DB) Close() error {
 // Path returns the database file path
 func (db *DB) Path() string {
 	return db.path
+}
+
+// migrateV1ToV2 creates the starred_commands table and bumps user_version to 2
+func migrateV1ToV2(conn *sql.DB) error {
+	if _, err := conn.Exec(CreateStarredCommandsTableSQL); err != nil {
+		return fmt.Errorf("failed to create starred_commands table: %w", err)
+	}
+	if _, err := conn.Exec("PRAGMA user_version = 2"); err != nil {
+		return fmt.Errorf("failed to set schema version: %w", err)
+	}
+	return nil
 }
 
 // NewForTesting creates a new database with schema initialized.
@@ -224,6 +254,9 @@ func (db *DB) InitSchema() (bool, error) {
 	}
 	if _, err := db.conn.Exec(CreateIndexesSQL); err != nil {
 		return false, fmt.Errorf("failed to create indexes: %w", err)
+	}
+	if _, err := db.conn.Exec(CreateStarredCommandsTableSQL); err != nil {
+		return false, fmt.Errorf("failed to create starred_commands table: %w", err)
 	}
 
 	// Set schema version
@@ -1382,6 +1415,113 @@ func (db *DB) GetUniqueSourceApps() ([]string, error) {
 	}
 
 	return apps, nil
+}
+
+// StarCommand marks a command as starred
+func (db *DB) StarCommand(id int64) error {
+	_, err := db.conn.Exec("INSERT OR IGNORE INTO starred_commands (command_id) VALUES (?)", id)
+	if err != nil {
+		return fmt.Errorf("failed to star command: %w", err)
+	}
+	return nil
+}
+
+// UnstarCommand removes a star from a command
+func (db *DB) UnstarCommand(id int64) error {
+	_, err := db.conn.Exec("DELETE FROM starred_commands WHERE command_id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to unstar command: %w", err)
+	}
+	return nil
+}
+
+// ToggleStar toggles the starred status of a command.
+// Returns true if the command is now starred, false if unstarred.
+func (db *DB) ToggleStar(id int64) (bool, error) {
+	starred, err := db.IsStarred(id)
+	if err != nil {
+		return false, err
+	}
+	if starred {
+		return false, db.UnstarCommand(id)
+	}
+	return true, db.StarCommand(id)
+}
+
+// IsStarred returns whether a command is starred
+func (db *DB) IsStarred(id int64) (bool, error) {
+	var exists int
+	err := db.conn.QueryRow("SELECT 1 FROM starred_commands WHERE command_id = ?", id).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to check starred status: %w", err)
+	}
+	return true, nil
+}
+
+// GetStarredIDs returns a set of all starred command IDs for O(1) lookup
+func (db *DB) GetStarredIDs() (map[int64]bool, error) {
+	rows, err := db.conn.Query("SELECT command_id FROM starred_commands")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query starred commands: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make(map[int64]bool)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan starred command ID: %w", err)
+		}
+		ids[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating starred commands: %w", err)
+	}
+	return ids, nil
+}
+
+// ListStarredCommands returns all starred commands with optional filters.
+// If sourceApp is non-empty, filters to active commands from that app/pid.
+// If cwd is non-empty, filters to commands from that working directory.
+func (db *DB) ListStarredCommands(sourceApp string, sourcePid int64, cwd string) ([]models.Command, error) {
+	var whereClauses []string
+	whereClauses = append(whereClauses, "sc.command_id IS NOT NULL")
+
+	if sourceApp != "" || sourcePid > 0 {
+		var sessionClauses []string
+		if sourceApp != "" {
+			sessionClauses = append(sessionClauses, fmt.Sprintf("s.app = '%s'",
+				strings.ReplaceAll(sourceApp, "'", "''")))
+		}
+		if sourcePid > 0 {
+			sessionClauses = append(sessionClauses, fmt.Sprintf("s.pid = %d", sourcePid))
+		}
+		sessionClauses = append(sessionClauses, "s.active = 1")
+		whereClauses = append(whereClauses, strings.Join(sessionClauses, " AND "))
+	}
+
+	if cwd != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("w.path = '%s'",
+			strings.ReplaceAll(cwd, "'", "''")))
+	}
+
+	whereClause := "WHERE " + strings.Join(whereClauses, " AND ")
+
+	query := `SELECT ` + commandSelectColumns + commandFromJoins + `
+		JOIN starred_commands sc ON c.id = sc.command_id
+		` + whereClause + `
+		ORDER BY c.timestamp DESC`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list starred commands: %w", err)
+	}
+	defer rows.Close()
+
+	return db.scanCommandRows(rows)
 }
 
 // DeleteCommands deletes commands by their IDs.

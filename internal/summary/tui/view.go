@@ -21,6 +21,8 @@ var (
 	separatorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	bucketLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
 
+	starStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+
 	// Header/footer bar styles (ANSI 0-15 only, adapts to terminal colorscheme)
 	barStyle       = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7"))
 	barBoldStyle   = lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("15")).Bold(true)
@@ -395,12 +397,19 @@ func (m *Model) renderDetailCommand(cmd models.Command, selected bool) string {
 		indicator = detailErrorStyle.Render(" ↵")
 	}
 
+	var starIndicator string
+	if m.starredIDs[cmd.ID] {
+		starIndicator = starStyle.Render("★") + " "
+	} else {
+		starIndicator = "  "
+	}
+
 	timeStr := "  " + minute + "  "
 
 	if selected {
-		return selectedStyle.Render("▶ ") + countStyle.Render(timeStr) + selectedStyle.Render(first) + indicator
+		return selectedStyle.Render("▶ ") + starIndicator + countStyle.Render(timeStr) + selectedStyle.Render(first) + indicator
 	}
-	return countStyle.Render("  "+timeStr) + normalStyle.Render(first) + indicator
+	return countStyle.Render("  ") + starIndicator + countStyle.Render(timeStr) + normalStyle.Render(first) + indicator
 }
 
 func (m *Model) renderHeaderBar() string {
@@ -784,10 +793,16 @@ func (m *Model) renderCommandDetailView() string {
 			if multi {
 				indicator = detailErrorStyle.Render(" ↵")
 			}
-			if i == m.cmdDetailIdx {
-				b.WriteString(margin + "  " + selectedStyle.Render("▶ ") + countStyle.Render(idStr) + selectedStyle.Render(first) + indicator + "\n")
+			var cmdStarIndicator string
+			if m.starredIDs[ctxCmd.ID] {
+				cmdStarIndicator = starStyle.Render("★") + " "
 			} else {
-				b.WriteString(margin + "  " + countStyle.Render("  "+idStr) + normalStyle.Render(first) + indicator + "\n")
+				cmdStarIndicator = "  "
+			}
+			if i == m.cmdDetailIdx {
+				b.WriteString(margin + "  " + selectedStyle.Render("▶ ") + cmdStarIndicator + countStyle.Render(idStr) + selectedStyle.Render(first) + indicator + "\n")
+			} else {
+				b.WriteString(margin + "  " + countStyle.Render("  ") + cmdStarIndicator + countStyle.Render(idStr) + normalStyle.Render(first) + indicator + "\n")
 			}
 		}
 	}

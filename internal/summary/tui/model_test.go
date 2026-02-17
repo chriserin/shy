@@ -3606,3 +3606,86 @@ func TestDeleteFromCommandDetailView(t *testing.T) {
 	assert.Contains(t, model.StatusMsg(), "Deleted #")
 	assert.Equal(t, ContextDetailView, model.ViewState())
 }
+
+// TestStarToggleContextDetail tests pressing S in ContextDetailView to star a command
+func TestStarToggleContextDetail(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo first", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "echo second", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Press S to star the first command
+	pressKey(model, 'S')
+
+	// Should show "Starred!" status
+	assert.Equal(t, "Starred!", model.StatusMsg())
+
+	// The starredIDs map should contain the command
+	assert.True(t, model.StarredIDs()[model.DetailCommands()[0].ID])
+}
+
+// TestStarToggleUnstar tests pressing S twice to unstar a command
+func TestStarToggleUnstar(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo first", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Star
+	pressKey(model, 'S')
+	assert.Equal(t, "Starred!", model.StatusMsg())
+	cmdID := model.DetailCommands()[0].ID
+	assert.True(t, model.StarredIDs()[cmdID])
+
+	// Unstar
+	pressKey(model, 'S')
+	assert.Equal(t, "Unstarred!", model.StatusMsg())
+	assert.False(t, model.StarredIDs()[cmdID])
+}
+
+// TestStarIndicatorRendered tests that the star indicator appears in the View output
+func TestStarIndicatorRendered(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo starred_cmd", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// View should not contain star initially
+	view := model.View()
+	assert.NotContains(t, view, "★")
+
+	// Star the command
+	pressKey(model, 'S')
+
+	// View should now contain star
+	view = model.View()
+	assert.Contains(t, view, "★")
+}

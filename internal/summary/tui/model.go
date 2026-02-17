@@ -120,6 +120,9 @@ type Model struct {
 	// Focus
 	focused bool
 
+	// Starred commands (loaded once, updated on toggle)
+	starredIDs map[int64]bool
+
 	// Status flash message (e.g. "Yanked!")
 	statusMsg string
 
@@ -196,7 +199,13 @@ func (m *Model) loadContexts() tea.Msg {
 	// Sort contexts alphabetically by working dir, then branch
 	sortContextItems(items)
 
-	return contextsLoadedMsg{contexts: items}
+	// Load starred IDs
+	starredIDs, err := m.db.GetStarredIDs()
+	if err != nil {
+		return errMsg{err}
+	}
+
+	return contextsLoadedMsg{contexts: items, starredIDs: starredIDs}
 }
 
 // mondayOfWeek returns the Monday (00:00 local) of the ISO week containing date.
@@ -395,6 +404,15 @@ func (m *Model) deleteCommand(id int64) tea.Cmd {
 	}
 }
 
+// toggleStar toggles the starred status of a command
+func (m *Model) toggleStar(id int64) tea.Cmd {
+	database := m.db
+	return func() tea.Msg {
+		starred, err := database.ToggleStar(id)
+		return starToggleResultMsg{id: id, starred: starred, err: err}
+	}
+}
+
 // Update implements tea.Model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -419,6 +437,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case contextsLoadedMsg:
 		m.contexts = msg.contexts
+		m.starredIDs = msg.starredIDs
 		m.selectedIdx = 0
 		if m.pendingDetailReentry {
 			m.pendingDetailReentry = false
@@ -468,6 +487,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "Yank failed"
 		} else {
 			m.statusMsg = "Yanked!"
+		}
+		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return clearStatusMsg{}
+		})
+
+	case starToggleResultMsg:
+		if msg.err != nil {
+			m.statusMsg = "Star failed"
+		} else {
+			if msg.starred {
+				if m.starredIDs == nil {
+					m.starredIDs = make(map[int64]bool)
+				}
+				m.starredIDs[msg.id] = true
+				m.statusMsg = "Starred!"
+			} else {
+				delete(m.starredIDs, msg.id)
+				m.statusMsg = "Unstarred!"
+			}
 		}
 		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 			return clearStatusMsg{}
@@ -684,6 +722,12 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "S":
+		if len(m.detailCommands) > 0 {
+			return m, m.toggleStar(m.detailCommands[m.detailCmdIdx].ID)
+		}
+		return m, nil
+
 	case "D":
 		if len(m.detailCommands) > 0 {
 			return m, m.deleteCommand(m.detailCommands[m.detailCmdIdx].ID)
@@ -756,6 +800,12 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	case "y":
 		if m.cmdDetailIdx < len(m.cmdDetailAll) {
 			return m, yankToClipboard(m.cmdDetailAll[m.cmdDetailIdx].CommandText)
+		}
+		return m, nil
+
+	case "S":
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			return m, m.toggleStar(m.cmdDetailAll[m.cmdDetailIdx].ID)
 		}
 		return m, nil
 
@@ -1137,7 +1187,8 @@ func (m *Model) View() string {
 
 // Messages
 type contextsLoadedMsg struct {
-	contexts []ContextItem
+	contexts   []ContextItem
+	starredIDs map[int64]bool
 }
 
 type errMsg struct {
@@ -1156,6 +1207,12 @@ type emptyStatePeeksMsg struct {
 }
 
 type clearStatusMsg struct{}
+
+type starToggleResultMsg struct {
+	id      int64
+	starred bool
+	err     error
+}
 
 type deleteResultMsg struct {
 	id    int64
@@ -1268,6 +1325,10 @@ func (m *Model) HelpPreviousView() ViewState {
 
 func (m *Model) StatusMsg() string {
 	return m.statusMsg
+}
+
+func (m *Model) StarredIDs() map[int64]bool {
+	return m.starredIDs
 }
 
 // filterBySubstring returns commands where CommandText contains the filter string
