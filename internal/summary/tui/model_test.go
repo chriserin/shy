@@ -3465,3 +3465,144 @@ func TestHelpViewRendersBindings(t *testing.T) {
 	assert.Contains(t, view, "Back to summary")
 	assert.Contains(t, view, "Previous context")
 }
+
+// pressKeyChain simulates a key press and executes all resulting commands in chain
+func pressKeyChain(model *Model, key tea.KeyMsg) {
+	_, cmd := model.handleKey(key)
+	for cmd != nil {
+		msg := cmd()
+		_, cmd = model.Update(msg)
+	}
+}
+
+// TestDeleteFromContextDetailView tests pressing D in ContextDetailView
+func TestDeleteFromContextDetailView(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo first", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "echo second", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 10, "echo third", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	assert.Equal(t, 3, len(model.DetailCommands()))
+
+	// Press D to delete the first command (chains through deleteResultMsg -> loadContexts -> contextsLoadedMsg)
+	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+
+	// Should show "Deleted #1" status and reload
+	assert.Contains(t, model.StatusMsg(), "Deleted #1")
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// After reload, the command count should be reduced
+	assert.Equal(t, 2, len(model.DetailCommands()))
+
+	// Cursor should be at index 0 (no command with ID < 1 exists)
+	assert.Equal(t, 0, model.DetailCmdIdx())
+}
+
+// TestDeleteFromContextDetailCursorPosition tests that after delete the cursor
+// moves to the closest command with an ID lesser than the deleted one.
+func TestDeleteFromContextDetailCursorPosition(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo first", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "echo second", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 10, "echo third", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	require.Equal(t, 3, len(model.DetailCommands()))
+
+	// Navigate to the second command (index 1, ID 2)
+	pressKey(model, 'j')
+	assert.Equal(t, 1, model.DetailCmdIdx())
+	assert.Equal(t, "echo second", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
+
+	// Delete the second command
+	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+
+	assert.Contains(t, model.StatusMsg(), "Deleted #2")
+	assert.Equal(t, 2, len(model.DetailCommands()))
+
+	// Cursor should be on the command with ID < 2, which is ID 1 ("echo first") at index 0
+	assert.Equal(t, 0, model.DetailCmdIdx())
+	assert.Equal(t, "echo first", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
+}
+
+// TestDeleteFromContextDetailCursorLastCommand tests deleting the last command
+// positions cursor at the preceding command.
+func TestDeleteFromContextDetailCursorLastCommand(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo first", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "echo second", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 10, "echo third", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Navigate to the last command (index 2, ID 3)
+	pressKey(model, 'j')
+	pressKey(model, 'j')
+	assert.Equal(t, 2, model.DetailCmdIdx())
+
+	// Delete the third command
+	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+
+	assert.Contains(t, model.StatusMsg(), "Deleted #3")
+	assert.Equal(t, 2, len(model.DetailCommands()))
+
+	// Cursor should be on "echo second" (ID 2), the closest with ID < 3
+	assert.Equal(t, 1, model.DetailCmdIdx())
+	assert.Equal(t, "echo second", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
+}
+
+// TestDeleteFromCommandDetailView tests pressing D in CommandDetailView
+func TestDeleteFromCommandDetailView(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	commands := []models.Command{
+		makeCommandWithText(yesterday, 9, 0, "echo first", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 5, "echo second", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+		makeCommandWithText(yesterday, 9, 10, "echo third", "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	}
+
+	dbPath := setupTestDB(t, commands)
+	model := initModel(t, dbPath, today)
+
+	// Enter context detail view then command detail view
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+	pressEnter(model)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	// Press D to delete the command (chains through deleteResultMsg -> loadContexts -> contextsLoadedMsg)
+	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+
+	// Should transition back to ContextDetailView with status message
+	assert.Contains(t, model.StatusMsg(), "Deleted #")
+	assert.Equal(t, ContextDetailView, model.ViewState())
+}

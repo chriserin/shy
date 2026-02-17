@@ -1383,3 +1383,95 @@ func (db *DB) GetUniqueSourceApps() ([]string, error) {
 
 	return apps, nil
 }
+
+// DeleteCommands deletes commands by their IDs.
+// It recalculates is_duplicate flags for affected command texts and cleans up
+// orphaned lookup table rows. Returns the number of deleted rows.
+func (db *DB) DeleteCommands(ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Build placeholders and args for IN clause
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	inClause := strings.Join(placeholders, ",")
+
+	// Collect command_text values of canonical entries (is_duplicate = 0) being deleted.
+	// These may need a replacement promoted after deletion.
+	canonicalQuery := fmt.Sprintf(
+		"SELECT DISTINCT command_text FROM commands WHERE id IN (%s) AND is_duplicate = 0",
+		inClause,
+	)
+	rows, err := tx.Query(canonicalQuery, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to query canonical texts: %w", err)
+	}
+	var affectedTexts []string
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("failed to scan canonical text: %w", err)
+		}
+		affectedTexts = append(affectedTexts, text)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("error iterating canonical texts: %w", err)
+	}
+
+	// Delete the commands
+	deleteQuery := fmt.Sprintf("DELETE FROM commands WHERE id IN (%s)", inClause)
+	result, err := tx.Exec(deleteQuery, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete commands: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	// Promote the highest remaining ID to canonical for each affected text
+	for _, text := range affectedTexts {
+		_, err := tx.Exec(`
+			UPDATE commands SET is_duplicate = 0
+			WHERE id = (SELECT MAX(id) FROM commands WHERE command_text = ?)
+			AND is_duplicate = 1`,
+			text,
+		)
+		if err != nil {
+			return 0, fmt.Errorf("failed to promote canonical entry: %w", err)
+		}
+	}
+
+	// Clean up orphaned lookup rows
+	_, err = tx.Exec("DELETE FROM working_dirs WHERE id NOT IN (SELECT DISTINCT working_dir_id FROM commands)")
+	if err != nil {
+		return 0, fmt.Errorf("failed to clean orphaned working_dirs: %w", err)
+	}
+	_, err = tx.Exec("DELETE FROM git_contexts WHERE id NOT IN (SELECT DISTINCT git_context_id FROM commands WHERE git_context_id IS NOT NULL)")
+	if err != nil {
+		return 0, fmt.Errorf("failed to clean orphaned git_contexts: %w", err)
+	}
+	_, err = tx.Exec("DELETE FROM sources WHERE id NOT IN (SELECT DISTINCT source_id FROM commands WHERE source_id IS NOT NULL)")
+	if err != nil {
+		return 0, fmt.Errorf("failed to clean orphaned sources: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return count, nil
+}

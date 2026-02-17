@@ -84,6 +84,7 @@ type Model struct {
 	detailContextKey     summary.ContextKey
 	detailContextBranch  summary.BranchKey
 	pendingDetailReentry bool
+	pendingDeletedID     int64 // after delete, position cursor near this ID
 
 	// Empty state peek data (adjacent period hints)
 	emptyPrevPeriod *periodPeekData
@@ -385,6 +386,15 @@ func (m *Model) loadCommandContext(cmdID int64) tea.Cmd {
 	}
 }
 
+// deleteCommand deletes a command by ID asynchronously
+func (m *Model) deleteCommand(id int64) tea.Cmd {
+	database := m.db
+	return func() tea.Msg {
+		count, err := database.DeleteCommands([]int64{id})
+		return deleteResultMsg{id: id, count: count, err: err}
+	}
+}
+
 // Update implements tea.Model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -462,6 +472,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 			return clearStatusMsg{}
 		})
+
+	case deleteResultMsg:
+		if msg.err != nil {
+			m.statusMsg = "Delete failed"
+		} else if msg.count == 0 {
+			m.statusMsg = "Not found"
+		} else {
+			m.statusMsg = fmt.Sprintf("Deleted #%d", msg.id)
+			m.pendingDetailReentry = true
+			m.pendingDeletedID = msg.id
+			m.viewState = ContextDetailView
+			return m, m.loadContexts
+		}
+		return m, nil
 
 	case clearStatusMsg:
 		m.statusMsg = ""
@@ -660,6 +684,12 @@ func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "D":
+		if len(m.detailCommands) > 0 {
+			return m, m.deleteCommand(m.detailCommands[m.detailCmdIdx].ID)
+		}
+		return m, nil
+
 	case "-":
 		m.viewState = SummaryView
 		return m, nil
@@ -726,6 +756,12 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	case "y":
 		if m.cmdDetailIdx < len(m.cmdDetailAll) {
 			return m, yankToClipboard(m.cmdDetailAll[m.cmdDetailIdx].CommandText)
+		}
+		return m, nil
+
+	case "D":
+		if m.cmdDetailIdx < len(m.cmdDetailAll) {
+			return m, m.deleteCommand(m.cmdDetailAll[m.cmdDetailIdx].ID)
 		}
 		return m, nil
 
@@ -964,6 +1000,20 @@ func (m *Model) enterDetailView() tea.Cmd {
 	m.detailCmdIdx = 0
 	m.detailScrollOffset = 0
 
+	// After a delete, position cursor at the closest command with ID < deleted ID
+	if m.pendingDeletedID > 0 && len(flatCommands) > 0 {
+		deletedID := m.pendingDeletedID
+		m.pendingDeletedID = 0
+		bestIdx := 0
+		for i, cmd := range flatCommands {
+			if cmd.ID < deletedID {
+				bestIdx = i
+			}
+		}
+		m.detailCmdIdx = bestIdx
+		m.ensureDetailCmdVisible()
+	}
+
 	if len(flatCommands) == 0 {
 		return m.loadEmptyStatePeeks()
 	}
@@ -1106,6 +1156,12 @@ type emptyStatePeeksMsg struct {
 }
 
 type clearStatusMsg struct{}
+
+type deleteResultMsg struct {
+	id    int64
+	count int64
+	err   error
+}
 
 // Getters for testing
 func (m *Model) SelectedIdx() int {

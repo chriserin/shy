@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -982,4 +983,213 @@ func TestGetUniqueSourceApps(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
+}
+
+func TestDeleteCommands_Basic(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert 3 commands
+	for i := 0; i < 3; i++ {
+		cmd := models.NewCommand(fmt.Sprintf("cmd%d", i), "/home/test", 0)
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Delete the second command (ID 2)
+	count, err := database.DeleteCommands([]int64{2})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Verify remaining commands
+	total, err := database.CountCommands()
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+
+	// Verify the deleted command is gone
+	_, err = database.GetCommand(2)
+	assert.Error(t, err)
+}
+
+func TestDeleteCommands_IsDuplicateRecalculation(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert two commands with the same text
+	// First insert: id=1, is_duplicate=0
+	cmd1 := models.NewCommand("echo hello", "/home/test", 0)
+	id1, err := database.InsertCommand(cmd1)
+	require.NoError(t, err)
+
+	// Second insert: id=2, is_duplicate=0 (first gets marked as duplicate)
+	cmd2 := models.NewCommand("echo hello", "/home/test", 0)
+	id2, err := database.InsertCommand(cmd2)
+	require.NoError(t, err)
+
+	// Verify the canonical is id2 (latest)
+	var isDup int
+	err = database.conn.QueryRow("SELECT is_duplicate FROM commands WHERE id = ?", id1).Scan(&isDup)
+	require.NoError(t, err)
+	assert.Equal(t, 1, isDup, "older command should be marked as duplicate")
+
+	err = database.conn.QueryRow("SELECT is_duplicate FROM commands WHERE id = ?", id2).Scan(&isDup)
+	require.NoError(t, err)
+	assert.Equal(t, 0, isDup, "newer command should be canonical")
+
+	// Delete the canonical (id2)
+	count, err := database.DeleteCommands([]int64{id2})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Verify the older one is now promoted to canonical
+	err = database.conn.QueryRow("SELECT is_duplicate FROM commands WHERE id = ?", id1).Scan(&isDup)
+	require.NoError(t, err)
+	assert.Equal(t, 0, isDup, "older command should be promoted to canonical")
+}
+
+func TestDeleteCommands_DeleteOlderDuplicate(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert two commands with the same text
+	cmd1 := models.NewCommand("echo hello", "/home/test", 0)
+	id1, err := database.InsertCommand(cmd1)
+	require.NoError(t, err)
+
+	cmd2 := models.NewCommand("echo hello", "/home/test", 0)
+	id2, err := database.InsertCommand(cmd2)
+	require.NoError(t, err)
+
+	// Delete the older duplicate (id1)
+	count, err := database.DeleteCommands([]int64{id1})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Verify the canonical stays as is_duplicate=0
+	var isDup int
+	err = database.conn.QueryRow("SELECT is_duplicate FROM commands WHERE id = ?", id2).Scan(&isDup)
+	require.NoError(t, err)
+	assert.Equal(t, 0, isDup, "canonical should remain canonical")
+}
+
+func TestDeleteCommands_MultipleIDs(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert 5 commands
+	for i := 0; i < 5; i++ {
+		cmd := models.NewCommand(fmt.Sprintf("cmd%d", i), "/home/test", 0)
+		_, err := database.InsertCommand(cmd)
+		require.NoError(t, err)
+	}
+
+	// Delete 3 of them
+	count, err := database.DeleteCommands([]int64{1, 3, 5})
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), count)
+
+	total, err := database.CountCommands()
+	require.NoError(t, err)
+	assert.Equal(t, 2, total)
+}
+
+func TestDeleteCommands_NonExistentID(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	count, err := database.DeleteCommands([]int64{999})
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+}
+
+func TestDeleteCommands_EmptySlice(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	count, err := database.DeleteCommands([]int64{})
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+}
+
+func TestDeleteCommands_OrphanCleanup(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test.db")
+	database, err := NewForTesting(dbPath)
+	require.NoError(t, err)
+	defer database.Close()
+
+	// Insert commands with distinct working_dirs, git_contexts, and sources
+	repo1 := "github.com/user/repo1"
+	branch1 := "main"
+	app1 := "zsh"
+	pid1 := int64(1001)
+	active := true
+
+	cmd1 := models.NewCommand("cmd1", "/home/test/dir1", 0)
+	cmd1.GitRepo = &repo1
+	cmd1.GitBranch = &branch1
+	cmd1.SourceApp = &app1
+	cmd1.SourcePid = &pid1
+	cmd1.SourceActive = &active
+	id1, err := database.InsertCommand(cmd1)
+	require.NoError(t, err)
+
+	repo2 := "github.com/user/repo2"
+	branch2 := "dev"
+	app2 := "bash"
+	pid2 := int64(2002)
+
+	cmd2 := models.NewCommand("cmd2", "/home/test/dir2", 0)
+	cmd2.GitRepo = &repo2
+	cmd2.GitBranch = &branch2
+	cmd2.SourceApp = &app2
+	cmd2.SourcePid = &pid2
+	cmd2.SourceActive = &active
+	_, err = database.InsertCommand(cmd2)
+	require.NoError(t, err)
+
+	// Count lookup rows before deletion
+	var wdCount, gcCount, srcCount int
+	database.conn.QueryRow("SELECT COUNT(*) FROM working_dirs").Scan(&wdCount)
+	database.conn.QueryRow("SELECT COUNT(*) FROM git_contexts").Scan(&gcCount)
+	database.conn.QueryRow("SELECT COUNT(*) FROM sources").Scan(&srcCount)
+	assert.Equal(t, 2, wdCount)
+	assert.Equal(t, 2, gcCount)
+	assert.Equal(t, 2, srcCount)
+
+	// Delete cmd1 — its working_dir, git_context, and source should be cleaned up
+	count, err := database.DeleteCommands([]int64{id1})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Verify orphaned rows are cleaned up
+	database.conn.QueryRow("SELECT COUNT(*) FROM working_dirs").Scan(&wdCount)
+	database.conn.QueryRow("SELECT COUNT(*) FROM git_contexts").Scan(&gcCount)
+	database.conn.QueryRow("SELECT COUNT(*) FROM sources").Scan(&srcCount)
+	assert.Equal(t, 1, wdCount, "orphaned working_dir should be cleaned up")
+	assert.Equal(t, 1, gcCount, "orphaned git_context should be cleaned up")
+	assert.Equal(t, 1, srcCount, "orphaned source should be cleaned up")
+
+	// Verify remaining rows belong to cmd2
+	var remainingPath string
+	database.conn.QueryRow("SELECT path FROM working_dirs").Scan(&remainingPath)
+	assert.Equal(t, "/home/test/dir2", remainingPath)
 }
