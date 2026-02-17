@@ -870,7 +870,7 @@ func (db *DB) GetCommandsByRange(first, last int64) ([]models.Command, error) {
 	}
 
 	query := `SELECT id, command_text from commands
-		WHERE id >= ? AND id <= ?	AND is_duplicate = 0 ORDER BY id ASC`
+		WHERE id >= ? AND id <= ? ORDER BY id ASC`
 
 	rows, err := db.conn.Query(query, first, last)
 	if err != nil {
@@ -908,7 +908,7 @@ func (db *DB) GetCommandsByRangeFull(first, last int64) ([]models.Command, error
 	}
 
 	query := `SELECT ` + commandSelectColumns + commandFromJoins + `
-		WHERE c.id >= ? AND c.id <= ? AND c.is_duplicate = 0
+		WHERE c.id >= ? AND c.id <= ?
 		ORDER BY c.id ASC`
 
 	rows, err := db.conn.Query(query, first, last)

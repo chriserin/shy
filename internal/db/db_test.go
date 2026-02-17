@@ -415,9 +415,9 @@ func boolPtr(b bool) *bool {
 	return &b
 }
 
-// TestGetCommandsByRange tests that GetCommandsByRange returns unique commands
+// TestGetCommandsByRange tests that GetCommandsByRange returns all commands in range
 func TestGetCommandsByRange(t *testing.T) {
-	t.Run("returns unique commands by deduplication", func(t *testing.T) {
+	t.Run("returns all commands including duplicates", func(t *testing.T) {
 		// Given: database with duplicate commands
 		tempDir := t.TempDir()
 		dbPath := filepath.Join(tempDir, "history.db")
@@ -445,29 +445,13 @@ func TestGetCommandsByRange(t *testing.T) {
 		results, err := database.GetCommandsByRange(1, 6)
 		require.NoError(t, err)
 
-		// Then: should return only unique commands (most recent occurrence)
-		assert.Len(t, results, 3, "should return 3 unique commands")
+		// Then: should return all 6 commands (no deduplication)
+		assert.Len(t, results, 6, "should return all commands including duplicates")
 
-		// And: should contain the unique command texts
-		cmdTexts := make(map[string]bool)
-		for _, cmd := range results {
-			cmdTexts[cmd.CommandText] = true
+		// And: IDs should be sequential
+		for i, cmd := range results {
+			assert.Equal(t, int64(i+1), cmd.ID)
 		}
-		assert.True(t, cmdTexts["echo hello"])
-		assert.True(t, cmdTexts["ls -la"])
-		assert.True(t, cmdTexts["pwd"])
-
-		// And: should return the most recent ID for each unique command
-		// "echo hello" appears at IDs 1, 3, 6 - should get ID 6
-		// "ls -la" appears at IDs 2, 5 - should get ID 5
-		// "pwd" appears at ID 4 - should get ID 4
-		idMap := make(map[string]int64)
-		for _, cmd := range results {
-			idMap[cmd.CommandText] = cmd.ID
-		}
-		assert.Equal(t, int64(6), idMap["echo hello"], "should get most recent 'echo hello'")
-		assert.Equal(t, int64(5), idMap["ls -la"], "should get most recent 'ls -la'")
-		assert.Equal(t, int64(4), idMap["pwd"], "should get 'pwd'")
 	})
 
 	t.Run("handles empty range", func(t *testing.T) {
