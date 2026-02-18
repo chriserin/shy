@@ -87,7 +87,7 @@ There is a tension between collection duplicates and not collecting duplicates.
 
 1. **DUPS**: Command Context: Useful when re-executing commands in order with
    the "accept-line-and-down-history" widget, or understanding how a command
-   was in context with other commands.
+   was used in context with other commands.
 2. **NO DUPS**: Searching: It is not useful to find 10, 20, or 100 of the same
    command when searching through commands
 3. **NO SEQ DUPS**: Traversing: When moving through previous commands with the
