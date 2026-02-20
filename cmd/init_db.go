@@ -22,7 +22,7 @@ func init() {
 func runInitDB(cmd *cobra.Command, args []string) error {
 	dbPath, _ := cmd.Flags().GetString("db")
 
-	// Open database with SkipSchemaCheck since we're creating the schema
+	// Open with SkipSchemaCheck, then call InitSchema to detect new vs existing
 	database, err := db.NewWithOptions(dbPath, db.Options{SkipSchemaCheck: true})
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)

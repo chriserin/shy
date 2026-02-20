@@ -1362,20 +1362,46 @@ func TestMigrateSchemaV1ToV2(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
 
-	// Create a v1 database manually
+	// Create a v1 database manually using PRAGMA user_version (old system)
 	db1, err := NewWithOptions(dbPath, Options{SkipSchemaCheck: true})
 	require.NoError(t, err)
 
-	// Create v1 schema (without starred_commands)
-	_, err = db1.conn.Exec(CreateWorkingDirsTableSQL)
+	// Create v1 schema (without starred_commands) using raw SQL
+	_, err = db1.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS working_dirs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			path TEXT NOT NULL UNIQUE
+		)`)
 	require.NoError(t, err)
-	_, err = db1.conn.Exec(CreateGitContextsTableSQL)
+	_, err = db1.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS git_contexts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			repo TEXT,
+			branch TEXT,
+			UNIQUE(repo, branch)
+		)`)
 	require.NoError(t, err)
-	_, err = db1.conn.Exec(CreateSourcesTableSQL)
+	_, err = db1.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS sources (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			app TEXT NOT NULL,
+			pid INTEGER NOT NULL,
+			active INTEGER DEFAULT 1,
+			UNIQUE(app, pid, active)
+		)`)
 	require.NoError(t, err)
-	_, err = db1.conn.Exec(CreateCommandsTableSQL)
-	require.NoError(t, err)
-	_, err = db1.conn.Exec(CreateIndexesSQL)
+	_, err = db1.conn.Exec(`
+		CREATE TABLE IF NOT EXISTS commands (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp INTEGER NOT NULL,
+			exit_status INTEGER NOT NULL,
+			duration INTEGER NOT NULL,
+			command_text TEXT NOT NULL,
+			working_dir_id INTEGER NOT NULL REFERENCES working_dirs(id),
+			git_context_id INTEGER REFERENCES git_contexts(id),
+			source_id INTEGER REFERENCES sources(id),
+			is_duplicate INTEGER DEFAULT 0
+		)`)
 	require.NoError(t, err)
 	_, err = db1.conn.Exec("PRAGMA user_version = 1")
 	require.NoError(t, err)
@@ -1386,12 +1412,12 @@ func TestMigrateSchemaV1ToV2(t *testing.T) {
 	require.NoError(t, err)
 	db1.Close()
 
-	// Reopen — should trigger migration to v2
+	// Reopen — should detect PRAGMA user_version=1, run migration 2
 	db2, err := New(dbPath)
 	require.NoError(t, err)
 	defer db2.Close()
 
-	// Verify version is now 2
+	// Verify PRAGMA user_version is now 2
 	var version int
 	err = db2.conn.QueryRow("PRAGMA user_version").Scan(&version)
 	require.NoError(t, err)

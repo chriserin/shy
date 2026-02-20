@@ -1,0 +1,3 @@
+CREATE TABLE IF NOT EXISTS starred_commands (
+	command_id INTEGER PRIMARY KEY REFERENCES commands(id) ON DELETE CASCADE
+);

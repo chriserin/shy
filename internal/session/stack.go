@@ -106,17 +106,12 @@ func PopDatabase(ppid int) (string, error) {
 
 // ensureDatabaseExists creates a database file and initializes schema if needed
 func ensureDatabaseExists(path string) error {
-	// Open database with SkipSchemaCheck since we might need to create the schema
-	database, err := db.NewWithOptions(path, db.Options{SkipSchemaCheck: true})
+	// Open database — migrations run automatically
+	database, err := db.New(path)
 	if err != nil {
 		return err
 	}
 	defer database.Close()
-
-	// Initialize schema if not already done
-	if _, err := database.InitSchema(); err != nil {
-		return err
-	}
 
 	return nil
 }

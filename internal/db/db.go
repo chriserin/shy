@@ -9,86 +9,11 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/chris/shy/internal/db/migrations"
 	"github.com/chris/shy/pkg/models"
 )
 
-const (
-	defaultDBPath = "~/.local/share/shy/history.db"
-
-	// SchemaVersion is the current database schema version
-	// Increment this when making schema changes
-	SchemaVersion = 2
-
-	CreateWorkingDirsTableSQL = `
-		CREATE TABLE IF NOT EXISTS working_dirs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			path TEXT NOT NULL UNIQUE
-		);
-	`
-
-	CreateGitContextsTableSQL = `
-		CREATE TABLE IF NOT EXISTS git_contexts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			repo TEXT,
-			branch TEXT,
-			UNIQUE(repo, branch)
-		);
-	`
-
-	CreateSourcesTableSQL = `
-		CREATE TABLE IF NOT EXISTS sources (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			app TEXT NOT NULL,
-			pid INTEGER NOT NULL,
-			active INTEGER DEFAULT 1,
-			UNIQUE(app, pid, active)
-		);
-	`
-
-	CreateCommandsTableSQL = `
-		CREATE TABLE IF NOT EXISTS commands (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			timestamp INTEGER NOT NULL,
-			exit_status INTEGER NOT NULL,
-			duration INTEGER NOT NULL,
-			command_text TEXT NOT NULL,
-			working_dir_id INTEGER NOT NULL REFERENCES working_dirs(id),
-			git_context_id INTEGER REFERENCES git_contexts(id),
-			source_id INTEGER REFERENCES sources(id),
-			is_duplicate INTEGER DEFAULT 0
-		);
-	`
-
-	CreateStarredCommandsTableSQL = `
-		CREATE TABLE IF NOT EXISTS starred_commands (
-			command_id INTEGER PRIMARY KEY REFERENCES commands(id) ON DELETE CASCADE
-		);
-	`
-
-	// CreateIndexesSQL creates performance indexes for common query patterns
-	CreateIndexesSQL = `
-		-- Index for session lookup (source_id + timestamp DESC)
-		CREATE INDEX IF NOT EXISTS idx_source_timestamp ON commands (source_id, timestamp DESC);
-
-		-- Index for working_dir lookup (working_dir_id + timestamp DESC)
-		CREATE INDEX IF NOT EXISTS idx_working_dir_timestamp ON commands (working_dir_id, timestamp DESC);
-
-		-- Index for full history (timestamp DESC)
-		CREATE INDEX IF NOT EXISTS idx_timestamp_desc ON commands (timestamp DESC);
-
-		-- Index for source lookup query
-		CREATE INDEX IF NOT EXISTS idx_sources_app_pid_active ON sources (app, pid, active);
-
-		-- Index for working_dir lookup query
-		CREATE INDEX IF NOT EXISTS idx_working_dirs_path ON working_dirs (path);
-
-		-- Index for GetCommandsForFzf deduplication (GROUP BY command_text, max(id))
-		CREATE INDEX IF NOT EXISTS idx_command_text_id ON commands (command_text, id DESC);
-
-		-- Index for fast fzf queries using is_duplicate flag
-		CREATE INDEX IF NOT EXISTS idx_not_duplicate ON commands (id DESC) WHERE is_duplicate = 0;
-	`
-)
+const defaultDBPath = "~/.local/share/shy/history.db"
 
 // DB wraps the SQLite database connection
 type DB struct {
@@ -98,8 +23,9 @@ type DB struct {
 
 // Options configures database connection behavior
 type Options struct {
-	// SkipSchemaCheck opens the database without verifying schema exists.
-	// Use this for init-db command which creates the schema.
+	// SkipSchemaCheck skips running migrations on open.
+	// Use this for read-only/benchmark access to existing databases,
+	// or for init-db which runs migrations via InitSchema instead.
 	SkipSchemaCheck bool
 }
 
@@ -148,23 +74,11 @@ func NewWithOptions(dbPath string, opts Options) (*DB, error) {
 		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
-	// Check schema version unless SkipSchemaCheck (used by init-db)
+	// Run pending migrations unless SkipSchemaCheck (used for read-only/bench)
 	if !opts.SkipSchemaCheck {
-		var version int
-		if err := conn.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		if err := migrations.Migrate(conn); err != nil {
 			conn.Close()
-			return nil, fmt.Errorf("failed to check schema version: %w", err)
-		}
-		if version == 0 {
-			conn.Close()
-			return nil, fmt.Errorf("database not initialized, run: shy init-db")
-		}
-		// Migrate from v1 to v2: add starred_commands table
-		if version == 1 {
-			if err := migrateV1ToV2(conn); err != nil {
-				conn.Close()
-				return nil, fmt.Errorf("failed to migrate schema v1 to v2: %w", err)
-			}
+			return nil, fmt.Errorf("failed to run migrations: %w", err)
 		}
 	}
 
@@ -198,73 +112,26 @@ func (db *DB) Path() string {
 	return db.path
 }
 
-// migrateV1ToV2 creates the starred_commands table and bumps user_version to 2
-func migrateV1ToV2(conn *sql.DB) error {
-	if _, err := conn.Exec(CreateStarredCommandsTableSQL); err != nil {
-		return fmt.Errorf("failed to create starred_commands table: %w", err)
-	}
-	if _, err := conn.Exec("PRAGMA user_version = 2"); err != nil {
-		return fmt.Errorf("failed to set schema version: %w", err)
-	}
-	return nil
-}
-
 // NewForTesting creates a new database with schema initialized.
 // This is a convenience function for tests.
 func NewForTesting(dbPath string) (*DB, error) {
-	db, err := NewWithOptions(dbPath, Options{SkipSchemaCheck: true})
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := db.InitSchema(); err != nil {
-		db.Close()
-		return nil, err
-	}
-
-	return db, nil
+	return New(dbPath)
 }
 
-// InitSchema creates the database schema and sets the schema version.
+// InitSchema runs all pending migrations and returns whether the schema was newly created.
 // This should only be called by the init-db command.
 // Returns true if schema was created, false if it already existed.
 func (db *DB) InitSchema() (bool, error) {
-	// Check if schema already exists
 	var version int
 	if err := db.conn.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return false, fmt.Errorf("failed to check schema version: %w", err)
 	}
-	if version > 0 {
-		// Schema already initialized
-		return false, nil
+
+	if err := migrations.Migrate(db.conn); err != nil {
+		return false, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	// Create lookup tables first (commands table has foreign keys to them)
-	if _, err := db.conn.Exec(CreateWorkingDirsTableSQL); err != nil {
-		return false, fmt.Errorf("failed to create working_dirs table: %w", err)
-	}
-	if _, err := db.conn.Exec(CreateGitContextsTableSQL); err != nil {
-		return false, fmt.Errorf("failed to create git_contexts table: %w", err)
-	}
-	if _, err := db.conn.Exec(CreateSourcesTableSQL); err != nil {
-		return false, fmt.Errorf("failed to create sources table: %w", err)
-	}
-	if _, err := db.conn.Exec(CreateCommandsTableSQL); err != nil {
-		return false, fmt.Errorf("failed to create commands table: %w", err)
-	}
-	if _, err := db.conn.Exec(CreateIndexesSQL); err != nil {
-		return false, fmt.Errorf("failed to create indexes: %w", err)
-	}
-	if _, err := db.conn.Exec(CreateStarredCommandsTableSQL); err != nil {
-		return false, fmt.Errorf("failed to create starred_commands table: %w", err)
-	}
-
-	// Set schema version
-	if _, err := db.conn.Exec(fmt.Sprintf("PRAGMA user_version = %d", SchemaVersion)); err != nil {
-		return false, fmt.Errorf("failed to set schema version: %w", err)
-	}
-
-	return true, nil
+	return version == 0, nil
 }
 
 // getOrCreateWorkingDir returns the ID for a working directory, creating it if needed
