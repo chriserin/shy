@@ -74,6 +74,7 @@ zle -N shy-shell-history _shy_shell_history
 __shy_history_index=0
 __shy_replay_index=0 # Persists across prompts for accept-line-and-down-history
 __shy_replay_cmd=""   # Pre-fetched command text for replay (avoids async insert race)
+typeset -gA __shy_history_edits # Preserves edits while navigating history
 
 # Reset history index when a new line starts
 _shy_reset_history_index() {
@@ -93,6 +94,7 @@ _shy_reset_history_index() {
   else
     __shy_history_index=0
   fi
+  __shy_history_edits=()
 }
 zle -N shy-reset-history-index _shy_reset_history_index
 
@@ -103,18 +105,27 @@ if typeset -f add-zle-hook-widget >/dev/null; then
 fi
 
 _shy_up_line_or_history() {
+  # Save current buffer before navigating (preserves edits and new input)
+  __shy_history_edits[$__shy_history_index]="$BUFFER"
+
   ((__shy_history_index++))
 
-  # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
-  local cmd=$(shy last-command --current-session -n $__shy_history_index)
-
-  if [[ -n "$cmd" ]]; then
-    BUFFER="$cmd"
+  # Restore saved edit if we've been to this index before
+  if (( ${+__shy_history_edits[$__shy_history_index]} )); then
+    BUFFER="${__shy_history_edits[$__shy_history_index]}"
     CURSOR=$#BUFFER
   else
-    # No command at this index, we've gone too far back
-    # Decrement to stay at the last valid command
-    ((__shy_history_index--))
+    # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
+    local cmd=$(shy last-command --current-session -n $__shy_history_index)
+
+    if [[ -n "$cmd" ]]; then
+      BUFFER="$cmd"
+      CURSOR=$#BUFFER
+    else
+      # No command at this index, we've gone too far back
+      # Decrement to stay at the last valid command
+      ((__shy_history_index--))
+    fi
   fi
 
   zle reset-prompt
@@ -125,24 +136,30 @@ bindkey '^[OA' shy-up-line-or-history # Application mode up arrow
 
 # Down Arrow: Cycle forward through command history (towards more recent)
 _shy_down_line_or_history() {
-  if [[ $__shy_history_index -gt 0 ]]; then
-    ((__shy_history_index--))
-  else
-    BUFFER=""
-    CURSOR=0
+  if [[ $__shy_history_index -le 0 ]]; then
     zle reset-prompt
     return
   fi
 
-  # Get the command at the current index (1-based: 1=most recent, 2=second most recent, etc.)
-  local cmd=$(shy last-command --current-session -n $__shy_history_index)
+  # Save current buffer before navigating (preserves edits)
+  __shy_history_edits[$__shy_history_index]="$BUFFER"
 
-  if [[ -n "$cmd" ]]; then
-    BUFFER="$cmd"
+  ((__shy_history_index--))
+
+  # Restore saved edit if we've been to this index before
+  if (( ${+__shy_history_edits[$__shy_history_index]} )); then
+    BUFFER="${__shy_history_edits[$__shy_history_index]}"
     CURSOR=$#BUFFER
   else
-    BUFFER=""
-    CURSOR=0
+    local cmd=$(shy last-command --current-session -n $__shy_history_index)
+
+    if [[ -n "$cmd" ]]; then
+      BUFFER="$cmd"
+      CURSOR=$#BUFFER
+    else
+      BUFFER=""
+      CURSOR=0
+    fi
   fi
 
   zle reset-prompt
