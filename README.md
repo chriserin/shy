@@ -35,7 +35,7 @@ An opinionated, performant, and metadata rich command history tool.
 
 ## Installation
 
-Install from the [releases page](https://github.com/chriserin/shy/releases) or install with mise `mise install github:chriserin/shy`.
+Install from the [releases page](https://github.com/chriserin/shy/releases) or install with mise `mise use github:chriserin/shy`.
 
 ## QUICK START
 
@@ -49,7 +49,7 @@ shy fc -R $HISTFILE # read data into the database from your history file
 Somewhere in your dot files:
 
 ```sh
-eval "$(shy init)"
+eval "$(shy init zsh)"
 bindkey '^R' shy-shell-history # if you use fzf or native history search
 export ZSH_AUTOSUGGEST_STRATEGY=(shy_history) # if you use autosuggest
 zvm_after_init_commands+=(_shy_bind_viins) # if you use zvm
@@ -60,7 +60,7 @@ export HISTSIZE=1 # fully minimize the zsh history system
 If you just want to collect commands in parallel with your current zsh setup:
 
 ```sh
-eval "$(shy init --record)" # anywhere in your dotfiles
+eval "$(shy init zsh --record)" # anywhere in your dotfiles
 ```
 
 ## Scopes
