@@ -320,7 +320,7 @@ func TestDurationIntegration_ZshHooksCaptureAndCalculateDuration(t *testing.T) {
 		// Verify it contains the start time capture logic
 		scriptContent := string(script)
 		assert.Contains(t, scriptContent, "__shy_cmd_start=", "script should set __shy_cmd_start")
-		assert.Contains(t, scriptContent, "date +%s%3N", "script should capture milliseconds")
+		assert.Contains(t, scriptContent, "EPOCHREALTIME", "script should capture milliseconds using zsh/datetime")
 	})
 
 	// Verify the precmd hook calculates duration

@@ -22,6 +22,9 @@ shy init-db ${SHY_DB_PATH:+--db "$SHY_DB_PATH"} 2>/dev/null
 # Export session PID for internal filtering (-I flag)
 export SHY_SESSION_PID=$$
 
+# Load zsh/datetime for $EPOCHREALTIME (microsecond precision, no subprocess fork)
+zmodload zsh/datetime
+
 # Store command for tracking
 __shy_cmd=""
 __shy_cmd_dir=""
@@ -37,14 +40,9 @@ __shy_preexec() {
 	# Store the command and context
 	__shy_cmd="$1"
 	__shy_cmd_dir="$PWD"
-	# Capture start time in milliseconds (using date with %N for nanoseconds, falling back to seconds * 1000)
-	if date +%N &>/dev/null 2>&1; then
-		# GNU date supports nanoseconds
-		__shy_cmd_start="$(date +%s%3N)"
-	else
-		# macOS/BSD date doesn't support %N, use seconds and append 000 for milliseconds
-		__shy_cmd_start="$(($(date +%s) * 1000))"
-	fi
+	# Capture start time in milliseconds (string manipulation to avoid float/sci notation)
+	local t=$EPOCHREALTIME
+	__shy_cmd_start="${t%.*}${${t#*.}:0:3}"
 }
 
 # Hook called after command execution
@@ -69,19 +67,15 @@ __shy_precmd() {
 	local duration=""
 	local timestamp=""
 	if [[ -n "$__shy_cmd_start" ]]; then
-		# Get current time in milliseconds
-		local end_time
-		if date +%N &>/dev/null 2>&1; then
-			end_time="$(date +%s%3N)"
-		else
-			end_time="$(($(date +%s) * 1000))"
-		fi
+		# Get end time in milliseconds
+		local t=$EPOCHREALTIME
+		local end_time="${t%.*}${${t#*.}:0:3}"
 
 		# Calculate duration in milliseconds
 		duration=$((end_time - __shy_cmd_start))
 
 		# Timestamp for database (seconds since epoch)
-		timestamp=$(((__shy_cmd_start + 500) / 1000))  # Round to nearest second
+		timestamp=$(( (__shy_cmd_start + 500) / 1000 ))
 	fi
 
 	sessionfile="$XDG_CACHE_HOME/shy/sessions/$SHY_SESSION_PID.txt"
@@ -124,7 +118,7 @@ __shy_precmd() {
 			mkdir -p "$shy_data_dir" 2>/dev/null
 			# Log the error with timestamp and error message
 			{
-				echo "[$(date '+%Y-%m-%d %H:%M:%S')] Error executing shy insert"
+				echo "[$(strftime '%Y-%m-%d %H:%M:%S' $EPOCHSECONDS)] Error executing shy insert"
 				echo "  Command: $__shy_cmd"
 				echo "  Working dir: $__shy_cmd_dir"
 				echo "  Error output: $error_output"
