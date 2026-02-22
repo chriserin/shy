@@ -128,7 +128,9 @@ _shy_up_line_or_history() {
     fi
   fi
 
-  zle reset-prompt
+  # Trigger syntax highlighting directly (compatible with widget-wrapping plugins
+  # that don't wrap custom widgets; much cheaper than zle reset-prompt)
+  (( ${+functions[_zsh_highlight]} )) && _zsh_highlight
 }
 zle -N shy-up-line-or-history _shy_up_line_or_history
 bindkey '^[[A' shy-up-line-or-history # Standard up arrow
@@ -137,7 +139,6 @@ bindkey '^[OA' shy-up-line-or-history # Application mode up arrow
 # Down Arrow: Cycle forward through command history (towards more recent)
 _shy_down_line_or_history() {
   if [[ $__shy_history_index -le 0 ]]; then
-    zle reset-prompt
     return
   fi
 
@@ -162,7 +163,7 @@ _shy_down_line_or_history() {
     fi
   fi
 
-  zle reset-prompt
+  (( ${+functions[_zsh_highlight]} )) && _zsh_highlight
 }
 zle -N shy-down-line-or-history _shy_down_line_or_history
 bindkey '^[[B' shy-down-line-or-history # Standard down arrow
