@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the current version of shy
-const ShyVersion = "0.1.13"
+const ShyVersion = "0.1.14"
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
