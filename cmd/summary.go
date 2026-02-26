@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/chris/shy/internal/summary/tui"
@@ -24,7 +24,7 @@ func runSummary(cmd *cobra.Command, args []string) error {
 	model := tui.New(dbPath)
 	defer model.Close()
 
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithReportFocus())
+	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
 		if err.Error() == "quit" {
 			return nil

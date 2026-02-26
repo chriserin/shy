@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,7 +77,7 @@ func initModel(t *testing.T, dbPath string, today time.Time) *Model {
 
 // pressKey simulates a key press and executes any resulting command
 func pressKey(model *Model, key rune) {
-	model, cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+	model, cmd := model.handleKey(tea.KeyPressMsg{Code: key, Text: string(key)})
 	if cmd != nil {
 		msg := cmd()
 		model.Update(msg)
@@ -109,7 +110,7 @@ func TestLaunchWithYesterdaysContexts(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := initModel(t, dbPath, today)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "YESTERDAY")
 	assert.Contains(t, view, "projects/shy")
@@ -136,10 +137,10 @@ func TestNavigateDownThroughContexts(t *testing.T) {
 
 	assert.Equal(t, 0, model.SelectedIdx())
 
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	assert.Equal(t, 1, model.SelectedIdx())
 
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	assert.Equal(t, 2, model.SelectedIdx())
 }
 
@@ -158,11 +159,11 @@ func TestNavigateUpThroughContexts(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := initModel(t, dbPath, today)
 
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	assert.Equal(t, 2, model.SelectedIdx())
 
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	assert.Equal(t, 1, model.SelectedIdx())
 }
 
@@ -182,16 +183,16 @@ func TestSelectionStopsAtBoundaries(t *testing.T) {
 	model := initModel(t, dbPath, today)
 
 	// Bottom boundary
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	assert.Equal(t, 2, model.SelectedIdx())
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	assert.Equal(t, 2, model.SelectedIdx())
 
 	// Top boundary
 	model2 := initModel(t, dbPath, today)
 	assert.Equal(t, 0, model2.SelectedIdx())
-	model2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model2.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
 	assert.Equal(t, 0, model2.SelectedIdx())
 }
 
@@ -215,7 +216,7 @@ func TestNavigateToPreviousDay(t *testing.T) {
 	pressKey(model, 'h')
 
 	assert.Equal(t, dayBefore.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Feb 3")
 }
 
@@ -238,7 +239,7 @@ func TestNavigateToNextDay(t *testing.T) {
 	pressKey(model, 'l')
 
 	assert.Equal(t, yesterday.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "YESTERDAY")
 }
@@ -258,7 +259,7 @@ func TestNavigateToTodayWithNoCommands(t *testing.T) {
 
 	pressKey(model, 'l')
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Feb 5")
 	assert.Contains(t, view, "TODAY")
 	assert.Contains(t, view, "No commands found")
@@ -301,7 +302,7 @@ func TestJumpToToday(t *testing.T) {
 
 	pressKey(model, 't')
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Feb 5")
 	assert.Contains(t, view, "TODAY")
 }
@@ -324,7 +325,7 @@ func TestJumpToYesterday(t *testing.T) {
 
 	pressKey(model, 'e')
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "YESTERDAY")
 }
@@ -346,8 +347,8 @@ func TestSelectionResetsWhenChangingDays(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := initModel(t, dbPath, today)
 
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	assert.Equal(t, 2, model.SelectedIdx())
 
 	pressKey(model, 'h')
@@ -367,7 +368,7 @@ func TestQuitApplication(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := New(dbPath, WithNow(fixedTime(today)))
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
@@ -387,7 +388,7 @@ func TestQuitWithCtrlC(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := New(dbPath, WithNow(fixedTime(today)))
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
@@ -411,10 +412,10 @@ func TestArrowKeysWork(t *testing.T) {
 
 	assert.Equal(t, 0, model.SelectedIdx())
 
-	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	assert.Equal(t, 1, model.SelectedIdx())
 
-	model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	assert.Equal(t, 0, model.SelectedIdx())
 }
 
@@ -437,11 +438,11 @@ func TestViewportScrollsToKeepSelectionVisible(t *testing.T) {
 	assert.Equal(t, 0, model.SelectedIdx())
 
 	for range 12 {
-		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	}
 
 	assert.Equal(t, 12, model.SelectedIdx())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "projectm")
 }
 
@@ -458,7 +459,7 @@ func TestFocusedIndicator(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := initModel(t, dbPath, today)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "●")
 	assert.NotContains(t, view, "○")
 }
@@ -479,7 +480,7 @@ func TestBlurredIndicator(t *testing.T) {
 	// Simulate blur
 	model.Update(tea.BlurMsg{})
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "○")
 	assert.NotContains(t, view, "●")
 }
@@ -504,7 +505,7 @@ func TestFocusRestoredIndicator(t *testing.T) {
 	model.Update(tea.FocusMsg{})
 	assert.True(t, model.Focused())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "●")
 }
 
@@ -554,7 +555,7 @@ func TestLongContextNameTruncated(t *testing.T) {
 	// Set narrow terminal
 	model.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "…")
 	// The full path should NOT appear
 	assert.NotContains(t, view, longDir+":main")
@@ -581,16 +582,17 @@ func TestCommandCountsRightAligned(t *testing.T) {
 	model := initModel(t, dbPath, today)
 	model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
-	view := model.View()
+	view := model.renderView()
 
-	// Find all lines containing "commands"
+	// Find all lines containing "commands" (strip ANSI before filtering)
 	lines := strings.Split(view, "\n")
 	var commandLines []string
 	for _, line := range lines {
-		if strings.Contains(line, "commands") || strings.Contains(line, "command") {
+		plain := ansi.Strip(line)
+		if strings.Contains(plain, "commands") || strings.Contains(plain, "command") {
 			// Only context lines (not status bar)
-			if !strings.Contains(line, "[") {
-				commandLines = append(commandLines, line)
+			if !strings.Contains(plain, "[") {
+				commandLines = append(commandLines, plain)
 			}
 		}
 	}
@@ -618,7 +620,7 @@ func TestHeaderIncludesDayOfWeek(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := initModel(t, dbPath, today)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Wednesday")
 	assert.Contains(t, view, "Feb 4")
 	assert.Contains(t, view, "YESTERDAY")
@@ -643,7 +645,7 @@ func TestHeaderIncludesDayOfWeekNonRelative(t *testing.T) {
 	cmd := model.loadContexts()
 	model.Update(cmd)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Sunday")
 	assert.Contains(t, view, "Feb 1")
 	// Header should not contain relative date labels
@@ -668,7 +670,7 @@ func TestHomeDirectoryDisplaysFullPath(t *testing.T) {
 	dbPath := setupTestDB(t, commands)
 	model := initModel(t, dbPath, today)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, homeDir)
 
 	// Make sure it's not just "~" by checking the full path appears
@@ -699,7 +701,7 @@ func makeCommandWithText(date time.Time, hour, minute int, text, workingDir stri
 }
 
 func pressEnter(model *Model) {
-	model, cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	model, cmd := model.handleKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd != nil {
 		msg := cmd()
 		model.Update(msg)
@@ -707,7 +709,7 @@ func pressEnter(model *Model) {
 }
 
 func pressEsc(model *Model) {
-	model, cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
+	model, cmd := model.handleKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if cmd != nil {
 		msg := cmd()
 		model.Update(msg)
@@ -715,7 +717,7 @@ func pressEsc(model *Model) {
 }
 
 func pressShiftKey(model *Model, key rune) {
-	model, cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+	model, cmd := model.handleKey(tea.KeyPressMsg{Code: key, Text: string(key)})
 	if cmd != nil {
 		msg := cmd()
 		model.Update(msg)
@@ -759,7 +761,7 @@ func TestDetailViewCommandsForSelectedContext(t *testing.T) {
 
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	// Header shows context name, not "Work Summary"
 	assert.Contains(t, view, "main")
 	assert.Contains(t, view, "Wednesday")
@@ -791,11 +793,11 @@ func TestDetailHeaderConsistentLayout(t *testing.T) {
 
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	// Header should show context name instead of "Work Summary"
 	assert.NotContains(t, view, "Work Summary")
 	assert.Contains(t, view, "●")
-	assert.Contains(t, view, "YESTERDAY Wednesday Feb 4")
+	assert.Contains(t, ansi.Strip(view), "YESTERDAY Wednesday Feb 4")
 }
 
 // TestDetailHeaderFocusIndicator tests focus indicator in detail view
@@ -808,12 +810,12 @@ func TestDetailHeaderFocusIndicator(t *testing.T) {
 
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "●")
 
 	// Blur
 	model.Update(tea.BlurMsg{})
-	view = model.View()
+	view = model.renderView()
 	assert.Contains(t, view, "○")
 	assert.NotContains(t, view, "●")
 }
@@ -828,7 +830,7 @@ func TestDetailCommandCountNotShown(t *testing.T) {
 
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.NotContains(t, view, "commands")
 }
 
@@ -846,7 +848,7 @@ func TestDetailFirstCommandSelected(t *testing.T) {
 	require.True(t, len(model.DetailCommands()) > 0)
 	assert.Equal(t, "go build -o shy .", model.DetailCommands()[0].CommandText)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "▶")
 }
 
@@ -966,10 +968,10 @@ func TestDetailArrowKeys(t *testing.T) {
 
 	assert.Equal(t, "go build -o shy .", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
 
-	model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	assert.Equal(t, "./shy summary", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
 
-	model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	assert.Equal(t, "go build -o shy .", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
 }
 
@@ -983,7 +985,7 @@ func TestDetailCommandTimestamps(t *testing.T) {
 
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, ":15")
 	assert.Contains(t, view, ":22")
 	assert.Contains(t, view, ":30")
@@ -1006,7 +1008,7 @@ func TestDetailReturnToSummaryWithDash(t *testing.T) {
 	pressKey(model, '-')
 	assert.Equal(t, SummaryView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	assert.NotContains(t, view, "Work Summary")
 	assert.Contains(t, view, "●")
 	assert.Equal(t, 0, model.SelectedIdx())
@@ -1029,7 +1031,7 @@ func TestDetailSelectionPreservedOnReturn(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "bugfix")
 
 	pressKey(model, '-')
@@ -1163,8 +1165,8 @@ func TestDetailNavigatePrevDay(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 	assert.Equal(t, "2026-02-03", model.CurrentDate().Format("2006-01-02"))
 
-	view := model.View()
-	assert.Contains(t, view, ctxName)
+	view := model.renderView()
+	assert.Contains(t, ansi.Strip(view), ctxName)
 }
 
 // TestDetailNavigateNextDay tests navigating to next day stays in detail
@@ -1193,8 +1195,8 @@ func TestDetailNavigateNextDay(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 	assert.Equal(t, "2026-02-04", model.CurrentDate().Format("2006-01-02"))
 
-	view := model.View()
-	assert.Contains(t, view, ctxName)
+	view := model.renderView()
+	assert.Contains(t, ansi.Strip(view), ctxName)
 }
 
 // TestDetailCannotNavigatePastToday tests cannot navigate past today
@@ -1265,7 +1267,7 @@ func TestDetailQuit(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
@@ -1286,7 +1288,7 @@ func TestDetailEmptyState(t *testing.T) {
 	model.detailBuckets = nil
 	model.detailCommands = nil
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "No commands found")
 	assert.NotContains(t, view, "[j/k]")
 	assert.NotContains(t, view, "[Esc]")
@@ -1302,7 +1304,7 @@ func TestDetailStatusBar(t *testing.T) {
 
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	// Footer shows mode indicator, no key hints
 	assert.Contains(t, view, "All")
 	assert.NotContains(t, view, "[j/k]")
@@ -1330,7 +1332,7 @@ func TestDetailViewportOverflow(t *testing.T) {
 	model.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	lines := strings.Split(view, "\n")
 
 	// Header should be on first line
@@ -1383,7 +1385,7 @@ func TestDetailViewportScrollsWithSelection(t *testing.T) {
 		pressKey(model, 'j')
 	}
 
-	view := model.View()
+	view := model.renderView()
 	lines := strings.Split(view, "\n")
 
 	// The selected command should be visible
@@ -1433,7 +1435,7 @@ func TestDetailViewportScrollUpShowsBucketHeader(t *testing.T) {
 	for range 15 {
 		pressKey(model, 'j')
 	}
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "9am", "should see 9am bucket after scrolling down")
 
 	// Now scroll back up to first command in 9am bucket
@@ -1441,7 +1443,7 @@ func TestDetailViewportScrollUpShowsBucketHeader(t *testing.T) {
 		pressKey(model, 'k')
 	}
 
-	view = model.View()
+	view = model.renderView()
 	assert.Contains(t, view, "9am", "9am bucket header should be visible when at first command in 9am")
 
 	// Scroll all the way back to 8am first command
@@ -1449,7 +1451,7 @@ func TestDetailViewportScrollUpShowsBucketHeader(t *testing.T) {
 		pressKey(model, 'k')
 	}
 
-	view = model.View()
+	view = model.renderView()
 	assert.Contains(t, view, "8am", "8am bucket header should be visible when at first command in 8am")
 }
 
@@ -1484,7 +1486,7 @@ func TestDefaultAllModeShowsTotalCounts(t *testing.T) {
 	model := initModel(t, dbPath, today)
 
 	assert.Equal(t, AllMode, model.DisplayMode())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "8 commands")
 	assert.Contains(t, view, "2 commands")
 }
@@ -1500,7 +1502,7 @@ func TestUniqueModeShowsUniqueCounts(t *testing.T) {
 	pressKey(model, 'u')
 
 	assert.Equal(t, UniqueMode, model.DisplayMode())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "3 commands")
 	assert.Contains(t, view, "2 commands")
 }
@@ -1518,7 +1520,7 @@ func TestAllModeReturnsTotalCounts(t *testing.T) {
 
 	pressKey(model, 'a')
 	assert.Equal(t, AllMode, model.DisplayMode())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "8 commands")
 	assert.Contains(t, view, "2 commands")
 }
@@ -1556,7 +1558,7 @@ func TestModePersistsEnterLeaveDetail(t *testing.T) {
 	pressKey(model, '-')
 	assert.Equal(t, SummaryView, model.ViewState())
 	assert.Equal(t, UniqueMode, model.DisplayMode())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "3 commands")
 }
 
@@ -1593,7 +1595,7 @@ func TestUniqueModeFiltersInDetail(t *testing.T) {
 	assert.Equal(t, 3, len(model.DetailCommands()))
 	assert.Equal(t, 3, len(model.DetailBuckets()))
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "8am")
 	assert.Contains(t, view, "9am")
 	assert.Contains(t, view, "2pm")
@@ -1631,7 +1633,7 @@ func TestStatusBarShowsModeIndicator(t *testing.T) {
 	dbPath := setupTestDB(t, phase3Commands(yesterday))
 	model := initModel(t, dbPath, today)
 
-	view := model.View()
+	view := model.renderView()
 	// Default mode is All
 	assert.Contains(t, view, "All")
 }
@@ -1646,7 +1648,7 @@ func TestStatusBarShowsActiveMode(t *testing.T) {
 
 	pressKey(model, 'u')
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Uniq")
 }
 
@@ -1660,7 +1662,7 @@ func TestStatusBarModeInDetail(t *testing.T) {
 
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "All")
 }
 
@@ -1685,9 +1687,10 @@ func TestDetailNavigateNextDayEmptyContext(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 	assert.Equal(t, today.Format("2006-01-02"), model.CurrentDate().Format("2006-01-02"))
 
-	view := model.View()
-	assert.Contains(t, view, "No commands found in")
-	assert.Contains(t, view, ctxName)
+	view := model.renderView()
+	plainView := ansi.Strip(view)
+	assert.Contains(t, plainView, "No commands found in")
+	assert.Contains(t, plainView, ctxName)
 }
 
 // === Phase 4a Test Helpers ===
@@ -1761,7 +1764,7 @@ func TestCmdDetailEnterFromContextDetail(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, CommandDetailView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Event:")
 }
 
@@ -1779,7 +1782,7 @@ func TestCmdDetailShowsMetadata(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, cmds[1:3])
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Command:")
 	assert.Contains(t, view, "go build -o shy .")
 	assert.Contains(t, view, "Timestamp:")
@@ -1805,7 +1808,7 @@ func TestCmdDetailExitStatusSuccess(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, nil)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "0 \u2713")
 }
 
@@ -1823,7 +1826,7 @@ func TestCmdDetailExitStatusFailure(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, nil)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "1 \u2717")
 }
 
@@ -1841,7 +1844,7 @@ func TestCmdDetailDurationHumanReadable(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, nil)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Duration:")
 	assert.Contains(t, view, "8s")
 }
@@ -1861,7 +1864,7 @@ func TestCmdDetailMissingDuration(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, nil)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Duration:")
 	assert.Contains(t, view, "\u2014")
 }
@@ -1885,7 +1888,7 @@ func TestCmdDetailSessionContext(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, before, after)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Context (same session):")
 	assert.Contains(t, view, "./shy summary")
 	assert.Contains(t, view, "go test ./... -v")
@@ -1911,7 +1914,7 @@ func TestCmdDetailCurrentCommandHighlighted(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, before, after)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "▶")
 }
 
@@ -2049,7 +2052,7 @@ func TestCmdDetailNavigateAllCommands(t *testing.T) {
 	assert.Equal(t, allTexts[len(allTexts)-1], model.CmdDetailTarget().CommandText)
 
 	// Verify the view renders the currently selected command's metadata
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Event:")
 	assert.Contains(t, view, allTexts[len(allTexts)-1])
 }
@@ -2089,7 +2092,7 @@ func TestCmdDetailQuit(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, nil)
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
@@ -2110,7 +2113,7 @@ func TestCmdDetailStatusBar(t *testing.T) {
 
 	enterCommandDetailDirect(model, &target, nil, nil)
 
-	view := model.View()
+	view := model.renderView()
 	// Footer bar has no key hints in command detail view
 	assert.NotContains(t, view, "[j/k]")
 	assert.NotContains(t, view, "[Esc]")
@@ -2251,21 +2254,21 @@ func TestCmdDetailResizeReloadsContext(t *testing.T) {
 
 // === Phase 4b Test Helpers ===
 
-// typeString sends each rune as a KeyMsg to simulate typing
+// typeString sends each rune as a KeyPressMsg to simulate typing
 func typeString(model *Model, s string) {
 	for _, r := range s {
-		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		model.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 }
 
 // pressBackspace simulates pressing backspace
 func pressBackspace(model *Model) {
-	model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	model.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 }
 
 // pressSlash simulates pressing '/' to open filter
 func pressSlash(model *Model) {
-	model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 }
 
 // === Phase 4b Tests ===
@@ -2283,7 +2286,7 @@ func TestFilterOpenWithSlash(t *testing.T) {
 	pressSlash(model)
 	assert.True(t, model.FilterActive())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Filter:")
 }
 
@@ -2299,7 +2302,7 @@ func TestFilterTypingUpdatesText(t *testing.T) {
 	typeString(model, "go test")
 
 	assert.Equal(t, "go test", model.FilterText())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Filter: go test")
 }
 
@@ -2314,7 +2317,7 @@ func TestFilterLiveApplicationSummary(t *testing.T) {
 	pressSlash(model)
 	typeString(model, "go build")
 
-	view := model.View()
+	view := model.renderView()
 	// shy:main has 3x "go build" commands
 	assert.Contains(t, view, "3 commands")
 	// downloads has 0 matching
@@ -2423,7 +2426,7 @@ func TestFilterClearWithEmptySubmit(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, "", model.FilterText())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "8 commands")
 }
 
@@ -2475,7 +2478,7 @@ func TestFilterAndUniqueModeCombine(t *testing.T) {
 	// Set unique mode
 	pressKey(model, 'u')
 
-	view := model.View()
+	view := model.renderView()
 	// "go test ./cmd -v" is the only unique "go" command (count=1)
 	// "go build" (3x) and "go test ./... -v" (2x) excluded
 	assert.Contains(t, view, "1 command")
@@ -2539,7 +2542,7 @@ func TestFilterIndicatorInStatusBar(t *testing.T) {
 	typeString(model, "go test")
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "/go test")
 }
 
@@ -2569,7 +2572,7 @@ func TestFilterQuitWhileFilterOpen(t *testing.T) {
 	pressSlash(model)
 	assert.True(t, model.FilterActive())
 
-	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	_, cmd := model.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	assert.NotNil(t, cmd)
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
@@ -2639,7 +2642,7 @@ func TestDefaultPeriodIsDay(t *testing.T) {
 	model := initModel(t, dbPath, today)
 
 	assert.Equal(t, DayPeriod, model.Period())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Day")
 }
 
@@ -2654,7 +2657,7 @@ func TestPeriodCycleDayToWeek(t *testing.T) {
 
 	pressBracketRight(model)
 	assert.Equal(t, WeekPeriod, model.Period())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Week")
 	assert.Contains(t, view, "Week of")
 }
@@ -2669,7 +2672,7 @@ func TestPeriodCycleWeekToMonth(t *testing.T) {
 	pressBracketRight(model) // Day → Week
 	pressBracketRight(model) // Week → Month
 	assert.Equal(t, MonthPeriod, model.Period())
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Month")
 	assert.Contains(t, view, "February 2026")
 }
@@ -2733,7 +2736,7 @@ func TestWeekViewAggregatedCounts(t *testing.T) {
 	pressBracketRight(model) // Day → Week
 	assert.Equal(t, WeekPeriod, model.Period())
 
-	view := model.View()
+	view := model.renderView()
 	// shy:main has 3(Mon) + 8(Tue) + 2(Wed) = 13 commands for the week
 	assert.Contains(t, view, "13 commands")
 }
@@ -2756,7 +2759,7 @@ func TestWeekDateNavMovesByWeek(t *testing.T) {
 	diff := dateBefore.Sub(dateAfter)
 	assert.Equal(t, 7*24*time.Hour, diff)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Week of Jan 26")
 }
 
@@ -2771,7 +2774,7 @@ func TestMonthDateNavMovesByMonth(t *testing.T) {
 	pressBracketRight(model) // Week → Month
 
 	pressKey(model, 'h') // go back 1 month
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "January 2026")
 }
 
@@ -2788,7 +2791,7 @@ func TestWeekDetailBucketsByDay(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	// Should bucket by day (Feb 3 2026 = Tuesday)
 	assert.Contains(t, view, "Tue Feb 3")
 	assert.Contains(t, view, "Wed Feb 4")
@@ -2805,7 +2808,7 @@ func TestWeekDetailShowsFullTimestamps(t *testing.T) {
 	pressBracketRight(model)
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	// Should show full time like "9:15 AM" instead of just ":15"
 	assert.Contains(t, view, "AM")
 }
@@ -2823,7 +2826,7 @@ func TestMonthDetailBucketsByWeek(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Week of Feb 2") // Feb 3-5 are in ISO week 6, Monday is Feb 2
 }
 
@@ -2836,7 +2839,7 @@ func TestHeaderWeekFormat(t *testing.T) {
 
 	pressBracketRight(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Week of Feb 2")
 	assert.Contains(t, view, "Week")
 }
@@ -2851,7 +2854,7 @@ func TestHeaderMonthFormat(t *testing.T) {
 	pressBracketRight(model)
 	pressBracketRight(model)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "February 2026")
 	assert.Contains(t, view, "Month")
 }
@@ -2863,7 +2866,7 @@ func TestHeaderDayPeriodIndicator(t *testing.T) {
 	dbPath := setupTestDB(t, phase4Commands())
 	model := initModel(t, dbPath, today)
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Day")
 }
 
@@ -2951,14 +2954,14 @@ func TestPeriodSwitchPreservesContext(t *testing.T) {
 	pressEnter(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "main")
 
 	// Switch to week
 	pressBracketRight(model)
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
-	view = model.View()
+	view = model.renderView()
 	assert.Contains(t, view, "main")
 }
 
@@ -3014,7 +3017,7 @@ func TestUniqueModeInWeekView(t *testing.T) {
 	// In week view, shy:main has 13 total commands.
 	// "go build -o shy ." appears 4x, "go test ./... -v" 3x, "shy summary" 2x
 	// Unique: "./shy summary"(1), git commit(1), git push(1), "go test ./cmd -v"(1) = 4
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "4 commands")
 }
 
@@ -3032,7 +3035,7 @@ func TestFilterWorksInWeekView(t *testing.T) {
 	typeString(model, "build")
 	pressEnter(model)
 
-	view := model.View()
+	view := model.renderView()
 	// shy:main has 4 "go build" commands across the week
 	assert.Contains(t, view, "4 commands")
 	// downloads has 0 matching
@@ -3096,7 +3099,7 @@ func TestEmptyDetailShowsContextHints(t *testing.T) {
 	assert.Equal(t, 0, len(model.DetailCommands()))
 
 	// The view should show all four hint keys (H, L, h, l)
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "H")
 	assert.Contains(t, view, "L")
 	assert.Contains(t, view, "h")
@@ -3141,7 +3144,7 @@ func TestEmptyDetailShowsPeriodHints(t *testing.T) {
 	assert.Equal(t, 2, model.EmptyPrevPeriod().Count(), "dayBefore has 2 'go build' commands (unique filtered out from 3, but mode is All)")
 
 	// View should show the h hint with the date label
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "h")
 	assert.Contains(t, view, "2 commands")
 }
@@ -3216,7 +3219,7 @@ func TestEmptyDetailOrphanedContextLGoesToFirst(t *testing.T) {
 	assert.Equal(t, 0, len(model.DetailCommands()), "orphaned context has no commands")
 
 	// The empty state should show the L hint with downloads context name
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "downloads", "L hint should show first available context name")
 
 	// Press L — should jump to the first available context (downloads)
@@ -3258,7 +3261,7 @@ func TestEmptyDetailOrphanedContextHGoesToLast(t *testing.T) {
 	// The empty state should show the H hint with the last context's name
 	lastCtx := model.Contexts()[len(model.Contexts())-1]
 	lastName := formatContextName(lastCtx.Key, lastCtx.Branch)
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, lastName, "H hint should show last available context name")
 
 	// Press H — should jump to the last available context
@@ -3331,7 +3334,7 @@ func TestEmptyDetailFilterOrphanedDoesNotSwitchContext(t *testing.T) {
 	assert.Equal(t, 0, len(model.DetailCommands()))
 
 	// Remember the context key before filtering
-	headerBefore := model.View()
+	headerBefore := model.renderView()
 	assert.Contains(t, headerBefore, "shy", "header should still show the orphaned context")
 
 	// Open filter and type "t" — should NOT switch to downloads
@@ -3343,8 +3346,8 @@ func TestEmptyDetailFilterOrphanedDoesNotSwitchContext(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
 	// The header should still reference the orphaned context
-	headerAfter := model.View()
-	assert.Contains(t, headerAfter, "shy:main", "header should still show orphaned context after filtering")
+	headerAfter := model.renderView()
+	assert.Contains(t, ansi.Strip(headerAfter), "shy:main", "header should still show orphaned context after filtering")
 	assert.Equal(t, 0, len(model.DetailCommands()), "should still show empty commands")
 }
 
@@ -3446,7 +3449,7 @@ func TestHelpViewRendersBindings(t *testing.T) {
 
 	// Help from summary view
 	pressKey(model, '?')
-	view := model.View()
+	view := model.renderView()
 	assert.Contains(t, view, "Help")
 	assert.Contains(t, view, "Navigate down")
 	assert.Contains(t, view, "Open context")
@@ -3460,14 +3463,14 @@ func TestHelpViewRendersBindings(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
 	pressKey(model, '?')
-	view = model.View()
+	view = model.renderView()
 	assert.Contains(t, view, "View command detail")
 	assert.Contains(t, view, "Back to summary")
 	assert.Contains(t, view, "Previous context")
 }
 
 // pressKeyChain simulates a key press and executes all resulting commands in chain
-func pressKeyChain(model *Model, key tea.KeyMsg) {
+func pressKeyChain(model *Model, key tea.KeyPressMsg) {
 	_, cmd := model.handleKey(key)
 	for cmd != nil {
 		msg := cmd()
@@ -3495,7 +3498,7 @@ func TestDeleteFromContextDetailView(t *testing.T) {
 	assert.Equal(t, 3, len(model.DetailCommands()))
 
 	// Press D to delete the first command (chains through deleteResultMsg -> loadContexts -> contextsLoadedMsg)
-	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	pressKeyChain(model, tea.KeyPressMsg{Code: 'D', Text: "D"})
 
 	// Should show "Deleted #1" status and reload
 	assert.Contains(t, model.StatusMsg(), "Deleted #1")
@@ -3534,7 +3537,7 @@ func TestDeleteFromContextDetailCursorPosition(t *testing.T) {
 	assert.Equal(t, "echo second", model.DetailCommands()[model.DetailCmdIdx()].CommandText)
 
 	// Delete the second command
-	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	pressKeyChain(model, tea.KeyPressMsg{Code: 'D', Text: "D"})
 
 	assert.Contains(t, model.StatusMsg(), "Deleted #2")
 	assert.Equal(t, 2, len(model.DetailCommands()))
@@ -3569,7 +3572,7 @@ func TestDeleteFromContextDetailCursorLastCommand(t *testing.T) {
 	assert.Equal(t, 2, model.DetailCmdIdx())
 
 	// Delete the third command
-	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	pressKeyChain(model, tea.KeyPressMsg{Code: 'D', Text: "D"})
 
 	assert.Contains(t, model.StatusMsg(), "Deleted #3")
 	assert.Equal(t, 2, len(model.DetailCommands()))
@@ -3600,7 +3603,7 @@ func TestDeleteFromCommandDetailView(t *testing.T) {
 	assert.Equal(t, CommandDetailView, model.ViewState())
 
 	// Press D to delete the command (chains through deleteResultMsg -> loadContexts -> contextsLoadedMsg)
-	pressKeyChain(model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	pressKeyChain(model, tea.KeyPressMsg{Code: 'D', Text: "D"})
 
 	// Should transition back to ContextDetailView with status message
 	assert.Contains(t, model.StatusMsg(), "Deleted #")
@@ -3679,13 +3682,13 @@ func TestStarIndicatorRendered(t *testing.T) {
 	assert.Equal(t, ContextDetailView, model.ViewState())
 
 	// View should not contain star initially
-	view := model.View()
+	view := model.renderView()
 	assert.NotContains(t, view, "★")
 
 	// Star the command
 	pressKey(model, 'S')
 
 	// View should now contain star
-	view = model.View()
+	view = model.renderView()
 	assert.Contains(t, view, "★")
 }

@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // yankResultMsg is sent after a yank attempt completes.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/chris/shy/internal/db"
 	"github.com/chris/shy/internal/summary"
@@ -416,7 +416,7 @@ func (m *Model) toggleStar(id int64) tea.Cmd {
 // Update implements tea.Model
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case tea.WindowSizeMsg:
@@ -537,7 +537,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	if m.filterActive {
 		return m.handleFilterKey(msg)
 	}
@@ -599,7 +599,7 @@ func (m *Model) setDisplayMode(mode DisplayMode) (*Model, tea.Cmd) {
 
 // handleSharedKey handles keys shared between summary and detail views.
 // Returns handled=true if the key was consumed.
-func (m *Model) handleSharedKey(msg tea.KeyMsg) (model *Model, cmd tea.Cmd, handled bool) {
+func (m *Model) handleSharedKey(msg tea.KeyPressMsg) (model *Model, cmd tea.Cmd, handled bool) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit, true
@@ -661,7 +661,7 @@ func (m *Model) handleSharedKey(msg tea.KeyMsg) (model *Model, cmd tea.Cmd, hand
 	return m, nil, false
 }
 
-func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+func (m *Model) handleSummaryKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	if model, cmd, handled := m.handleSharedKey(msg); handled {
 		return model, cmd
 	}
@@ -689,7 +689,7 @@ func (m *Model) handleSummaryKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+func (m *Model) handleDetailKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	if model, cmd, handled := m.handleSharedKey(msg); handled {
 		return model, cmd
 	}
@@ -771,7 +771,7 @@ func (m *Model) cmdDetailAllCommands() []models.Command {
 	return m.cmdDetailAll
 }
 
-func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+func (m *Model) handleCommandDetailKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -839,7 +839,7 @@ func (m *Model) handleCommandDetailKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleCommandTextKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+func (m *Model) handleCommandTextKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -876,7 +876,7 @@ func (m *Model) handleCommandTextKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleHelpKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
+func (m *Model) handleHelpKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -887,12 +887,12 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyCtrlC:
+func (m *Model) handleFilterKey(msg tea.KeyPressMsg) (*Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
 		return m, tea.Quit
 
-	case tea.KeyEnter:
+	case "enter":
 		m.filterActive = false
 		// If in detail view, re-enter to apply filter
 		if m.viewState == ContextDetailView {
@@ -900,7 +900,7 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyEscape:
+	case "esc":
 		m.filterActive = false
 		m.filterText = m.filterPrevText
 		// If in detail view, re-enter to restore filter
@@ -909,7 +909,7 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyBackspace:
+	case "backspace":
 		if len(m.filterText) == 0 {
 			m.filterActive = false
 			return m, nil
@@ -923,20 +923,15 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (*Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeySpace:
-		m.filterText += " "
-		if m.viewState == ContextDetailView {
-			return m, m.refreshDetailView()
+	default:
+		if msg.Text != "" {
+			m.filterText += msg.Text
+			// Live update in detail view
+			if m.viewState == ContextDetailView {
+				return m, m.refreshDetailView()
+			}
+			return m, nil
 		}
-		return m, nil
-
-	case tea.KeyRunes:
-		m.filterText += string(msg.Runes)
-		// Live update in detail view
-		if m.viewState == ContextDetailView {
-			return m, m.refreshDetailView()
-		}
-		return m, nil
 	}
 
 	return m, nil
@@ -1181,8 +1176,11 @@ func (m *Model) ensureDetailCmdVisible() {
 }
 
 // View implements tea.Model
-func (m *Model) View() string {
-	return m.renderView()
+func (m *Model) View() tea.View {
+	v := tea.NewView(m.renderView())
+	v.AltScreen = true
+	v.ReportFocus = true
+	return v
 }
 
 // Messages

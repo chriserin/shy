@@ -6,18 +6,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/chris/shy/internal/db"
 	"github.com/chris/shy/pkg/models"
 )
 
-func init() {
-	// Force color output for TV preview (television supports colors)
-	lipgloss.SetColorProfile(termenv.TrueColor)
-}
+// In lipgloss v2, Render() always emits full-fidelity ANSI codes.
+// Color downsampling only happens at the output layer (lipgloss.Print, etc.).
 
 // Styles for TV preview (matching television theme palette)
 var (
