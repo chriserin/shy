@@ -3692,3 +3692,78 @@ func TestStarIndicatorRendered(t *testing.T) {
 	view = model.renderView()
 	assert.Contains(t, view, "★")
 }
+
+// TestFooterHelpHintInSummaryView tests that the summary view footer shows "? help"
+func TestFooterHelpHintInSummaryView(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, []models.Command{
+		makeCommand(yesterday, 9, "/home/user/projects/shy", strPtr("github.com/chris/shy"), strPtr("main")),
+	})
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	view := model.renderView()
+	plain := ansi.Strip(view)
+	assert.Contains(t, plain, "? help", "summary footer should show ? help hint")
+	assert.NotContains(t, plain, "- back", "summary footer should not show - back hint")
+}
+
+// TestFooterHelpHintInContextDetailView tests that the context detail footer shows "- back" and "? help"
+func TestFooterHelpHintInContextDetailView(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase2Commands(yesterday))
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	view := model.renderView()
+	plain := ansi.Strip(view)
+	assert.Contains(t, plain, "- back", "context detail footer should show - back hint")
+	assert.Contains(t, plain, "? help", "context detail footer should show ? help hint")
+}
+
+// TestFooterHelpHintInCommandDetailView tests that the command detail footer shows "- back" and "? help"
+func TestFooterHelpHintInCommandDetailView(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase2Commands(yesterday))
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	pressEnter(model)
+	pressEnter(model)
+	assert.Equal(t, CommandDetailView, model.ViewState())
+
+	view := model.renderView()
+	plain := ansi.Strip(view)
+	assert.Contains(t, plain, "- back", "command detail footer should show - back hint")
+	assert.Contains(t, plain, "? help", "command detail footer should show ? help hint")
+}
+
+// TestFooterHelpHintHiddenDuringStatus tests that help hints are hidden when a status message is shown
+func TestFooterHelpHintHiddenDuringStatus(t *testing.T) {
+	today := time.Date(2026, 2, 5, 12, 0, 0, 0, time.Local)
+	yesterday := today.AddDate(0, 0, -1)
+
+	dbPath := setupTestDB(t, phase2Commands(yesterday))
+	model := initModel(t, dbPath, today)
+	model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	pressEnter(model)
+	assert.Equal(t, ContextDetailView, model.ViewState())
+
+	// Star to trigger a status message
+	pressKey(model, 'S')
+	assert.NotEmpty(t, model.StatusMsg())
+
+	view := model.renderView()
+	plain := ansi.Strip(view)
+	assert.NotContains(t, plain, "? help", "footer should not show help hint while status is displayed")
+}

@@ -511,10 +511,17 @@ func (m *Model) renderFooterBar() string {
 		left += barStyle.Render(" /" + m.filterText + " ")
 	}
 
-	// Right: status flash message
+	// Right: status flash message or help hints
 	var right string
 	if m.statusMsg != "" {
 		right = barDimStyle.Render(" " + m.statusMsg + " ")
+	} else {
+		var hints string
+		if m.viewState == ContextDetailView || m.viewState == CommandDetailView {
+			hints += barStyle.Render(" ") + barBoldStyle.Render("-") + barStyle.Render(" back")
+		}
+		hints += barStyle.Render(" ") + barBoldStyle.Render("?") + barStyle.Render(" help ")
+		right = hints
 	}
 
 	leftWidth := ansi.StringWidth(left)
